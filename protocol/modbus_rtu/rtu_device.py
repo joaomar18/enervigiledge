@@ -125,6 +125,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             timeout=self.connection_options.timeout,
         )
 
+        self.connection_open = False
         self.start()
 
     def start(self):
@@ -137,38 +138,42 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                 debug.logger.debug(
                     f"Trying to connect to client {self.name} with id {self.id}..."
                 )
-                self.connected = self.client.connect()
-                if not self.connected:
+                self.connection_open = self.client.connect()
+                if not self.connection_open:
                     raise Exception(
                         "Failed to connect to client {self.name} with id {self.id}"
                     )
                 debug.logger.debug(f"Client {self.name} with id {self.id} connected")
                 while True:
                     await asyncio.sleep(2)
-                    if not self.client.connected:
+                    if not self.connection_open:
                         raise Exception(
                             f"Client {self.name} with id {self.id} disconnected..."
                         )
             except Exception as e:
-                if self.connected:
+                if self.connection_open:
                     debug.logger.debug(f"Connection lost: %s" % (e))
-                    self.connected = False
+                    self.set_disconnected()
+                    self.client.close()
+                    self.connection_open = False
                 await asyncio.sleep(2)
 
     async def _receiver(self):
         while True:
             try:
-                if self.connected:
+                if self.connection_open:
                     for node in self.nodes:
                         node.set_value(self._read_float(node))
+                        self.set_connected()
                     await self.process_nodes()
                     await self.publish_nodes()
             except Exception as e:
                 debug.logger.debug(f"{e}")
-                self.connected = False
+                self.set_disconnected()
                 self.client.close()
+                self.connection_open = False
             await asyncio.sleep(self.connection_options.read_period)
-
+    
     def _read_float(self, node: ModbusRTUNode):
         try:
             response = self.client.read_holding_registers(

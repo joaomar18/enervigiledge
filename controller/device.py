@@ -215,6 +215,14 @@ class Device(ABC):  # ABSTRACT DEVICE CLASS
         except ValueError as e:
             debug.logger.exception(e)
 
+    def set_connected(self):
+        if not self.connected:
+            self.connected = True
+
+    def set_disconnected(self):
+        if self.connected:
+            self.connected = False        
+
     def get_device_state(self) -> dict[str]:
         state_dict: dict[str] = dict()
         state_dict["id"] = self.id
