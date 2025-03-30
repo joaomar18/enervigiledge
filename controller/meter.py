@@ -40,10 +40,19 @@ class EnergyMeterOptions:
         negative_reactive_power: bool,
         frequency_reading: bool,
     ):
+
         self.read_energy_from_meter = read_energy_from_meter
         self.read_separate_forward_reverse_energy = read_separate_forward_reverse_energy
         self.negative_reactive_power = negative_reactive_power
         self.frequency_reading = frequency_reading
+      
+    def get_meter_options(self) -> dict[str]:
+        state_dict: dict[str] = dict()
+        state_dict["read_energy_from_meter"] = self.read_energy_from_meter
+        state_dict["read_separate_forward_reverse_energy"] = self.read_separate_forward_reverse_energy
+        state_dict["negative_reactive_power"] = self.negative_reactive_power
+        state_dict["frequency_reading"] = self.frequency_reading
+        return state_dict        
 
 
 class EnergyMeterNodes:
@@ -230,9 +239,20 @@ class EnergyMeter(Device):
                         node.set_value(PowerFactorDirection.UNKNOWN)
                         
     async def publish_nodes(self):
-        topic = f"{self.name}{self.id}_nodes"
+        topic = f"{self.name}_{self.id}_nodes"
         payload: dict[str] = dict()
         for node in self.meter_nodes.nodes.values():
             if node.publish:
                 payload[node.name] = node.get_publish_format()
         await self.publish_queue.put(MQTTMessage(qos=1, topic=topic, payload=payload))
+    
+    def get_device_state(self) -> dict[str]:
+        state_dict: dict[str] = dict()
+        state_dict["id"] = self.id
+        state_dict["name"] = self.name
+        state_dict["protocol"] = self.protocol
+        state_dict["connected"] = self.connected
+        state_dict["options"] = self.meter_options.get_meter_options()
+        state_dict["type"] = self.meter_type
+        return state_dict
+        

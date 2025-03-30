@@ -10,6 +10,7 @@ import util.functions as utilf
 import data.nodes as nodes
 from mqtt.client import MQTTClient
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter, ModbusRTUOptions
+from controller.device import DeviceManager
 from controller.meter import EnergyMeterType, EnergyMeterOptions
 import util.debug as debug
 
@@ -25,6 +26,8 @@ async def async_main():  # Main coroutine
         username="admin",
         password="Estudante18.",
     )
+    
+    device_manager = DeviceManager(publish_queue=mqtt_client.publish_queue)
 
     try:
 
@@ -53,6 +56,8 @@ async def async_main():  # Main coroutine
             connection_options=meter_orno_we_516_options,
             nodes=nodes.get_orno_we_516_nodes(),
         )
+        
+        device_manager.add_device(meter_orno_we_516)
 
     except Exception as e:
         debug.logger.error(e)

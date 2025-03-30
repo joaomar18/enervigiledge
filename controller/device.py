@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 #############LOCAL IMPORTS#############
 
 import util.debug as debug
+from mqtt.client import MQTTMessage
 
 #######################################
 
@@ -214,12 +215,31 @@ class Device(ABC):  # ABSTRACT DEVICE CLASS
         except ValueError as e:
             debug.logger.exception(e)
 
-    def stringify(self) -> str:  # returns a string defining the device
-        return (
-            "id:"
-            + str(self.id)
-            + ";name:"
-            + self.name
-            + ";protocol:"
-            + str(self.protocol)
-        )
+    def get_device_state(self) -> dict[str]:
+        state_dict: dict[str] = dict()
+        state_dict["id"] = self.id
+        state_dict["name"] = self.name
+        state_dict["protocol"] = self.protocol
+        state_dict["connected"] = self.connected
+        return state_dict
+
+class DeviceManager(): #DEVICE MANAGER CLASS
+    def __init__(self, publish_queue: asyncio.Queue):
+        self.devices: set[Device] = set()
+        self.publish_queue = publish_queue
+        asyncio.get_event_loop().create_task(self.handle_devices())
+        
+    def add_device(self, device: Device):
+        self.devices.add(device)
+    
+    async def handle_devices(self):
+        while True:
+            await self.publish_devices_state()
+            await asyncio.sleep(3)
+    
+    async def publish_devices_state(self):
+        topic = f"devices_state"
+        payload: dict[int] = dict()
+        for device in self.devices:
+            payload[device.id] = device.get_device_state()
+        await self.publish_queue.put(MQTTMessage(qos=1, topic=topic, payload=payload))

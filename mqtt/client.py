@@ -75,7 +75,7 @@ class MQTTClient:
                 try:
                     message: MQTTMessage = await self.publish_queue.get()
                     await self.client.publish(
-                        topic=message.topic, payload=message.payload, qos=message.qos
+                        topic=message.topic, payload=json.dumps(message.payload), qos=message.qos
                     )
                 except Exception as e:
                     debug.logger.error(f"MQTT Client - Publish Task: {e}")
