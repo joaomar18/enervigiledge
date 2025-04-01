@@ -6,18 +6,21 @@ import asyncio
 
 #############LOCAL IMPORTS#############
 
-import util.functions as utilf
 import data.nodes as nodes
+from db.timedb import TimeDBClient
 from mqtt.client import MQTTClient
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter, ModbusRTUOptions
 from controller.device import DeviceManager
 from controller.meter import EnergyMeterType, EnergyMeterOptions
 import util.debug as debug
+import util.functions as functions
 
 #######################################
 
 
 async def async_main():  # Main coroutine
+    
+    timedb_client = TimeDBClient()
     
     mqtt_client = MQTTClient(
         config_file = "mqtt/client_options.env"
