@@ -1,5 +1,6 @@
 ###########EXERTNAL IMPORTS############
 
+from datetime import datetime
 import asyncio
 import math
 
@@ -10,6 +11,7 @@ import math
 from controller.device import Device, Node, NodeType
 from mqtt.client import MQTTMessage
 import util.debug as debug
+import util.functions as functions
 
 #######################################
 
@@ -98,13 +100,13 @@ class EnergyMeterNodes:
                 for k in keys:
                     self._add_node(k, NodeType.FLOAT, units[k], publish=False)
                 if "kWh" in (units[f"{prefix}forward_active_energy"], units[f"{prefix}reverse_active_energy"]):
-                    self._add_node(f"{prefix}active_energy", NodeType.FLOAT, "kWh", calculated=True)
+                    self._add_node(f"{prefix}active_energy", NodeType.FLOAT, "kWh", calculated=True, calculate_increment=False)
                 elif all(units[f"{prefix}{et}"] == "Wh" for et in ["forward_active_energy", "reverse_active_energy"]):
-                    self._add_node(f"{prefix}active_energy", NodeType.FLOAT, "Wh", calculated=True)
+                    self._add_node(f"{prefix}active_energy", NodeType.FLOAT, "Wh", calculated=True, calculate_increment=False)
                 if "kVArh" in (units[f"{prefix}forward_reactive_energy"], units[f"{prefix}reverse_reactive_energy"]):
-                    self._add_node(f"{prefix}reactive_energy", NodeType.FLOAT, "kVArh", calculated=True)
+                    self._add_node(f"{prefix}reactive_energy", NodeType.FLOAT, "kVArh", calculated=True, calculate_increment=False)
                 elif all(units[f"{prefix}{et}"] == "VArh" for et in ["forward_reactive_energy", "reverse_reactive_energy"]):
-                    self._add_node(f"{prefix}reactive_energy", NodeType.FLOAT, "VArh", calculated=True)
+                    self._add_node(f"{prefix}reactive_energy", NodeType.FLOAT, "VArh", calculated=True, calculate_increment=False)
             else:
                 keys = [f"{prefix}active_energy", f"{prefix}reactive_energy"]
                 self._require_units(units, keys)
@@ -187,6 +189,56 @@ class EnergyMeter(Device):
         self.meter_nodes.set_energy_nodes_incremental()
         if not self.meter_nodes.init_nodes(units):
             raise Exception(f"Failed to initialize EnergyMeter '{name}' with id {id} due to invalid or missing node definitions.")
+
+        asyncio.get_event_loop().create_task(self.process_logging())
+
+    async def process_logging(self):
+        while True:
+            date_time = functions.get_current_date()
+            await self.log_nodes(date_time)
+            await asyncio.sleep(30)
+
+    async def log_nodes(self, date_time: datetime):
+
+        for node in self.meter_nodes.nodes.values():
+            if node.logging:
+                if node.last_log_datetime is None:
+                    node.last_log_datetime = date_time
+                elif functions.subtracte_datetime_mins(date_time, node.last_log_datetime) >= node.logging_period:
+                    log_data: dict[str] = node.submit_log(date_time)
+                    print(log_data)
+                    self.log_post_process(node)
+
+    def log_post_process(self, node: Node):
+        prefix = ""
+        if node.name.startswith("l1_"):
+            prefix = "l1_"
+        elif node.name.startswith("l2_"):
+            prefix = "l2_"
+        elif node.name.startswith("l3_"):
+            prefix = "l3_"
+
+        if "_reactive_energy" in node.name:
+
+            forward_energy = self.meter_nodes.nodes[prefix + "forward_reactive_energy"]
+            reverse_energy = self.meter_nodes.nodes[prefix + "reverse_reactive_energy"]
+
+            if not forward_energy.logging:
+                forward_energy.reset_value()
+
+            if not reverse_energy.logging:
+                reverse_energy.reset_value()
+
+        elif "_active_energy" in node.name:
+
+            forward_energy = self.meter_nodes.nodes[prefix + "forward_active_energy"]
+            reverse_energy = self.meter_nodes.nodes[prefix + "reverse_active_energy"]
+
+            if not forward_energy.logging:
+                forward_energy.reset_value()
+
+            if not reverse_energy.logging:
+                reverse_energy.reset_value()
 
     async def process_nodes(self):
 
@@ -273,7 +325,7 @@ class EnergyMeter(Device):
         for node in self.meter_nodes.nodes.values():
             if node.publish:
                 payload[node.name] = node.get_publish_format()
-        await self.publish_queue.put(MQTTMessage(qos=1, topic=topic, payload=payload))
+        await self.publish_queue.put(MQTTMessage(qos=0, topic=topic, payload=payload))
 
     def get_device_state(self) -> dict[str]:
         state_dict: dict[str] = dict()

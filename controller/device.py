@@ -1,5 +1,6 @@
 ###########EXERTNAL IMPORTS############
 
+from datetime import datetime
 import asyncio
 import time
 import threading
@@ -37,10 +38,11 @@ class Node:  # ABSTRACT NODE CLASS
         unit: str,
         incremental_node=False,
         positive_incremental=False,
+        calculate_increment=True,
         publish: bool = True,
         calculated: bool = False,
         logging: bool = False,
-        logging_period: int = 0,
+        logging_period: int = 15,  # logging period in minutes
         min_alarm: bool = False,
         max_alarm: bool = False,
         min_alarm_value: float = 0.0,
@@ -53,6 +55,7 @@ class Node:  # ABSTRACT NODE CLASS
         self.unit = unit
         self.incremental_node = incremental_node
         self.positive_incremental = positive_incremental
+        self.calculate_increment = calculate_increment
         self.publish = publish
         self.calculated = calculated
         self.logging = logging
@@ -72,6 +75,7 @@ class Node:  # ABSTRACT NODE CLASS
         self.elapsed_time: float = None  # elapsed time since the last measure to the current measure
         self.positive_direction: bool = False  # used to keep track of incremental direction
         self.negative_direction: bool = False  # used to keep track of incremental direction
+        self.last_log_datetime: datetime = None  # last logging date / time
         self.min_value = None
         self.max_value = None
         self.mean_value = None
@@ -122,9 +126,11 @@ class Node:  # ABSTRACT NODE CLASS
                 self.value = 0.0 if self.type is NodeType.FLOAT else 0
 
             else:
-                if self.positive_incremental:
+                if not self.calculate_increment:
+                    calculated_value = value
+                elif self.positive_incremental:
                     calculated_value = value + self.initial_value
-                else:
+                elif not self.positive_incremental:
                     calculated_value = value - self.initial_value
 
                 if calculated_value > self.value:
@@ -188,20 +194,35 @@ class Node:  # ABSTRACT NODE CLASS
     def get_publish_format(self) -> dict[str]:
         if self.value is None:
             raise Exception(f"Error: Trying to publish null value on node {self.name} with value {self.value}")
+
         output = dict()
         output["value"] = self.value
         output["type"] = self.type
         output["unit"] = self.unit
+
         if self.type != NodeType.BOOL and self.type != NodeType.STRING and not self.incremental_node:
-
             if self.min_alarm:
-
                 output["min_alarm_state"] = self.min_alarm_state
-
             if self.max_alarm:
-
                 output["max_alarm_state"] = self.max_alarm_state
+        return output
 
+    def submit_log(self, date_time: datetime) -> dict[str]:
+
+        output = dict()
+        if self.value is not None:
+            output["start_time"] = self.last_log_datetime
+            output["end_time"] = date_time
+
+            if self.type != NodeType.BOOL and self.type != NodeType.STRING and not self.incremental_node:
+                output["mean_value"] = self.mean_value
+                output["min_value"] = self.min_value
+                output["max_value"] = self.max_value
+            else:
+                output["value"] = self.value
+
+        self.reset_value()
+        self.last_log_datetime = date_time
         return output
 
 
@@ -248,11 +269,11 @@ class DeviceManager:  # DEVICE MANAGER CLASS
     async def handle_devices(self):
         while True:
             await self.publish_devices_state()
-            await asyncio.sleep(3)
+            await asyncio.sleep(10)
 
     async def publish_devices_state(self):
         topic = f"devices_state"
         payload: dict[int] = dict()
         for device in self.devices:
             payload[device.id] = device.get_device_state()
-        await self.publish_queue.put(MQTTMessage(qos=1, topic=topic, payload=payload))
+        await self.publish_queue.put(MQTTMessage(qos=0, topic=topic, payload=payload))

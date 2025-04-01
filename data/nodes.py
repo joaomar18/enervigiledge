@@ -15,7 +15,7 @@ from protocol.modbus_rtu.rtu_device import ModbusRTUNode
 def get_orno_we_516_nodes() -> {ModbusRTUNode}:
 
     return {
-        ModbusRTUNode(name="l1_voltage", type=NodeType.FLOAT, register=0x000E, unit="V"),
+        ModbusRTUNode(name="l1_voltage", type=NodeType.FLOAT, register=0x000E, unit="V", logging=True, logging_period=1),
         ModbusRTUNode(name="l1_current", type=NodeType.FLOAT, register=0x0016, unit="A"),
         ModbusRTUNode(name="l1_active_power", type=NodeType.FLOAT, register=0x001E, unit="kW"),
         ModbusRTUNode(name="l1_reactive_power", type=NodeType.FLOAT, register=0x0026, unit="kVAr"),
