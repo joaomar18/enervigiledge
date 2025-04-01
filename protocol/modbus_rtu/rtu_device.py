@@ -93,13 +93,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         nodes: set[ModbusRTUNode] = set(),
     ):
         super().__init__(
-            id=id,
-            name=name,
-            protocol=Protocol.MODBUS_RTU,
-            publish_queue=publish_queue,
-            meter_type=meter_type,
-            meter_options=meter_options,
-            meter_nodes=nodes,
+            id=id, name=name, protocol=Protocol.MODBUS_RTU, publish_queue=publish_queue, meter_type=meter_type, meter_options=meter_options, meter_nodes=nodes
         )
 
         self.nodes = nodes
@@ -160,9 +154,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
     def _read_float(self, node: ModbusRTUNode):
         try:
-            response = self.client.read_holding_registers(
-                address=node.register, count=2, slave=self.connection_options.slave_id, no_response_expected=False
-            )
+            response = self.client.read_holding_registers(address=node.register, count=2, slave=self.connection_options.slave_id, no_response_expected=False)
 
         except Exception as e:
             raise Exception(f"Exception while reading from node {node.name} at address {node.register}: {e}")

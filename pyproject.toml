@@ -1,5 +1,5 @@
 [tool.black]
-line-length = 150                      # Default is 88
-skip-string-normalization = true      # Keeps quotes as-is (no auto-conversion to double quotes)
-skip-magic-trailing-comma = true      # Stops adding trailing commas for multiline expressions
-target-version = ['py311']            # Use your actual Python version
+line-length = 160        
+skip-string-normalization = true
+skip-magic-trailing-comma = true
+target-version = ['py311']

@@ -6,7 +6,7 @@ import asyncio
 
 #############LOCAL IMPORTS#############
 
-from controller.device import NodeType
+from controller.device import Node, NodeType
 from protocol.modbus_rtu.rtu_device import ModbusRTUNode
 
 #######################################
@@ -40,4 +40,25 @@ def get_orno_we_516_nodes() -> {ModbusRTUNode}:
         ModbusRTUNode(name="l3_forward_reactive_energy", type=NodeType.FLOAT, register=0x0126, unit="kVArh"),
         ModbusRTUNode(name="l3_reverse_reactive_energy", type=NodeType.FLOAT, register=0x012E, unit="kVArh"),
         ModbusRTUNode(name="frequency", type=NodeType.FLOAT, register=0x0014, unit="Hz"),
+        
+        #Calculated Nodes
+        Node(name="l1_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, calculate_increment=False, calculated=True, logging=True),
+        Node(name="l1_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, calculate_increment=False, calculated=True),
+        Node(name="l1_apparent_power", type=NodeType.FLOAT, unit="kVA", calculated=True),
+        Node(name="l1_power_factor", type=NodeType.FLOAT, unit="", calculated=True),
+        Node(name="l1_power_factor_direction", type=NodeType.STRING, unit="", calculated=True),
+        
+        
+        Node(name="l2_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, calculate_increment=False, calculated=True, logging=True),
+        Node(name="l2_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, calculate_increment=False, calculated=True),
+        Node(name="l2_apparent_power", type=NodeType.FLOAT, unit="kVA", calculated=True),
+        Node(name="l2_power_factor", type=NodeType.FLOAT, unit="", calculated=True),
+        Node(name="l2_power_factor_direction", type=NodeType.STRING, unit="", calculated=True),
+        
+        
+        Node(name="l3_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, calculate_increment=False, calculated=True, logging=True),
+        Node(name="l3_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, calculate_increment=False, calculated=True),
+        Node(name="l3_apparent_power", type=NodeType.FLOAT, unit="kVA", calculated=True),
+        Node(name="l3_power_factor", type=NodeType.FLOAT, unit="", calculated=True),
+        Node(name="l3_power_factor_direction", type=NodeType.STRING, unit="", calculated=True),
     }
