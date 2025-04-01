@@ -18,8 +18,10 @@ import util.debug as debug
 
 
 async def async_main():  # Main coroutine
-
-    mqtt_client = MQTTClient(id="enervigiledge1", address="127.0.0.1", port=1883, username="admin", password="Estudante18.")
+    
+    mqtt_client = MQTTClient(
+        config_file = "mqtt/client_options.env"
+    )
 
     device_manager = DeviceManager(publish_queue=mqtt_client.publish_queue)
 

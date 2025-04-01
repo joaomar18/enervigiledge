@@ -1,6 +1,8 @@
 ###########EXERTNAL IMPORTS############
 
 import asyncio
+from dotenv import load_dotenv
+import os
 import aiomqtt.client as mqtt
 import json
 
@@ -9,6 +11,7 @@ import json
 #############LOCAL IMPORTS#############
 
 import util.debug as debug
+import util.functions as functions
 
 #######################################
 
@@ -21,13 +24,23 @@ class MQTTMessage:
 
 
 class MQTTClient:
-    def __init__(self, id: str, address: str, port: int, username: str, password: str, topics_sub: set[str] = set()):
 
-        self.id = id
-        self.address = address
-        self.port = port
-        self.username = username
-        self.password = password
+    @staticmethod
+    def check_config_valid(config_file: str):
+        load_dotenv(config_file)
+        required = ["MQTT_CLIENT_ID", "MQTT_ADDRESS", "MQTT_PORT", "MQTT_USERNAME", "MQTT_PASSWORD_ENCRYPTED", "MQTT_PASSWORD_KEY"]
+        missing = [var for var in required if os.getenv(var) is None]
+        if missing:
+            raise ValueError(f"Missing required MQTT config(s): {', '.join(missing)}")
+
+    def __init__(self, config_file: str, topics_sub: set[str] = set()):
+
+        MQTTClient.check_config_valid(config_file)
+        self.id = os.getenv("MQTT_CLIENT_ID")
+        self.address = os.getenv("MQTT_ADDRESS")
+        self.port = int(os.getenv("MQTT_PORT"))
+        self.username = os.getenv("MQTT_USERNAME")
+        self.password = functions.decrypt_password(password_encrypted=os.getenv("MQTT_PASSWORD_ENCRYPTED"), key=os.getenv("MQTT_PASSWORD_KEY"))
         self.topics_sub = topics_sub
 
         self.publish_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)

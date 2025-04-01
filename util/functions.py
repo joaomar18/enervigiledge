@@ -1,6 +1,10 @@
+from cryptography.fernet import Fernet
 from datetime import datetime
 import random
 import time
+
+def decrypt_password(password_encrypted: str, key: str) -> str:
+    return Fernet(key).decrypt(password_encrypted).decode()
 
 def remove_phase_string(name: str) -> str:
     parts = name.split("_")
