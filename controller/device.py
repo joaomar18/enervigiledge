@@ -210,6 +210,7 @@ class Node:  # ABSTRACT NODE CLASS
     def submit_log(self, date_time: datetime) -> dict[str]:
 
         output = dict()
+        output["name"] = self.name
         if self.value is not None:
             output["start_time"] = self.last_log_datetime
             output["end_time"] = date_time
