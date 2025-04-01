@@ -14,32 +14,19 @@ from controller.device import DeviceManager
 from controller.meter import EnergyMeterType, EnergyMeterOptions
 import util.debug as debug
 
-#######################################D
+#######################################
 
 
 async def async_main():  # Main coroutine
 
-    mqtt_client = MQTTClient(
-        id="enervigiledge1",
-        address="127.0.0.1",
-        port=1883,
-        username="admin",
-        password="Estudante18.",
-    )
-    
+    mqtt_client = MQTTClient(id="enervigiledge1", address="127.0.0.1", port=1883, username="admin", password="Estudante18.")
+
     device_manager = DeviceManager(publish_queue=mqtt_client.publish_queue)
 
     try:
 
         meter_orno_we_516_options = ModbusRTUOptions(
-            slave_id=1,
-            port="/dev/ttyAMA0",
-            baudrate=9600,
-            stopbits=1,
-            parity="E",
-            bytesize=8,
-            read_period=5,
-            timeout=1.0,
+            slave_id=1, port="/dev/ttyAMA0", baudrate=9600, stopbits=1, parity="E", bytesize=8, read_period=5, timeout=1.0
         )
 
         meter_orno_we_516 = ModbusRTUEnergyMeter(
@@ -48,15 +35,12 @@ async def async_main():  # Main coroutine
             publish_queue=mqtt_client.publish_queue,
             meter_type=EnergyMeterType.THREE_PHASE,
             meter_options=EnergyMeterOptions(
-                read_energy_from_meter=True,
-                read_separate_forward_reverse_energy=True,
-                negative_reactive_power=False,
-                frequency_reading=True,
+                read_energy_from_meter=True, read_separate_forward_reverse_energy=True, negative_reactive_power=False, frequency_reading=True
             ),
             connection_options=meter_orno_we_516_options,
             nodes=nodes.get_orno_we_516_nodes(),
         )
-        
+
         device_manager.add_device(meter_orno_we_516)
 
     except Exception as e:

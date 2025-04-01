@@ -11,6 +11,7 @@ from protocol.modbus_rtu.rtu_device import ModbusRTUNode
 
 #######################################
 
+
 def get_orno_we_516_nodes() -> {ModbusRTUNode}:
 
     return {
@@ -22,7 +23,6 @@ def get_orno_we_516_nodes() -> {ModbusRTUNode}:
         ModbusRTUNode(name="l1_reverse_active_energy", type=NodeType.FLOAT, register=0x0112, unit="kWh"),
         ModbusRTUNode(name="l1_forward_reactive_energy", type=NodeType.FLOAT, register=0x0122, unit="kVArh"),
         ModbusRTUNode(name="l1_reverse_reactive_energy", type=NodeType.FLOAT, register=0x012A, unit="kVArh"),
-        
         ModbusRTUNode(name="l2_voltage", type=NodeType.FLOAT, register=0x0010, unit="V"),
         ModbusRTUNode(name="l2_current", type=NodeType.FLOAT, register=0x0018, unit="A"),
         ModbusRTUNode(name="l2_active_power", type=NodeType.FLOAT, register=0x0020, unit="kW"),
@@ -31,7 +31,6 @@ def get_orno_we_516_nodes() -> {ModbusRTUNode}:
         ModbusRTUNode(name="l2_reverse_active_energy", type=NodeType.FLOAT, register=0x0114, unit="kWh"),
         ModbusRTUNode(name="l2_forward_reactive_energy", type=NodeType.FLOAT, register=0x0124, unit="kVArh"),
         ModbusRTUNode(name="l2_reverse_reactive_energy", type=NodeType.FLOAT, register=0x012C, unit="kVArh"),
-        
         ModbusRTUNode(name="l3_voltage", type=NodeType.FLOAT, register=0x0012, unit="V"),
         ModbusRTUNode(name="l3_current", type=NodeType.FLOAT, register=0x001A, unit="A"),
         ModbusRTUNode(name="l3_active_power", type=NodeType.FLOAT, register=0x0022, unit="kW"),
@@ -40,6 +39,5 @@ def get_orno_we_516_nodes() -> {ModbusRTUNode}:
         ModbusRTUNode(name="l3_reverse_active_energy", type=NodeType.FLOAT, register=0x0116, unit="kWh"),
         ModbusRTUNode(name="l3_forward_reactive_energy", type=NodeType.FLOAT, register=0x0126, unit="kVArh"),
         ModbusRTUNode(name="l3_reverse_reactive_energy", type=NodeType.FLOAT, register=0x012E, unit="kVArh"),
-        
         ModbusRTUNode(name="frequency", type=NodeType.FLOAT, register=0x0014, unit="Hz"),
     }

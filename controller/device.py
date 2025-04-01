@@ -45,6 +45,7 @@ class Node:  # ABSTRACT NODE CLASS
         max_alarm: bool = False,
         min_alarm_value: float = 0.0,
         max_alarm_value: float = 0.0,
+        decimal_places: int = 3,
         on_value_change: callable = None,
     ):
         self.name = name
@@ -62,14 +63,15 @@ class Node:  # ABSTRACT NODE CLASS
         self.max_alarm_value = max_alarm_value
         self.min_alarm_state = False
         self.max_alarm_state = False
+        self.decimal_places = decimal_places
         self.on_value_change = on_value_change
 
         self.initial_value = None  # used for incremental nodes (for example energy nodes)
         self.value = None
         self.timestamp: float = None  # timestamp of the current measurement
         self.elapsed_time: float = None  # elapsed time since the last measure to the current measure
-        self.positive_direction: False #used to keep track of incremental direction
-        self.negative_direction: False #used to keep track of incremental direction
+        self.positive_direction: bool = False  # used to keep track of incremental direction
+        self.negative_direction: bool = False  # used to keep track of incremental direction
         self.min_value = None
         self.max_value = None
         self.mean_value = None
@@ -86,13 +88,7 @@ class Node:  # ABSTRACT NODE CLASS
         self.logging = logging
         self.logging_period = logging_period
 
-    def set_alarms(
-        self,
-        min_alarm: bool,
-        max_alarm: bool,
-        min_alarm_value: float,
-        max_alarm_value: float,
-    ):
+    def set_alarms(self, min_alarm: bool, max_alarm: bool, min_alarm_value: float, max_alarm_value: float):
         self.min_alarm = min_alarm
         self.max_alarm = max_alarm
         self.min_alarm_value = min_alarm_value
@@ -119,33 +115,40 @@ class Node:  # ABSTRACT NODE CLASS
             self.timestamp = current_timestamp
 
         if self.incremental_node:
+
             if self.initial_value is None:
                 self.initial_value = value
-            elif self.positive_incremental:
-                
-                calculated_value = value + self.initial_value
-                self.positive_direction = calculated_value > self.value
-                self.negative_direction = calculated_value < self.value
-                
-                self.value = calculated_value
-                
-            elif not self.positive_incremental:
-                
-                calculated_value = value - self.initial_value
-                self.positive_direction = calculated_value > self.value
-                self.negative_direction = calculated_value < self.value
-                
-                self.value = calculated_value
+
+                self.value = 0.0 if self.type is NodeType.FLOAT else 0
+
+            else:
+                if self.positive_incremental:
+                    calculated_value = value + self.initial_value
+                else:
+                    calculated_value = value - self.initial_value
+
+                if calculated_value > self.value:
+                    self.positive_direction = True
+                    self.negative_direction = False
+                elif calculated_value < self.value:
+                    self.positive_direction = False
+                    self.negative_direction = True
+
+                self.value = round(number=calculated_value, ndigits=self.decimal_places) if self.type is NodeType.FLOAT else calculated_value
 
         else:
 
-            self.value = value
+            if self.value is not None:
+                if value > self.value:
+                    self.positive_direction = True
+                    self.negative_direction = False
+                elif value < self.value:
+                    self.positive_direction = False
+                    self.negative_direction = True
 
-        if (
-            self.type != NodeType.BOOL
-            and self.type != NodeType.STRING
-            and not self.incremental_node
-        ):
+            self.value = round(number=value, ndigits=self.decimal_places) if self.type is NodeType.FLOAT else value
+
+        if self.type != NodeType.BOOL and self.type != NodeType.STRING and not self.incremental_node:
 
             self.mean_sum += value
             self.mean_count += 1
@@ -170,45 +173,46 @@ class Node:  # ABSTRACT NODE CLASS
         self.initial_value = None
         self.min_value = None
         self.max_value = None
-        self.positive_direction: False
-        self.negative_direction: False
+        self.positive_direction = False
+        self.negative_direction = False
         self.mean_value = None
         self.timestamp = None
         self.elapsed_time = None
         self.mean_sum = 0
         self.mean_count = 0
 
-    def get_publish_format(self) -> dict[str]:
+    def reset_direction(self):
+        self.positive_direction = False
+        self.negative_direction = False
 
+    def get_publish_format(self) -> dict[str]:
+        if self.value is None:
+            raise Exception(f"Error: Trying to publish null value on node {self.name} with value {self.value}")
         output = dict()
         output["value"] = self.value
         output["type"] = self.type
         output["unit"] = self.unit
-        output["min_alarm_state"] = self.min_alarm_state
-        output["max_alarm_state"] = self.max_alarm_state
+        if self.type != NodeType.BOOL and self.type != NodeType.STRING and not self.incremental_node:
+
+            if self.min_alarm:
+
+                output["min_alarm_state"] = self.min_alarm_state
+
+            if self.max_alarm:
+
+                output["max_alarm_state"] = self.max_alarm_state
 
         return output
 
 
 class Device(ABC):  # ABSTRACT DEVICE CLASS
-    def __init__(
-        self,
-        id: int,
-        name: str,
-        protocol: int,
-        publish_queue: asyncio.Queue,
-    ):
+    def __init__(self, id: int, name: str, protocol: int, publish_queue: asyncio.Queue):
         self.id = id
         self.name = name
         self.connected = False
         self.publish_queue = publish_queue
         try:
-            if protocol in [
-                Protocol.OPC_UA,
-                Protocol.MQTT,
-                Protocol.MODBUS_TCP,
-                Protocol.MODBUS_RTU,
-            ]:
+            if protocol in [Protocol.OPC_UA, Protocol.MQTT, Protocol.MODBUS_TCP, Protocol.MODBUS_RTU]:
                 self.protocol = protocol
             else:
                 raise ValueError(f"Invalid protocol: {protocol}")
@@ -221,7 +225,7 @@ class Device(ABC):  # ABSTRACT DEVICE CLASS
 
     def set_disconnected(self):
         if self.connected:
-            self.connected = False        
+            self.connected = False
 
     def get_device_state(self) -> dict[str]:
         state_dict: dict[str] = dict()
@@ -231,20 +235,21 @@ class Device(ABC):  # ABSTRACT DEVICE CLASS
         state_dict["connected"] = self.connected
         return state_dict
 
-class DeviceManager(): #DEVICE MANAGER CLASS
+
+class DeviceManager:  # DEVICE MANAGER CLASS
     def __init__(self, publish_queue: asyncio.Queue):
         self.devices: set[Device] = set()
         self.publish_queue = publish_queue
         asyncio.get_event_loop().create_task(self.handle_devices())
-        
+
     def add_device(self, device: Device):
         self.devices.add(device)
-    
+
     async def handle_devices(self):
         while True:
             await self.publish_devices_state()
             await asyncio.sleep(3)
-    
+
     async def publish_devices_state(self):
         topic = f"devices_state"
         payload: dict[int] = dict()

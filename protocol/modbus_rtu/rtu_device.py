@@ -16,17 +16,7 @@ from controller.meter import EnergyMeter, EnergyMeterType, EnergyMeterOptions
 
 
 class ModbusRTUOptions:
-    def __init__(
-        self,
-        slave_id: int,
-        port: str,
-        baudrate: int,
-        stopbits: int,
-        parity: str,
-        bytesize: int,
-        read_period: int,
-        timeout: float,
-    ):
+    def __init__(self, slave_id: int, port: str, baudrate: int, stopbits: int, parity: str, bytesize: int, read_period: int, timeout: float):
         self.slave_id = slave_id
         self.port = port
         self.baudrate = baudrate
@@ -112,8 +102,8 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             meter_nodes=nodes,
         )
 
-        self.nodes = nodes    
-            
+        self.nodes = nodes
+
         self.connection_options = connection_options
 
         self.client = ModbusRTUClient(
@@ -135,21 +125,15 @@ class ModbusRTUEnergyMeter(EnergyMeter):
     async def _main(self):
         while True:
             try:
-                debug.logger.debug(
-                    f"Trying to connect to client {self.name} with id {self.id}..."
-                )
+                debug.logger.debug(f"Trying to connect to client {self.name} with id {self.id}...")
                 self.connection_open = self.client.connect()
                 if not self.connection_open:
-                    raise Exception(
-                        "Failed to connect to client {self.name} with id {self.id}"
-                    )
+                    raise Exception("Failed to connect to client {self.name} with id {self.id}")
                 debug.logger.debug(f"Client {self.name} with id {self.id} connected")
                 while True:
                     await asyncio.sleep(2)
                     if not self.connection_open:
-                        raise Exception(
-                            f"Client {self.name} with id {self.id} disconnected..."
-                        )
+                        raise Exception(f"Client {self.name} with id {self.id} disconnected...")
             except Exception as e:
                 if self.connection_open:
                     debug.logger.debug(f"Connection lost: %s" % (e))
@@ -173,27 +157,24 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                 self.client.close()
                 self.connection_open = False
             await asyncio.sleep(self.connection_options.read_period)
-    
+
     def _read_float(self, node: ModbusRTUNode):
         try:
             response = self.client.read_holding_registers(
-                address=node.register,
-                count=2,
-                slave=self.connection_options.slave_id,
-                no_response_expected=False,
+                address=node.register, count=2, slave=self.connection_options.slave_id, no_response_expected=False
             )
-        
+
         except Exception as e:
-            raise Exception(f"Exception while reading from device {node.name} at address {node.register}: {e}")
+            raise Exception(f"Exception while reading from node {node.name} at address {node.register}: {e}")
 
         if response is None:
-            raise Exception(f"No response from device when reading {node.name} (address {node.register})")
+            raise Exception(f"No response from device when reading {node.name} at address {node.register})")
 
         if response.isError():
             raise Exception(f"Error reading float register {node.name} with register address {node.register}: {response}")
 
         if not hasattr(response, "registers") or len(response.registers) < 2:
             raise Exception(f"Incomplete data received from {node.name} at register {node.register}")
-        
+
         raw_value = struct.pack(">HH", response.registers[0], response.registers[1])
         return struct.unpack(">f", raw_value)[0]

@@ -21,15 +21,7 @@ class MQTTMessage:
 
 
 class MQTTClient:
-    def __init__(
-        self,
-        id: str,
-        address: str,
-        port: int,
-        username: str,
-        password: str,
-        topics_sub: set[str] = set(),
-    ):
+    def __init__(self, id: str, address: str, port: int, username: str, password: str, topics_sub: set[str] = set()):
 
         self.id = id
         self.address = address
@@ -47,12 +39,7 @@ class MQTTClient:
     async def handler_task(self):
         while True:
             try:
-                self.client = mqtt.Client(
-                    hostname=self.address,
-                    port=self.port,
-                    username=self.username,
-                    password=self.password,
-                )
+                self.client = mqtt.Client(hostname=self.address, port=self.port, username=self.username, password=self.password)
                 async with self.client as client:
                     await self.subscribe_topics(client, self.topics_sub)
                     async for message in client.messages:
@@ -74,9 +61,7 @@ class MQTTClient:
             if self.client != None:
                 try:
                     message: MQTTMessage = await self.publish_queue.get()
-                    await self.client.publish(
-                        topic=message.topic, payload=json.dumps(message.payload), qos=message.qos
-                    )
+                    await self.client.publish(topic=message.topic, payload=json.dumps(message.payload), qos=message.qos)
                 except Exception as e:
                     debug.logger.error(f"MQTT Client - Publish Task: {e}")
             await asyncio.sleep(0)
