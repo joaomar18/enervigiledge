@@ -87,13 +87,21 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         id: int,
         name: str,
         publish_queue: asyncio.Queue,
+        measurements_queue: asyncio.Queue,
         meter_type: EnergyMeterType,
         meter_options: EnergyMeterOptions,
         connection_options: ModbusRTUOptions,
         nodes: set[ModbusRTUNode] = set(),
     ):
         super().__init__(
-            id=id, name=name, protocol=Protocol.MODBUS_RTU, publish_queue=publish_queue, meter_type=meter_type, meter_options=meter_options, meter_nodes=nodes
+            id=id,
+            name=name,
+            protocol=Protocol.MODBUS_RTU,
+            publish_queue=publish_queue,
+            measurements_queue=measurements_queue,
+            meter_type=meter_type,
+            meter_options=meter_options,
+            meter_nodes=nodes,
         )
 
         self.nodes = nodes

@@ -3,13 +3,15 @@
 from datetime import datetime
 import asyncio
 import math
+from typing import List, Dict, Any
 
 #######################################
 
 #############LOCAL IMPORTS#############
 
-from controller.device import Device, Node, NodeType
+from controller.device import Device, Node
 from mqtt.client import MQTTMessage
+from db.timedb import Measurement
 import util.debug as debug
 import util.functions as functions
 
@@ -41,17 +43,15 @@ class PowerFactorDirection:
 
 
 class EnergyMeterOptions:
-    def __init__(
-        self, read_energy_from_meter: bool, read_separate_forward_reverse_energy: bool, negative_reactive_power: bool, frequency_reading: bool
-    ):
+    def __init__(self, read_energy_from_meter: bool, read_separate_forward_reverse_energy: bool, negative_reactive_power: bool, frequency_reading: bool):
 
         self.read_energy_from_meter = read_energy_from_meter
         self.read_separate_forward_reverse_energy = read_separate_forward_reverse_energy
         self.negative_reactive_power = negative_reactive_power
         self.frequency_reading = frequency_reading
 
-    def get_meter_options(self) -> dict[str]:
-        output: dict[str] = dict()
+    def get_meter_options(self) -> Dict[str, Any]:
+        output: Dict[str, Any] = {}
         output["read_energy_from_meter"] = self.read_energy_from_meter
         output["read_separate_forward_reverse_energy"] = self.read_separate_forward_reverse_energy
         output["negative_reactive_power"] = self.negative_reactive_power
@@ -107,7 +107,7 @@ class EnergyMeterNodes:
     def __init__(self, meter_type: EnergyMeterType, meter_options: EnergyMeterOptions, nodes: set[Node]):
         self.meter_type = meter_type
         self.meter_options = meter_options
-        self.nodes: dict[str, Node] = {node.name: node for node in nodes}
+        self.nodes: Dict[str, Node] = {node.name: node for node in nodes}
 
     def validate_nodes(self):
         for node in self.nodes.values():
@@ -217,14 +217,14 @@ class EnergyMeter(Device):
         name: str,
         protocol: int,
         publish_queue: asyncio.Queue,
+        measurements_queue: asyncio.Queue,
         meter_type: EnergyMeterType,
         meter_options: EnergyMeterOptions,
         meter_nodes: set[Node],
     ):
-        super().__init__(id=id, name=name, protocol=protocol, publish_queue=publish_queue)
+        super().__init__(id=id, name=name, protocol=protocol, publish_queue=publish_queue, measurements_queue=measurements_queue)
         self.meter_type = meter_type
         self.meter_options = meter_options
-        units = {node.name: node.unit for node in meter_nodes}
         try:
             self.meter_nodes = EnergyMeterNodes(meter_type=self.meter_type, meter_options=self.meter_options, nodes=meter_nodes)
             self.meter_nodes.set_energy_nodes_incremental()
@@ -259,8 +259,9 @@ class EnergyMeter(Device):
                 if node.last_log_datetime is None:
                     node.last_log_datetime = date_time
                 elif functions.subtracte_datetime_mins(date_time, node.last_log_datetime) >= node.logging_period:
-                    log_data: dict[str] = node.submit_log(date_time)
-                    print(log_data)
+                    log_data: List[Dict] = [node.submit_log(date_time)]
+                    log_db = f"{self.name}_{self.id}"
+                    await self.measurements_queue.put(Measurement(db=log_db, data=log_data))
                     self.reset_directional_energy(node)
 
     def reset_directional_energy(self, node: Node):
@@ -350,14 +351,14 @@ class EnergyMeter(Device):
 
     async def publish_nodes(self):
         topic = f"{self.name}_{self.id}_nodes"
-        payload: dict[str] = dict()
+        payload: Dict[str, Any] = {}
         for node in self.meter_nodes.nodes.values():
             if node.publish:
                 payload[node.name] = node.get_publish_format()
         await self.publish_queue.put(MQTTMessage(qos=0, topic=topic, payload=payload))
 
-    def get_device_state(self) -> dict[str]:
-        output: dict[str] = dict()
+    def get_device_state(self) -> Dict[str, Any]:
+        output: Dict[str, Any] = {}
         output["id"] = self.id
         output["name"] = self.name
         output["protocol"] = self.protocol

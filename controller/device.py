@@ -4,6 +4,7 @@ from datetime import datetime
 import asyncio
 import time
 import threading
+from typing import List, Dict, Any
 from abc import ABC, abstractmethod
 
 #######################################
@@ -191,11 +192,11 @@ class Node:  # ABSTRACT NODE CLASS
         self.positive_direction = False
         self.negative_direction = False
 
-    def get_publish_format(self) -> dict[str]:
+    def get_publish_format(self) -> Dict[str, Any]:
         if self.value is None:
             raise Exception(f"Error: Trying to publish null value on node {self.name} with value {self.value}")
 
-        output = dict()
+        output = {}
         output["value"] = self.value
         output["type"] = self.type
         output["unit"] = self.unit
@@ -207,32 +208,30 @@ class Node:  # ABSTRACT NODE CLASS
                 output["max_alarm_state"] = self.max_alarm_state
         return output
 
-    def submit_log(self, date_time: datetime) -> dict[str]:
+    def submit_log(self, date_time: datetime) -> Dict[str, Any]:
 
-        output = dict()
+        output = {}
         output["name"] = self.name
-        if self.value is not None:
-            output["start_time"] = self.last_log_datetime
-            output["end_time"] = date_time
-
-            if self.type != NodeType.BOOL and self.type != NodeType.STRING and not self.incremental_node:
-                output["mean_value"] = self.mean_value
-                output["min_value"] = self.min_value
-                output["max_value"] = self.max_value
-            else:
-                output["value"] = self.value
-
+        output["start_time"] = self.last_log_datetime
+        output["end_time"] = date_time
+        if self.type != NodeType.BOOL and self.type != NodeType.STRING and not self.incremental_node:
+            output["mean_value"] = self.mean_value
+            output["min_value"] = self.min_value
+            output["max_value"] = self.max_value
+        else:
+            output["value"] = self.value
         self.reset_value()
         self.last_log_datetime = date_time
         return output
 
 
 class Device(ABC):  # ABSTRACT DEVICE CLASS
-    def __init__(self, id: int, name: str, protocol: int, publish_queue: asyncio.Queue):
+    def __init__(self, id: int, name: str, protocol: int, publish_queue: asyncio.Queue, measurements_queue: asyncio.Queue):
         self.id = id
         self.name = name
         self.connected = False
-        self.publish_queue = publish_queue
+        self.publish_queue = publish_queue  # mqtt publish queue
+        self.measurements_queue = measurements_queue  # time db measurements queue
         try:
             if protocol in [Protocol.OPC_UA, Protocol.MQTT, Protocol.MODBUS_TCP, Protocol.MODBUS_RTU]:
                 self.protocol = protocol
@@ -249,8 +248,8 @@ class Device(ABC):  # ABSTRACT DEVICE CLASS
         if self.connected:
             self.connected = False
 
-    def get_device_state(self) -> dict[str]:
-        state_dict: dict[str] = dict()
+    def get_device_state(self) -> Dict[str, Any]:
+        state_dict: Dict[str, Any] = {}
         state_dict["id"] = self.id
         state_dict["name"] = self.name
         state_dict["protocol"] = self.protocol
@@ -274,7 +273,7 @@ class DeviceManager:  # DEVICE MANAGER CLASS
 
     async def publish_devices_state(self):
         topic = f"devices_state"
-        payload: dict[int] = dict()
+        payload: Dict[int, Dict[str, Any]] = {}
         for device in self.devices:
             payload[device.id] = device.get_device_state()
         await self.publish_queue.put(MQTTMessage(qos=0, topic=topic, payload=payload))

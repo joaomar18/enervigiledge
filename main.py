@@ -22,6 +22,10 @@ async def async_main():  # Main coroutine
     
     timedb_client = TimeDBClient()
     
+    print(timedb_client.check_db_exists("OR-WE-516 Energy Meter_1"))
+    print(timedb_client.get_measurements_list("OR-WE-516 Energy Meter_1"))
+    print(timedb_client.client._database)
+    
     mqtt_client = MQTTClient(
         config_file = "mqtt/client_options.env"
     )
@@ -38,6 +42,7 @@ async def async_main():  # Main coroutine
             id=1,
             name="OR-WE-516 Energy Meter",
             publish_queue=mqtt_client.publish_queue,
+            measurements_queue=timedb_client.write_queue,
             meter_type=EnergyMeterType.THREE_PHASE,
             meter_options=EnergyMeterOptions(
                 read_energy_from_meter=True, read_separate_forward_reverse_energy=True, negative_reactive_power=False, frequency_reading=True
