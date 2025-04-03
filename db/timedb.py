@@ -24,14 +24,16 @@ class Measurement:
 class TimeDBClient:
 
     @staticmethod
-    def to_db_format(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def to_db_format(data: List[Dict[str, Any]]) -> List[Dict[str, Any]] | None:
         formatted = []
         for item in data:
             fields = {k: v for k, v in item.items() if k not in ("name", "start_time", "end_time") and v is not None}
             tags = {"start_time": functions.datetime_to_tag(item["start_time"]), "end_time": functions.datetime_to_tag(item["end_time"])}
             timestamp: datetime = item.get("end_time")
-
-            formatted.append({"measurement": item["name"], "fields": fields, "tags": tags, "time": timestamp.isoformat() if timestamp else None})
+            if fields and tags and timestamp:
+                formatted.append({"measurement": item["name"], "fields": fields, "tags": tags, "time": timestamp.isoformat() if timestamp else None})
+            else:
+                return None
         return formatted
 
     def __init__(self, host: str = "localhost", port: int = 8086, username: str = "root", password: str = "root"):
@@ -45,7 +47,6 @@ class TimeDBClient:
                 try:
                     measurement: Measurement = await self.write_queue.get()
                     await self.write_data(measurement)
-                    print(f"Sucessfully writed measurement to {measurement.db}")
                 except Exception as e:
                     debug.logger.error(f"Time DB Client - Write Task: {e}")
             await asyncio.sleep(0)
@@ -56,8 +57,8 @@ class TimeDBClient:
                 self.client.create_database(measurement.db)
 
             db_data = TimeDBClient.to_db_format(measurement.data)
-            print(db_data)
-            self.client.write_points(points=db_data, database=measurement.db)
+            if db_data is not None:
+                self.client.write_points(points=db_data, database=measurement.db)
         except Exception as e:
             debug.logger.error(f"Failed to write data to time db: {e}")
             return False
