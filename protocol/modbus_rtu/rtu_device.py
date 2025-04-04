@@ -121,10 +121,10 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         self.start()
 
     def start(self):
-        self.main_task = asyncio.get_event_loop().create_task(self._main())
-        self.receiver_task = asyncio.get_event_loop().create_task(self._receiver())
+        self.main_task = asyncio.get_event_loop().create_task(self.main())
+        self.receiver_task = asyncio.get_event_loop().create_task(self.receiver())
 
-    async def _main(self):
+    async def main(self):
         while True:
             try:
                 debug.logger.debug(f"Trying to connect to client {self.name} with id {self.id}...")
@@ -144,24 +144,30 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                     self.connection_open = False
                 await asyncio.sleep(2)
 
-    async def _receiver(self):
+    async def receiver(self):
         while True:
             try:
                 if self.connection_open:
-                    for node in self.nodes:
-                        node.set_value(self._read_float(node))
+                    tasks = [asyncio.to_thread(self.read_float, node) for node in self.nodes]
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for node, result in zip(self.nodes, results):
+                        if isinstance(result, Exception):
+                            debug.logger.error(f"Read failed for {node.name}: {result}")
+                            continue
+                        node.set_value(result)
                         self.set_connected()
                     await self.process_nodes()
                     await self.publish_nodes()
             except Exception as e:
-                debug.logger.debug(f"{e}")
+                debug.logger.error(f"{e}")
                 self.set_disconnected()
                 self.client.close()
                 self.connection_open = False
             await asyncio.sleep(self.connection_options.read_period)
 
-    def _read_float(self, node: ModbusRTUNode):
+    def read_float(self, node: ModbusRTUNode):
         try:
+            print("trying to read")
             response = self.client.read_holding_registers(address=node.register, count=2, slave=self.connection_options.slave_id, no_response_expected=False)
 
         except Exception as e:
