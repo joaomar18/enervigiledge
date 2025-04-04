@@ -167,7 +167,6 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
     def read_float(self, node: ModbusRTUNode):
         try:
-            print("trying to read")
             response = self.client.read_holding_registers(address=node.register, count=2, slave=self.connection_options.slave_id, no_response_expected=False)
 
         except Exception as e:
