@@ -16,7 +16,7 @@ from controller.meter import EnergyMeter, EnergyMeterType, EnergyMeterOptions
 
 
 class ModbusRTUOptions:
-    def __init__(self, slave_id: int, port: str, baudrate: int, stopbits: int, parity: str, bytesize: int, read_period: int, timeout: float):
+    def __init__(self, slave_id: int, port: str, baudrate: int, stopbits: int, parity: str, bytesize: int, read_period: int, timeout: float, retries: int):
         self.slave_id = slave_id
         self.port = port
         self.baudrate = baudrate
@@ -25,6 +25,7 @@ class ModbusRTUOptions:
         self.bytesize = bytesize
         self.read_period = read_period
         self.timeout = timeout
+        self.retries = retries
 
     def set_slave_id(self, slave_id: int):
         self.slave_id = slave_id
@@ -46,6 +47,9 @@ class ModbusRTUOptions:
 
     def set_timeout(self, timeout: float):
         self.timeout = timeout
+
+    def set_retries(self, retries: int):
+        self.retries = retries
 
 
 class ModbusRTUNode(Node):
@@ -115,6 +119,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             parity=self.connection_options.parity,
             bytesize=self.connection_options.bytesize,
             timeout=self.connection_options.timeout,
+            retries=self.connection_options.retries
         )
 
         self.connection_open = False
@@ -148,18 +153,17 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         while True:
             try:
                 if self.connection_open:
-                    tasks = [asyncio.to_thread(self.read_float, node) for node in self.nodes]
+                    tasks = [asyncio.to_thread(self.read_float, node) for node in self.nodes if isinstance(node, ModbusRTUNode)]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
                     for node, result in zip(self.nodes, results):
                         if isinstance(result, Exception):
-                            debug.logger.error(f"Read failed for {node.name}: {result}")
-                            continue
+                            raise result
                         node.set_value(result)
-                        self.set_connected()
+                    self.set_connected()    
                     await self.process_nodes()
                     await self.publish_nodes()
             except Exception as e:
-                debug.logger.error(f"{e}")
+                debug.logger.debug(f"{e}")
                 self.set_disconnected()
                 self.client.close()
                 self.connection_open = False

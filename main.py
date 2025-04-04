@@ -30,7 +30,7 @@ async def async_main():  # Main coroutine
     try:
 
         meter_orno_we_516_options = ModbusRTUOptions(
-            slave_id=1, port="/dev/ttyAMA0", baudrate=9600, stopbits=1, parity="E", bytesize=8, read_period=5, timeout=1.0
+            slave_id=1, port="/dev/ttyAMA0", baudrate=9600, stopbits=1, parity="E", bytesize=8, read_period=5, timeout=0.2, retries=0
         )
 
         meter_orno_we_516 = ModbusRTUEnergyMeter(
