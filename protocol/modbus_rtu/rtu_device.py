@@ -95,7 +95,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         meter_type: EnergyMeterType,
         meter_options: EnergyMeterOptions,
         connection_options: ModbusRTUOptions,
-        nodes: set[ModbusRTUNode] = set(),
+        nodes: set[Node] = set(),
     ):
         super().__init__(
             id=id,
@@ -109,6 +109,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         )
 
         self.nodes = nodes
+        self.modbus_rtu_nodes: set[ModbusRTUNode] = {node for node in nodes if isinstance(node, ModbusRTUNode)}
 
         self.connection_options = connection_options
 
@@ -119,7 +120,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             parity=self.connection_options.parity,
             bytesize=self.connection_options.bytesize,
             timeout=self.connection_options.timeout,
-            retries=self.connection_options.retries
+            retries=self.connection_options.retries,
         )
 
         self.connection_open = False
@@ -153,17 +154,18 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         while True:
             try:
                 if self.connection_open:
-                    tasks = [asyncio.to_thread(self.read_float, node) for node in self.nodes if isinstance(node, ModbusRTUNode)]
+                    tasks = [asyncio.to_thread(self.read_float, node) for node in self.modbus_rtu_nodes]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
-                    for node, result in zip(self.nodes, results):
+                    for node, result in zip(self.modbus_rtu_nodes, results):
                         if isinstance(result, Exception):
                             raise result
                         node.set_value(result)
-                    self.set_connected()    
+                    self.set_connected()
                     await self.process_nodes()
                     await self.publish_nodes()
+                    await self.log_nodes()
             except Exception as e:
-                debug.logger.debug(f"{e}")
+                debug.logger.error(f"{e}")
                 self.set_disconnected()
                 self.client.close()
                 self.connection_open = False

@@ -159,17 +159,17 @@ class Node:  # ABSTRACT NODE CLASS
 
             self.mean_sum += value
             self.mean_count += 1
-            self.mean_value = self.mean_sum / self.mean_count
+            self.mean_value = round(self.mean_sum / self.mean_count, self.decimal_places)
 
             if self.min_value is None:
-                self.min_value = value
+                self.min_value = round(value, self.decimal_places)
             elif self.min_value > value:
-                self.min_value = value
+                self.min_value = round(value, self.decimal_places)
 
             if self.max_value is None:
-                self.max_value = value
+                self.max_value = round(value, self.decimal_places)
             elif self.max_value < value:
-                self.max_value = value
+                self.max_value = round(value, self.decimal_places)
 
             self.check_alarms(value)
 
@@ -226,12 +226,13 @@ class Node:  # ABSTRACT NODE CLASS
 
 
 class Device(ABC):  # ABSTRACT DEVICE CLASS
-    def __init__(self, id: int, name: str, protocol: int, publish_queue: asyncio.Queue, measurements_queue: asyncio.Queue):
+    def __init__(self, id: int, name: str, protocol: int, publish_queue: asyncio.Queue, measurements_queue: asyncio.Queue, nodes: set[Node]):
         self.id = id
         self.name = name
         self.connected = False
         self.publish_queue = publish_queue  # mqtt publish queue
         self.measurements_queue = measurements_queue  # time db measurements queue
+        self.nodes = nodes
         try:
             if protocol in [Protocol.OPC_UA, Protocol.MQTT, Protocol.MODBUS_TCP, Protocol.MODBUS_RTU]:
                 self.protocol = protocol
@@ -265,6 +266,12 @@ class DeviceManager:  # DEVICE MANAGER CLASS
 
     def add_device(self, device: Device):
         self.devices.add(device)
+
+    def get_device(self, name:str, id:id) -> Device:
+        for device in self.devices:
+            if name == device.name and id == device.id:
+                return device
+        return None
 
     async def handle_devices(self):
         while True:

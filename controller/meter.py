@@ -222,7 +222,7 @@ class EnergyMeter(Device):
         meter_options: EnergyMeterOptions,
         meter_nodes: set[Node],
     ):
-        super().__init__(id=id, name=name, protocol=protocol, publish_queue=publish_queue, measurements_queue=measurements_queue)
+        super().__init__(id=id, name=name, protocol=protocol, publish_queue=publish_queue, measurements_queue=measurements_queue, nodes=meter_nodes)
         self.meter_type = meter_type
         self.meter_options = meter_options
         try:
@@ -231,7 +231,6 @@ class EnergyMeter(Device):
             self.meter_nodes.validate_nodes()
         except Exception as e:
             raise Exception(f"Failed to initialize EnergyMeter '{name}' with id {id} due to invalid definitions. {e}")
-        asyncio.get_event_loop().create_task(self.process_logging())
 
         self.calculation_methods = {
             "_reactive_energy": (self.calculate_energy, {"energy_type": "reactive"}),
@@ -243,23 +242,14 @@ class EnergyMeter(Device):
             "_power_factor": (self.calculate_pf, {}),
         }
 
-    async def process_logging(self):
-        while True:
-            try:
-                date_time = functions.get_current_date()
-                await self.log_nodes(date_time)
-            except Exception as e:
-                debug.logger.error(e)
-            await asyncio.sleep(30)
-
-    async def log_nodes(self, date_time: datetime):
-
+    async def log_nodes(self):
+        current_date_time = datetime.now()
         for node in self.meter_nodes.nodes.values():
             if node.logging:
                 if node.last_log_datetime is None:
-                    node.last_log_datetime = date_time
-                elif functions.subtracte_datetime_mins(date_time, node.last_log_datetime) >= node.logging_period:
-                    log_data: List[Dict] = [node.submit_log(date_time)]
+                    node.last_log_datetime = current_date_time
+                elif functions.subtracte_datetime_mins(current_date_time, node.last_log_datetime) >= node.logging_period:
+                    log_data: List[Dict] = [node.submit_log(current_date_time)]
                     log_db = f"{self.name}_{self.id}"
                     await self.measurements_queue.put(Measurement(db=log_db, data=log_data))
                     self.reset_directional_energy(node)
@@ -325,11 +315,12 @@ class EnergyMeter(Device):
     def calculate_pf_direction(self, prefix: str, node: Node):
         pf = self.meter_nodes.nodes[prefix + "power_factor"].value
         er = self.meter_nodes.nodes.get(prefix + "reactive_energy")
-        if pf >= 0.99:
-            node.set_value(PowerFactorDirection.UNITARY)
-            if er:
-                er.reset_direction()
-            return
+        if pf:
+            if pf >= 0.99:
+                node.set_value(PowerFactorDirection.UNITARY)
+                if er:
+                    er.reset_direction()
+                return
 
         if self.meter_options.negative_reactive_power:
             q = self.meter_nodes.nodes[prefix + "reactive_power"]

@@ -20,17 +20,18 @@ import util.functions as functions
 
 
 async def async_main():  # Main coroutine
-
+    
     timedb_client = TimeDBClient()
     mqtt_client = MQTTClient(config_file="mqtt/client_options.env")
-    http_server = HTTPServer(host="0.0.0.0", port=8000)
-
     device_manager = DeviceManager(publish_queue=mqtt_client.publish_queue)
+    
+    http_server = HTTPServer(host="0.0.0.0", port=8000, device_manager=device_manager, timedb=timedb_client)
+
 
     try:
 
         meter_orno_we_516_options = ModbusRTUOptions(
-            slave_id=1, port="/dev/ttyAMA0", baudrate=9600, stopbits=1, parity="E", bytesize=8, read_period=5, timeout=0.2, retries=0
+            slave_id=1, port="/dev/ttyAMA0", baudrate=9600, stopbits=1, parity="E", bytesize=8, read_period=5, timeout=1, retries=0
         )
 
         meter_orno_we_516 = ModbusRTUEnergyMeter(

@@ -4,10 +4,6 @@ import random
 import time
 
 
-def datetime_to_tag(dt: datetime) -> str:
-    return dt.isoformat()
-
-
 def decrypt_password(password_encrypted: str, key: str) -> str:
     return Fernet(key).decrypt(password_encrypted).decode()
 
