@@ -10,7 +10,7 @@ import json
 
 #############LOCAL IMPORTS#############
 
-import util.debug as debug
+from util.debug import LoggerManager
 import util.functions as functions
 
 #######################################
@@ -61,7 +61,7 @@ class TimeDBClient:
                     measurement: Measurement = await self.write_queue.get()
                     await self.write_data(measurement)
                 except Exception as e:
-                    debug.logger.error(f"Time DB Client - Write Task: {e}")
+                    LoggerManager.get_logger(__name__).exception(f"Write Task: {e}")
             await asyncio.sleep(0)
 
     async def write_data(self, measurement: Measurement) -> bool:
@@ -73,7 +73,7 @@ class TimeDBClient:
             if db_data is not None:
                 self.client.write_points(points=db_data, database=measurement.db)
         except Exception as e:
-            debug.logger.exception(f"Failed to write data to time db: {e}")
+            LoggerManager.get_logger(__name__).exception(f"Failed to write data: {e}")
             return False
 
     def check_db_exists(self, db: str) -> bool:
@@ -115,7 +115,7 @@ class TimeDBClient:
             self.client.query(query)
             return True
         except Exception as e:
-            debug.logger.error(f"Failed to delete data from measurement '{measurement}' in DB '{db_name}': {e}")
+            LoggerManager.get_logger(__name__).exception(f"Failed to delete data from measurement '{measurement}' in DB '{db_name}': {e}")
             return False
 
     def close(self):

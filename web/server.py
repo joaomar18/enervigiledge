@@ -1,10 +1,11 @@
 import asyncio
 import json
+import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from uvicorn import Config, Server
 import multipart
-import util.debug as debug
+from util.debug import LoggerManager
 
 from controller.device import Device, DeviceManager
 from db.timedb import TimeDBClient
@@ -36,9 +37,9 @@ class HTTPServer:
                 response = self.timedb.get_measurement_data_between(device_name=name, device_id=id, measurement=measurement)
             except Exception as e:
                 if measurement:
-                    debug.logger.error(f"Failed to retrieve data for measurement '{measurement}' in time db: {e}")
+                    LoggerManager.get_logger(__name__).error(f"Failed to retrieve data for measurement '{measurement}' in time db: {e}")
                 else:
-                    debug.logger.error(f"Failed to retrieve data in time db: {e}")
+                    LoggerManager.get_logger(__name__).error(f"Failed to retrieve data in time db: {e}")
                 return JSONResponse(content={"error": str(e)})
             return JSONResponse(content=response)
 
@@ -62,13 +63,13 @@ class HTTPServer:
                     response["result"] = f"Could not delete {measurement} node logs from device {name} with id {id}"
             except Exception as e:
                 if measurement:
-                    debug.logger.error(f"Failed to delete data for measurement '{measurement}' in time db: {e}")
+                    LoggerManager.get_logger(__name__).error(f"Failed to delete data for measurement '{measurement}' in time db: {e}")
                 else:
-                    debug.logger.error(f"Failed to delete data in time db: {e}")
+                    LoggerManager.get_logger(__name__).error(f"Failed to delete data in time db: {e}")
                 return JSONResponse(content={"error": str(e)})
             return JSONResponse(content=response)
 
     async def run_server(self):
-        config = Config(app=self.server, host=self.host, port=self.port, reload=False)
+        config = Config(app=self.server, host=self.host, port=self.port, reload=False, log_level= logging.CRITICAL + 1)
         server = Server(config)
         await server.serve()

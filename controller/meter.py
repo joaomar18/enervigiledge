@@ -12,7 +12,7 @@ from typing import List, Dict, Any
 from controller.device import Device, Node
 from mqtt.client import MQTTMessage
 from db.timedb import Measurement
-import util.debug as debug
+from util.debug import LoggerManager
 import util.functions as functions
 
 #######################################
@@ -242,6 +242,12 @@ class EnergyMeter(Device):
             "_power_factor": (self.calculate_pf, {}),
         }
 
+    async def process_nodes(self):
+        if self.connected:
+            await self.calculate_nodes()
+            await self.log_nodes()
+            await self.publish_nodes()
+
     async def log_nodes(self):
         current_date_time = datetime.now()
         for node in self.meter_nodes.nodes.values():
@@ -265,7 +271,7 @@ class EnergyMeter(Device):
                     if energy_node and not energy_node.logging:
                         energy_node.reset_value()
 
-    async def process_nodes(self):
+    async def calculate_nodes(self):
 
         for node in self.meter_nodes.nodes.values():
             if not node.calculated:
@@ -344,7 +350,7 @@ class EnergyMeter(Device):
         topic = f"{self.name}_{self.id}_nodes"
         payload: Dict[str, Any] = {}
         for node in self.meter_nodes.nodes.values():
-            if node.publish:
+            if node.publish and node.value is not None:
                 payload[node.name] = node.get_publish_format()
         await self.publish_queue.put(MQTTMessage(qos=0, topic=topic, payload=payload))
 

@@ -10,7 +10,7 @@ import json
 
 #############LOCAL IMPORTS#############
 
-import util.debug as debug
+from util.debug import LoggerManager
 import util.functions as functions
 
 #######################################
@@ -58,7 +58,7 @@ class MQTTClient:
                     async for message in client.messages:
                         await self.receive_handler(str(message.topic), message.payload)
             except Exception as e:
-                debug.logger.error(f"MQTT Client - Handler Task: {e}")
+                LoggerManager.get_logger(__name__).error(f"{e}")
             await asyncio.sleep(2)
 
     async def subscribe_topics(self, client: mqtt.Client, topics: set[str]):
@@ -76,5 +76,5 @@ class MQTTClient:
                     message: MQTTMessage = await self.publish_queue.get()
                     await self.client.publish(topic=message.topic, payload=json.dumps(message.payload), qos=message.qos)
                 except Exception as e:
-                    debug.logger.error(f"MQTT Client - Publish Task: {e}")
+                    LoggerManager.get_logger(__name__).error(f"{e}")
             await asyncio.sleep(0)

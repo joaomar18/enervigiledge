@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 
 #############LOCAL IMPORTS#############
 
-import util.debug as debug
+from util.debug import LoggerManager
 from mqtt.client import MQTTMessage
 
 #######################################
@@ -110,6 +110,9 @@ class Node:  # ABSTRACT NODE CLASS
         self.max_alarm_state = False
 
     def set_value(self, value):
+        
+        if value is None:
+            return
 
         if self.timestamp is None:
             self.timestamp = time.time()
@@ -194,7 +197,7 @@ class Node:  # ABSTRACT NODE CLASS
 
     def get_publish_format(self) -> Dict[str, Any]:
         if self.value is None:
-            raise Exception(f"Error: Trying to publish null value on node {self.name} with value {self.value}")
+            raise Exception(f"Trying to publish null value on node {self.name} with value {self.value}")
 
         output = {}
         output["value"] = self.value
@@ -239,7 +242,7 @@ class Device(ABC):  # ABSTRACT DEVICE CLASS
             else:
                 raise ValueError(f"Invalid protocol: {protocol}")
         except ValueError as e:
-            debug.logger.exception(e)
+            LoggerManager.get_logger(__name__).exception(e)
 
     def set_connected(self):
         if not self.connected:
@@ -250,12 +253,12 @@ class Device(ABC):  # ABSTRACT DEVICE CLASS
             self.connected = False
 
     def get_device_state(self) -> Dict[str, Any]:
-        state_dict: Dict[str, Any] = {}
-        state_dict["id"] = self.id
-        state_dict["name"] = self.name
-        state_dict["protocol"] = self.protocol
-        state_dict["connected"] = self.connected
-        return state_dict
+        output: Dict[str, Any] = {}
+        output["id"] = self.id
+        output["name"] = self.name
+        output["protocol"] = self.protocol
+        output["connected"] = self.connected
+        return output
 
 
 class DeviceManager:  # DEVICE MANAGER CLASS
@@ -267,7 +270,7 @@ class DeviceManager:  # DEVICE MANAGER CLASS
     def add_device(self, device: Device):
         self.devices.add(device)
 
-    def get_device(self, name:str, id:id) -> Device:
+    def get_device(self, name: str, id: id) -> Device:
         for device in self.devices:
             if name == device.name and id == device.id:
                 return device
