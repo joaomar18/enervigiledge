@@ -18,6 +18,20 @@ LoggerManager.get_logger(__name__).setLevel(logging.INFO)
 
 @dataclass
 class OPCUAOptions:
+    """
+    Configuration container for OPC UA connection parameters.
+
+    This class defines the necessary configuration parameters for establishing
+    and managing a connection with an OPC UA server.
+
+    Attributes:
+        url (str): Endpoint URL of the OPC UA server (e.g., 'opc.tcp://192.168.0.100:4840').
+        username (Optional[str]): Optional username for authentication (default: None).
+        password (Optional[str]): Optional password for authentication (default: None).
+        read_period (int): Time in seconds between consecutive read cycles (default: 5).
+        timeout (int): Timeout duration in seconds for connection and read operations (default: 5).
+    """
+
     url: str
     username: Optional[str] = None
     password: Optional[str] = None
@@ -26,6 +40,34 @@ class OPCUAOptions:
 
 
 class OPCUANode(Node):
+    """
+    Represents an OPC UA node (data point) with specific metadata and state tracking.
+
+    This class extends the generic Node to include the necessary configuration
+    for identifying and reading values from an OPC UA server.
+
+    Inherits from:
+        Node: Base class representing a generic data point.
+
+    Args:
+        name (str): Unique name identifying the node.
+        type (NodeType): Type of the node (e.g., NodeType.FLOAT).
+        node_id (str): OPC UA Node ID used to access the value on the server (e.g., 'ns=2;s=Voltage_L1').
+        unit (str): Unit of measurement (e.g., 'V', 'A').
+        publish (bool): Whether to publish the node value via MQTT (default: True).
+        calculated (bool): Whether the value is calculated instead of read directly (default: False).
+        logging (bool): Whether the node value should be logged (default: False).
+        logging_period (int): Logging interval in minutes (default: 15).
+        min_alarm (bool): Enable alarm if value drops below `min_alarm_value` (default: False).
+        max_alarm (bool): Enable alarm if value rises above `max_alarm_value` (default: False).
+        min_alarm_value (float): Minimum threshold for triggering a minimum value alarm (default: 0.0).
+        max_alarm_value (float): Maximum threshold for triggering a maximum value alarm (default: 0.0).
+
+    Attributes:
+        node_id (str): OPC UA Node ID used to query values.
+        connected (bool): Indicates whether the node is currently reachable/responding.
+    """
+
     def __init__(
         self,
         name: str,
@@ -62,6 +104,34 @@ class OPCUANode(Node):
 
 
 class OPCUAEnergyMeter(EnergyMeter):
+    """
+    Represents an energy meter that communicates over the OPC UA protocol.
+
+    This class extends the generic EnergyMeter to implement specific functionality
+    for devices connected via OPC UA. It manages the OPC UA client lifecycle,
+    node reading routines, and connection handling.
+
+    Inherits from:
+        EnergyMeter: Base class for energy meter abstraction.
+
+    Args:
+        id (int): Unique identifier of the energy meter.
+        name (str): Display name of the meter.
+        publish_queue (asyncio.Queue): Queue used to publish processed meter data to MQTT.
+        measurements_queue (asyncio.Queue): Queue for pushing measurements to be logged.
+        meter_type (EnergyMeterType): Specifies the type of meter (EnergyMeterType.SINGLE_PHASE, EnergyMeterType.THREE_PHASE).
+        meter_options (EnergyMeterOptions): General configuration options for the meter.
+        connection_options (OPCUAOptions): Connection configuration parameters for the OPC UA client.
+        nodes (Optional[Set[Node]]): Set of nodes representing individual measurement points.
+
+    Attributes:
+        client (asyncua.Client): Instance of the OPC UA client used for communication.
+        connection_options (OPCUAOptions): Configuration used to initialize the OPC UA client.
+        nodes (Set[Node]): All nodes associated with this meter.
+        opcua_nodes (Set[OPCUANode]): Subset of nodes specific to OPC UA.
+        connection_open (bool): Flag indicating whether the OPC UA connection is currently established.
+    """
+
     def __init__(
         self,
         id: int,
@@ -97,11 +167,36 @@ class OPCUAEnergyMeter(EnergyMeter):
         self.start()
 
     def start(self) -> None:
+        """
+        Starts the background tasks for the OPC UA energy meter.
+
+        This method initializes two asynchronous tasks using the event loop:
+            - `connection_task`: Handles connection establishment and reconnection logic.
+            - `receiver_task`: Periodically reads values from all configured OPC UA nodes.
+
+        These tasks run concurrently to ensure continuous communication and data acquisition.
+        """
+
         loop = asyncio.get_event_loop()
         self.connection_task = loop.create_task(self.manage_connection())
         self.receiver_task = loop.create_task(self.receiver())
 
     async def manage_connection(self):
+        """
+        Manages the OPC UA client connection lifecycle.
+
+        This asynchronous task continuously attempts to establish and maintain a stable
+        connection with the OPC UA server. It performs the following actions:
+
+            - Attempts to connect to the configured OPC UA server.
+            - Monitors the connection status in a loop using `check_connection()`.
+            - Handles disconnection events and triggers a reconnection attempt.
+            - Updates the internal connection state and logs status changes.
+
+        In case of connection loss or unexpected errors, the client is properly closed
+        and a reconnection is attempted after a short delay.
+        """
+
         logger = LoggerManager.get_logger(__name__)
 
         while True:
@@ -109,6 +204,7 @@ class OPCUAEnergyMeter(EnergyMeter):
                 logger.info(f"Trying to connect OPC UA client {self.name} with id {self.id}...")
                 await self.client.connect()
                 self.connection_open = True
+                self.set_connection_state(True)
                 logger.info(f"Client {self.name} with id {self.id} connected")
 
                 while self.connection_open:
@@ -123,6 +219,22 @@ class OPCUAEnergyMeter(EnergyMeter):
                 await asyncio.sleep(3)
 
     async def receiver(self):
+        """
+        Continuously reads data from all OPC UA nodes and updates their values.
+
+        This asynchronous task runs in a loop and performs the following operations
+        while the connection is open:
+
+            - Creates individual read tasks for each OPC UA node.
+            - Collects all results using `asyncio.gather`, handling exceptions per node.
+            - Sets each node’s value or flags it as failed (sets to None) if reading fails.
+            - Logs any failed node readings for diagnostic purposes.
+            - Calls `process_nodes()` to handle post-read logic (e.g., logging, publishing).
+
+        In case of unexpected exceptions, the client connection is closed and will be
+        re-established by the `manage_connection` task.
+        """
+
         logger = LoggerManager.get_logger(__name__)
 
         while True:
@@ -143,11 +255,6 @@ class OPCUAEnergyMeter(EnergyMeter):
                     if failed_nodes:
                         logger.warning(f"Failed to read {len(failed_nodes)} nodes from {self.name}: {', '.join(failed_nodes)}")
 
-                    if any(node.connected for node in self.opcua_nodes):
-                        self.set_connection_state(True)
-                    else:
-                        self.set_connection_state(False)
-
                     await self.process_nodes()
 
             except Exception as e:
@@ -157,6 +264,26 @@ class OPCUAEnergyMeter(EnergyMeter):
             await asyncio.sleep(self.connection_options.read_period)
 
     async def read_float(self, node: OPCUANode):
+        """
+        Reads a float value from a specific OPC UA node.
+
+        This method attempts to read the value of the given node using its configured
+        OPC UA Node ID. The read value is converted to float before being returned.
+
+        Args:
+            node (OPCUANode): The node to read the value from.
+
+        Returns:
+            float: The value read from the OPC UA server.
+
+        Raises:
+            Exception: If the read operation fails or returns an invalid value.
+
+        Notes:
+            - Updates the node connection state based on the read result.
+            - If the read fails, the node value is not updated and an exception is raised.
+        """
+
         try:
             opc_node = self.client.get_node(node.node_id)
             value = await opc_node.read_value()
@@ -167,6 +294,19 @@ class OPCUAEnergyMeter(EnergyMeter):
             raise Exception(f"Failed to read {node.name} from {self.name}") from e
 
     async def close_connection(self):
+        """
+        Closes the OPC UA client connection and updates the internal connection state.
+
+        This method performs the following actions:
+            - Marks the device as disconnected.
+            - Closes the OPC UA client connection if it is currently open.
+            - Sets the `connection_open` flag to False.
+
+        Notes:
+            - Any exceptions raised during the disconnect process are silently ignored.
+            - The connection will be re-established by the `manage_connection` task.
+        """
+
         self.set_connection_state(False)
         try:
             if self.connection_open:
