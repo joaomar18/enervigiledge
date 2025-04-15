@@ -10,6 +10,7 @@ import data.nodes as nodes
 from db.timedb import TimeDBClient
 from mqtt.client import MQTTClient
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter, ModbusRTUOptions
+from protocol.opcua.opcua_device import OPCUAEnergyMeter, OPCUAOptions
 from controller.device import DeviceManager
 from controller.meter import EnergyMeterType, EnergyMeterOptions
 from web.server import HTTPServer
@@ -38,8 +39,7 @@ async def async_main():
     http_server = HTTPServer(host="0.0.0.0", port=8000, device_manager=device_manager, timedb=timedb_client)
 
     try:
-        # Configure and register OR-WE-516 Energy Meter
-        meter = ModbusRTUEnergyMeter(
+        modbus_meter = ModbusRTUEnergyMeter(
             id=1,
             name="OR-WE-516 Energy Meter",
             publish_queue=mqtt_client.publish_queue,
@@ -54,7 +54,21 @@ async def async_main():
             nodes=nodes.get_orno_we_516_nodes(),
         )
 
-        device_manager.add_device(meter)
+        #opcua_meter = OPCUAEnergyMeter(
+        #    id=2,
+        #    name="SM1238 S7-1200 Meter",
+        #    publish_queue=mqtt_client.publish_queue,
+        #    measurements_queue=timedb_client.write_queue,
+        #    meter_type=EnergyMeterType.THREE_PHASE,
+        #    meter_options=EnergyMeterOptions(
+        #        read_energy_from_meter=False, read_separate_forward_reverse_energy=False, negative_reactive_power=True, frequency_reading=True
+        #    ),
+        #    connection_options=OPCUAOptions(url="opc.tcp://192.168.10.10:4840"),
+        #    nodes=nodes.get_sm1238_nodes(),
+        #)
+
+        device_manager.add_device(modbus_meter)
+        #device_manager.add_device(opcua_meter)
 
     except Exception as e:
         LoggerManager.get_logger(__name__).error(f"Failed to initialize devices: {e}")

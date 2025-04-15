@@ -8,6 +8,7 @@ import asyncio
 
 from controller.node import Node, NodeType
 from protocol.modbus_rtu.rtu_device import ModbusRTUNode
+from protocol.opcua.opcua_device import OPCUANode
 
 #######################################
 
@@ -64,5 +65,54 @@ def get_orno_we_516_nodes() -> {ModbusRTUNode}:
         Node(name="l3_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, calculate_increment=False, calculated=True),
         Node(name="l3_apparent_power", type=NodeType.FLOAT, unit="kVA", calculated=True),
         Node(name="l3_power_factor", type=NodeType.FLOAT, unit="", calculated=True),
+        Node(name="l3_power_factor_direction", type=NodeType.STRING, unit="", calculated=True),
+    }
+
+def get_sm1238_nodes() -> {OPCUANode}:
+
+    return {
+        OPCUANode(name="l1_voltage", type=NodeType.FLOAT, node_id="ns=4;i=7", unit="V", logging=True, logging_period=15),
+        OPCUANode(name="l1_current", type=NodeType.FLOAT, node_id="ns=4;i=6", unit="mA"),
+        ModbusRTUNode(name="l1_active_power", type=NodeType.FLOAT, node_id="ns=4;i=8;", unit="W"),
+        ModbusRTUNode(name="l1_reactive_power", type=NodeType.FLOAT, node_id="ns=4;i=9", unit="VAr"),
+        ModbusRTUNode(name="l1_apparent_power", type=NodeType.FLOAT, node_id="ns=4;i=10", unit="VA"),
+        ModbusRTUNode(name="l1_power_factor", type=NodeType.FLOAT, node_id="ns=4;i=11", unit=""),
+        
+        ModbusRTUNode(name="l2_voltage", type=NodeType.FLOAT, node_id="ns=4;i=14", unit="V", logging=True, logging_period=15),
+        ModbusRTUNode(name="l2_current", type=NodeType.FLOAT, node_id="ns=4;i=13", unit="mA"),
+        ModbusRTUNode(name="l2_active_power", type=NodeType.FLOAT, node_id="ns=4;i=15", unit="W"),
+        ModbusRTUNode(name="l2_reactive_power", type=NodeType.FLOAT, node_id="ns=4;i=16", unit="VAr"),
+        ModbusRTUNode(name="l2_apparent_power", type=NodeType.FLOAT, node_id="ns=4;i=17", unit="VA"),
+        ModbusRTUNode(name="l2_power_factor", type=NodeType.FLOAT, node_id="ns=4;i=18", unit=""),
+
+        ModbusRTUNode(name="l3_voltage", type=NodeType.FLOAT, node_id="ns=4;i=21", unit="V", logging=True, logging_period=15),
+        ModbusRTUNode(name="l3_current", type=NodeType.FLOAT, register="ns=4;i=20", unit="A"),
+        ModbusRTUNode(name="l3_active_power", type=NodeType.FLOAT, register="ns=4;i=22", unit="W"),
+        ModbusRTUNode(name="l3_reactive_power", type=NodeType.FLOAT, register="ns=4;i=23", unit="VAr"),
+        ModbusRTUNode(name="l3_apparent_power", type=NodeType.FLOAT, register="ns=4;i=24", unit="VA"),
+        ModbusRTUNode(name="l3_power_factor", type=NodeType.FLOAT, node_id="ns=4;i=25", unit=""),
+
+        ModbusRTUNode(name="frequency", type=NodeType.FLOAT, node_id="ns=4;i=33", unit="Hz"),
+        ModbusRTUNode(name="total_power_factor", type=NodeType.FLOAT, node_id="ns=4;i=29", unit=""),
+        
+        # Calculated Nodes
+
+        Node(name="total_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, calculate_increment=False, calculated=True, logging=True, logging_period=5),
+        Node(name="total_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, calculate_increment=False, calculated=True, logging=True, logging_period=5),
+        Node(name="total_power_factor_direction", type=NodeType.STRING, unit="", calculated=True, logging=True),
+        Node(name="total_active_power", type=NodeType.FLOAT, unit="kW", calculated=True, logging=True),
+        Node(name="total_reactive_power", type=NodeType.FLOAT, unit="kVAr", calculated=True, logging=True),
+        Node(name="total_apparent_power", type=NodeType.FLOAT, unit="kVA", calculated=True, logging=True),
+
+        Node(name="l1_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, calculated=True, logging=True, logging_period=5),
+        Node(name="l1_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, calculated=True, logging=True, logging_period= 5),
+        Node(name="l1_power_factor_direction", type=NodeType.STRING, unit="", calculated=True),
+        
+        Node(name="l2_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, calculated=True),
+        Node(name="l2_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, calculated=True),
+        Node(name="l2_power_factor_direction", type=NodeType.STRING, unit="", calculated=True),
+        
+        Node(name="l3_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, calculated=True),
+        Node(name="l3_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, calculated=True),
         Node(name="l3_power_factor_direction", type=NodeType.STRING, unit="", calculated=True),
     }
