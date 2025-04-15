@@ -113,11 +113,12 @@ class OPCUAEnergyMeter(EnergyMeter):
 
                 while self.connection_open:
                     await asyncio.sleep(3)
-
-                logger.warning(f"Client {self.name} with id {self.id} disconnected")
+                    await self.client.check_connection()
 
             except Exception as e:
-                logger.error(f"Connection error: {e}")
+                if self.connection_open:
+                    logger.warning(f"Client {self.name} with id {self.id} disconnected")
+                logger.warning(f"Connection error on client {self.name} with id {self.id}: {e}")
                 await self.close_connection()
                 await asyncio.sleep(3)
 
@@ -127,7 +128,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         while True:
             try:
                 if self.connection_open:
-                    tasks = [asyncio.create_task(self.read_node(node)) for node in self.opcua_nodes]
+                    tasks = [asyncio.create_task(self.read_float(node)) for node in self.opcua_nodes]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
 
                     failed_nodes = []
@@ -168,7 +169,8 @@ class OPCUAEnergyMeter(EnergyMeter):
     async def close_connection(self):
         self.set_connection_state(False)
         try:
-            await self.client.disconnect()
+            if self.connection_open:
+                await self.client.disconnect()
         except Exception:
             pass
         self.connection_open = False
