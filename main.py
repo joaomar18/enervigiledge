@@ -8,6 +8,7 @@ import asyncio
 
 import data.nodes as nodes
 from db.timedb import TimeDBClient
+from db.db import SQLiteDBClient
 from mqtt.client import MQTTClient
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter, ModbusRTUOptions
 from protocol.opcua.opcua_device import OPCUAEnergyMeter, OPCUAOptions
@@ -34,6 +35,7 @@ async def async_main():
 
     # Create core infrastructure
     timedb_client = TimeDBClient()
+    sqlitedb_client = SQLiteDBClient()
     mqtt_client = MQTTClient(config_file="mqtt/client_options.env")
     device_manager = DeviceManager(publish_queue=mqtt_client.publish_queue)
     http_server = HTTPServer(host="0.0.0.0", port=8000, device_manager=device_manager, timedb=timedb_client)

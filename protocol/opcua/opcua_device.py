@@ -13,7 +13,7 @@ from controller.device import Protocol
 from controller.node import Node, NodeType
 from controller.meter import EnergyMeter, EnergyMeterType, EnergyMeterOptions
 
-LoggerManager.get_logger(__name__).setLevel(logging.INFO)
+LoggerManager.get_logger(__name__).setLevel(logging.ERROR)
 
 
 @dataclass
