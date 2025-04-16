@@ -343,7 +343,7 @@ class Node:
         """
         Updates the node's timestamp and calculates elapsed time since the last update.
 
-        If it's the first update (i.e., no previous timestamp), sets elapsed time to 0.0.
+        If the timestamp is None (initialization) sets elapsed time to 0.0.
         Otherwise, computes the time difference between the current and last update.
         """
 
@@ -462,7 +462,7 @@ class Node:
             self.value = calculated
 
         elif self.positive_incremental:
-            calculated = value + self.initial_value
+            calculated = value
             self.update_direction(calculated)
             self.value += calculated
 

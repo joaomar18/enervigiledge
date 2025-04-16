@@ -696,11 +696,11 @@ class EnergyMeter(Device):
 
     def reset_directional_energy(self, node: Node):
         """
-        Resets the values of directional energy nodes (forward/reverse) if they are not independently logged.
-        Also resets corresponding phase directional nodes if the parent node is a total node.
+        Resets the values of directional and incremental energy nodes if they are not independently logged.
+        Also resets corresponding phase nodes if the parent node is a total node.
 
         Args:
-            node (Node): The parent node (e.g., total energy node) used to identify related directional nodes.
+            node (Node): The node used to identify related energy nodes.
         """
 
         prefix = EnergyMeter.get_node_phase(node)
@@ -709,24 +709,28 @@ class EnergyMeter(Device):
             if f"_{energy_type}_energy" not in node.name:
                 continue
 
-            directions = ("forward", "reverse")
-
-            for direction in directions:
-                # Reset directly related directional node
+            # Reset directional nodes (forward, reverse)
+            for direction in ("forward", "reverse"):
                 key = f"{prefix}{direction}_{energy_type}_energy"
                 energy_node = self.meter_nodes.nodes.get(key)
-
                 if energy_node and not energy_node.logging:
                     energy_node.reset_value()
 
+            # If total_, also reset all phase equivalents
             if prefix == "total_":
-                for direction in directions:
-                    for p in ["l1_", "l2_", "l3_"]:
-                        phase_key = f"{p}{direction}_{energy_type}_energy"
-                        phase_node = self.meter_nodes.nodes.get(phase_key)
+                for p in ("l1_", "l2_", "l3_"):
+                    # Directional
+                    for direction in ("forward", "reverse"):
+                        phase_dir_key = f"{p}{direction}_{energy_type}_energy"
+                        phase_dir_node = self.meter_nodes.nodes.get(phase_dir_key)
+                        if phase_dir_node and not phase_dir_node.logging:
+                            phase_dir_node.reset_value()
 
-                        if phase_node and not phase_node.logging:
-                            phase_node.reset_value()
+                    # Normal incremental
+                    phase_norm_key = f"{p}{energy_type}_energy"
+                    phase_norm_node = self.meter_nodes.nodes.get(phase_norm_key)
+                    if phase_norm_node and not phase_norm_node.logging:
+                        phase_norm_node.reset_value()
 
     async def calculate_nodes(self) -> None:
         """
