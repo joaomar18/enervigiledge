@@ -29,7 +29,7 @@ def decrypt_password(password_encrypted: str, key: str) -> str:
 
 def remove_phase_string(name: str) -> str:
     """
-    Removes the phase or total prefix (e.g., 'l1_', 'l2_', 'l3_', 'total_') from a node name if present.
+    Removes the phase or total prefix (e.g., 'l1_', 'l2_', 'l3_', 'total_', 'l1_l2_', etc.) from a node name if present.
 
     Args:
         name (str): The name of the node.
@@ -39,8 +39,14 @@ def remove_phase_string(name: str) -> str:
     """
 
     parts = name.split("_")
+
+    # Handle common prefixes
     if parts[0] in {"l1", "l2", "l3", "total"}:
+        # Check for line-to-line voltages
+        if len(parts) > 1 and parts[1] in {"l1", "l2", "l3"}:
+            return "_".join(parts[2:])
         return "_".join(parts[1:])
+
     return name
 
 
@@ -81,7 +87,7 @@ def subtract_datetime_mins(date_time_01: datetime, date_time_02: datetime) -> in
     Returns:
         int: Difference in minutes between the two times.
     """
-    
+
     minutes_01 = date_time_01.minute + (date_time_01.hour * 60)
     minutes_02 = date_time_02.minute + (date_time_02.hour * 60)
     return minutes_01 - minutes_02

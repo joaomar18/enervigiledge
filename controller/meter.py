@@ -314,27 +314,32 @@ class EnergyMeterNodes:
         - Validating node names and units against predefined valid options.
         - Ensuring calculated nodes have all required dependencies based on their type and phase.
         - Checking that power factor and power direction nodes are properly supported.
-        - Verifying logging consistency across related nodes (e.g., all energy nodes must share the same logging period if logging is enabled).
-
-        Raises:
-            NodeUnknownError: If a node has an unrecognized base name.
-            UnitError: If a node's unit is not valid for its type.
-            NodeMissingError: If any required node for a calculated value is missing.
-            LoggingPeriodError: If logging-enabled nodes within the same category have inconsistent logging periods.
+        - Verifying logging consistency across related nodes.
         """
 
         for node in self.nodes.values():
             EnergyMeterNodes.validate_node(node)
 
-        for phase in ("l1_", "l2_", "l3_", "total_"):
+        if self.meter_type == EnergyMeterType.SINGLE_PHASE:
             for energy_type in ("active", "reactive"):
-                self.validate_energy_nodes(phase, energy_type)
+                self.validate_energy_nodes("", energy_type)
 
             for power_type in ("active", "reactive", "apparent"):
-                self.validate_power_nodes(phase, power_type)
+                self.validate_power_nodes("", power_type)
 
-            self.validate_pf_nodes(phase)
-            self.validate_pf_direction_nodes(phase)
+            self.validate_pf_nodes("")
+            self.validate_pf_direction_nodes("")
+
+        elif self.meter_type == EnergyMeterType.THREE_PHASE:
+            for phase in ("l1_", "l2_", "l3_", "total_"):
+                for energy_type in ("active", "reactive"):
+                    self.validate_energy_nodes(phase, energy_type)
+
+                for power_type in ("active", "reactive", "apparent"):
+                    self.validate_power_nodes(phase, power_type)
+
+                self.validate_pf_nodes(phase)
+                self.validate_pf_direction_nodes(phase)
 
         EnergyMeterNodes.validate_logging_consistency(self.nodes)
 
@@ -345,10 +350,10 @@ class EnergyMeterNodes:
         Depending on the meter's configuration, this function checks for:
         - Forward and reverse energy nodes (if configured to read them separately).
         - Corresponding power node (if energy is to be calculated from power).
-        - For total energy nodes, validates all three phase nodes exist.
+        - For total energy nodes in 3F meters, validates that all three phase nodes exist.
 
         Args:
-            phase (str): Phase prefix (e.g., "l1_", "l2_", "l3_", or "total_").
+            phase (str): Phase prefix (e.g., "l1_", "l2_", "l3_", "total_", or "" for 1F meters).
             energy_type (str): Type of energy (e.g., "active", "reactive").
 
         Raises:
@@ -361,8 +366,7 @@ class EnergyMeterNodes:
         if not node or not node.calculated:
             return
 
-        # Validation for total energy node
-        if phase == "total_":
+        if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
             missing_phases = []
             for p in ["l1_", "l2_", "l3_"]:
                 sub_node = self.nodes.get(f"{p}{energy_type}_energy")
@@ -370,9 +374,8 @@ class EnergyMeterNodes:
                     missing_phases.append(f"{p}{energy_type}_energy")
             if missing_phases:
                 raise NodeMissingError(f"Missing phase energy nodes for {node_name} calculation: {', '.join(missing_phases)}.")
-            return  # total node validated; no need to continue
+            return
 
-        # Validation for single-phase energy nodes
         if self.meter_options.read_separate_forward_reverse_energy:
             forward = self.nodes.get(f"{phase}forward_{energy_type}_energy")
             reverse = self.nodes.get(f"{phase}reverse_{energy_type}_energy")
@@ -381,9 +384,8 @@ class EnergyMeterNodes:
                 raise NodeMissingError(f"Missing nodes for {node_name} calculation: expected forward and reverse energy nodes.")
 
         elif not self.meter_options.read_energy_from_meter:
-            power = self.nodes.get(f"{phase}{energy_type}_power")
-
-            if not power:
+            power_node = self.nodes.get(f"{phase}{energy_type}_power")
+            if not power_node:
                 raise NodeMissingError(f"Missing node for {node_name} calculation: expected {phase}{energy_type}_power.")
 
     def validate_power_nodes(self, phase: str, power_type: str) -> None:
@@ -394,30 +396,27 @@ class EnergyMeterNodes:
         - "active": (V, I, PF) OR (S and Q)
         - "reactive": (V, I, PF) OR (S and P)
         - "apparent": (V, I) OR (P and Q)
-        - For total nodes: ensures all three phases have the required power type node.
+        - For total power nodes on 3F meters: validates that all three phases exist.
 
         Args:
-            phase (str): Phase prefix (e.g., "l1_", "l2_", "l3_", or "total_").
+            phase (str): Phase prefix (e.g., "l1_", "l2_", "l3_", "total_", or "" for 1F).
             power_type (str): Type of power ("active", "reactive", or "apparent").
 
         Raises:
             NodeMissingError: If required nodes for power calculation are missing.
         """
-
         node_name = f"{phase}{power_type}_power"
         node = self.nodes.get(node_name)
 
         if not node or not node.calculated:
             return
 
-        # Validate total node
-        if phase == "total_":
+        if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
             missing_phases = [f"{p}{power_type}_power" for p in ["l1_", "l2_", "l3_"] if not self.nodes.get(f"{p}{power_type}_power")]
             if missing_phases:
                 raise NodeMissingError(f"Missing phase power nodes for {node_name} calculation: {', '.join(missing_phases)}.")
             return
 
-        # Validate individual phase
         v = self.nodes.get(f"{phase}voltage")
         i = self.nodes.get(f"{phase}current")
         pf = self.nodes.get(f"{phase}power_factor")
@@ -426,17 +425,14 @@ class EnergyMeterNodes:
         s = self.nodes.get(f"{phase}apparent_power")
 
         if power_type == "active":
-            # Valid if (V, I, PF) or (S and Q)
             if (v and i and pf) or (s and q):
                 return
 
         elif power_type == "reactive":
-            # Valid if (V, I, PF) or (S and P)
             if (v and i and pf) or (s and p):
                 return
 
         elif power_type == "apparent":
-            # Valid if (V and I) or (P and Q)
             if (v and i) or (p and q):
                 return
 
@@ -451,7 +447,7 @@ class EnergyMeterNodes:
             - Reactive power node
 
         Args:
-            phase (str): Phase prefix (e.g., "l1_", "l2_", "l3_").
+            phase (str): Phase prefix (e.g., "l1_", "l2_", "l3_", "total_", or "" for 1F).
 
         Raises:
             NodeMissingError: If any of the required nodes for PF calculation are missing.
@@ -463,7 +459,7 @@ class EnergyMeterNodes:
         if not node or not node.calculated:
             return
 
-        if phase == "total_":
+        if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
             missing = []
             for p in ["l1_", "l2_", "l3_"]:
                 active = self.nodes.get(f"{p}active_power")
@@ -478,7 +474,7 @@ class EnergyMeterNodes:
             active_power = self.nodes.get(f"{phase}active_power")
             reactive_power = self.nodes.get(f"{phase}reactive_power")
 
-            if not (active_power and reactive_power):
+            if not active_power or not reactive_power:
                 raise NodeMissingError(f"Missing nodes for {node_name} calculation: expected {phase}active_power and {phase}reactive_power.")
 
     def validate_pf_direction_nodes(self, phase: str):
@@ -490,11 +486,11 @@ class EnergyMeterNodes:
             - If `read_separate_forward_reverse_energy` is enabled: requires power factor and reactive energy.
             - Otherwise: requires only power factor.
 
-        For total:
-            - Validates all three phases meet the same dependency criteria.
+        For 3F total:
+            - Validates that all three phases meet the same dependency criteria.
 
         Args:
-            phase (str): Phase prefix (e.g., "l1_", "l2_", "l3_", or "total_").
+            phase (str): Phase prefix (e.g., "l1_", "l2_", "l3_", "total_", or "" for 1F).
 
         Raises:
             NodeMissingError: If any required dependent node is missing for PF direction calculation.
@@ -506,8 +502,7 @@ class EnergyMeterNodes:
         if not node or not node.calculated:
             return
 
-        # Validate total power factor direction
-        if phase == "total_":
+        if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
             missing = []
             for p in ["l1_", "l2_", "l3_"]:
                 pf = self.nodes.get(f"{p}power_factor")
@@ -534,10 +529,8 @@ class EnergyMeterNodes:
 
             if missing:
                 raise NodeMissingError(f"Missing nodes for {node_name} calculation: {', '.join(missing)}.")
-
             return
 
-        # Validate phase power factor direction
         pf = self.nodes.get(f"{phase}power_factor")
 
         if self.meter_options.negative_reactive_power:
@@ -594,17 +587,16 @@ class EnergyMeter(Device):
         """
         Returns the phase prefix of a node based on its name.
 
-        Identifies whether a node belongs to a specific phase (e.g., "l1_", "l2_", "l3_")
-        or represents a totalized value ("total_") by checking the prefix of its name.
+        Identifies whether a node belongs to a specific phase (e.g., "l1_", "l2_", "l3_"),
+        a line-to-line voltage (e.g., "l1_l2_"), or represents a totalized value ("total_").
 
         Args:
             node (Node): The node whose name is to be analyzed.
 
         Returns:
-            str: The phase prefix ("l1_", "l2_", "l3_", or "total_"), or an empty string if none match.
+            str: The phase prefix ("l1_", "l2_", "l3_", "l1_l2_", etc.), or an empty string if none match.
         """
-
-        for phase in ("l1_", "l2_", "l3_", "total_"):
+        for phase in ("l1_l2_", "l2_l3_", "l3_l1_", "l1_", "l2_", "l3_", "total_"):
             if node.name.startswith(phase):
                 return phase
         return ""
