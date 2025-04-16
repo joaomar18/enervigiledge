@@ -125,6 +125,9 @@ def get_sm1238_nodes() -> {OPCUANode}:
         OPCUANode(name="l3_apparent_power", type=NodeType.FLOAT, node_id="ns=4;i=24", unit="VA"),
         OPCUANode(name="l3_power_factor", type=NodeType.FLOAT, node_id="ns=4;i=25", unit=""),
         OPCUANode(name="frequency", type=NodeType.FLOAT, node_id="ns=4;i=33", unit="Hz"),
+        OPCUANode(name="l1_l2_voltage", type=NodeType.FLOAT, node_id="ns=4;i=26", unit="V"),
+        OPCUANode(name="l2_l3_voltage", type=NodeType.FLOAT, node_id="ns=4;i=27", unit="V"),
+        OPCUANode(name="l3_l1_voltage", type=NodeType.FLOAT, node_id="ns=4;i=28", unit="V"),
         OPCUANode(name="total_power_factor", type=NodeType.FLOAT, node_id="ns=4;i=29", unit=""),
         # Calculated Nodes
         Node(
