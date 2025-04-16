@@ -775,11 +775,7 @@ class EnergyMeter(Device):
         """
         Calculates energy value based on the device configuration.
 
-        There are two calculation strategies depending on the configuration:
-            - If forward/reverse energy is enabled, subtract reverse from forward.
-            - Otherwise, derive energy by integrating power over elapsed time.
-
-        For total nodes, the result is the sum of all corresponding phase energy values.
+        For total nodes, the value is the sum of the three phase values.
 
         Args:
             prefix (str): Phase prefix (e.g., "l1_", "l2_", "l3_", or "total_").
@@ -790,14 +786,14 @@ class EnergyMeter(Device):
         if prefix == "total_":
             total = 0.0
             for p in ("l1_", "l2_", "l3_"):
-                temp_node = Node(name=f"{p}{energy_type}_energy", type=node.type, unit=node.unit)
-                self.calculate_energy(p, energy_type, temp_node)
+                phase_key = f"{p}{energy_type}_energy"
+                phase_node = self.meter_nodes.nodes.get(phase_key)
 
-                if temp_node.value is None:
+                if phase_node is None or phase_node.value is None:
                     node.set_value(None)
                     return
 
-                total += EnergyMeterNodes.get_scaled_value(temp_node)
+                total += EnergyMeterNodes.get_scaled_value(phase_node)
 
             scaled_total = EnergyMeterNodes.apply_output_scaling(total, node)
             node.set_value(scaled_total)
@@ -843,14 +839,14 @@ class EnergyMeter(Device):
         if prefix == "total_":
             total = 0.0
             for p in ("l1_", "l2_", "l3_"):
-                temp_node = Node(name=f"{p}{power_type}_power", type=node.type, unit=node.unit)
-                self.calculate_power(p, power_type, temp_node)
+                phase_key = f"{p}{power_type}_power"
+                phase_node = self.meter_nodes.nodes.get(phase_key)
 
-                if temp_node.value is None:
+                if phase_node is None or phase_node.value is None:
                     node.set_value(None)
                     return
 
-                total += EnergyMeterNodes.get_scaled_value(temp_node)
+                total += EnergyMeterNodes.get_scaled_value(phase_node)
 
             scaled_total = EnergyMeterNodes.apply_output_scaling(total, node)
             node.set_value(scaled_total)

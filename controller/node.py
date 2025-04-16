@@ -383,7 +383,6 @@ class Node:
         This method:
             - Accumulates the total sum and count of values to compute the mean.
             - Updates the current minimum and maximum values if applicable.
-            - Applies rounding based on the node's configured decimal precision for FLOAT types.
 
         Args:
             value (Union[int, float]): The new value to include in the statistics.
@@ -391,13 +390,13 @@ class Node:
 
         self.mean_sum += value
         self.mean_count += 1
-        self.mean_value = round(self.mean_sum / self.mean_count, self.decimal_places)
+        self.mean_value = self.mean_sum / self.mean_count
 
         if self.min_value is None or value < self.min_value:
-            self.min_value = round(value, self.decimal_places) if self.type == NodeType.FLOAT else value
+            self.min_value = value
 
         if self.max_value is None or value > self.max_value:
-            self.max_value = round(value, self.decimal_places) if self.type == NodeType.FLOAT else value
+            self.max_value = value
 
     def set_value_str_bool(self, value: Union[str, bool]) -> None:
         """
@@ -415,7 +414,6 @@ class Node:
 
         This includes:
             - Updating direction (positive/negative change).
-            - Rounding (for FLOAT types).
             - Updating statistical tracking (min, max, mean).
             - Evaluating alarm thresholds.
 
@@ -430,7 +428,7 @@ class Node:
         if self.value is not None:
             self.update_direction(value)
 
-        self.value = round(value, self.decimal_places) if self.type == NodeType.FLOAT else value
+        self.value = value
         self.update_stats(value)
         self.check_alarms(value)
 
@@ -442,10 +440,9 @@ class Node:
             - Initial value capture on first call.
             - Calculation of the new value based on the current reading and mode:
                 - Raw value (if `calculate_increment` is False),
-                - Positive accumulation (adds initial value),
+                - Positive accumulation (adds value over time),
                 - Delta from initial (default behavior).
             - Updates direction (positive or negative change).
-            - Applies rounding for FLOAT nodes.
 
         Args:
             value (Union[int, float]): The current raw value read from the device.
@@ -461,15 +458,18 @@ class Node:
 
         if not self.calculate_increment:
             calculated = value
+            self.update_direction(calculated)
+            self.value = calculated
 
         elif self.positive_incremental:
             calculated = value + self.initial_value
+            self.update_direction(calculated)
+            self.value += calculated
 
         else:
             calculated = value - self.initial_value
-
-        self.update_direction(calculated)
-        self.value = round(calculated, self.decimal_places) if self.type == NodeType.FLOAT else calculated
+            self.update_direction(calculated)
+            self.value = calculated
 
     def reset_value(self) -> None:
         """
@@ -489,7 +489,7 @@ class Node:
         self.mean_value = None
         self.mean_sum = 0
         self.mean_count = 0
-        self.timestamp = None
+        self.timestamp = time.time()
         self.elapsed_time = None
         self.positive_direction = False
         self.negative_direction = False
@@ -506,6 +506,7 @@ class Node:
     def get_publish_format(self) -> Dict[str, Any]:
         """
         Prepares the node's current value and metadata for MQTT publishing.
+        Applies rounding for non-incremental FLOAT nodes.
 
         Returns:
             Dict[str, Any]: A dictionary containing the node's value, type, unit,
@@ -515,7 +516,13 @@ class Node:
             Exception: If the node value is None, indicating no data has been set yet.
         """
 
-        output = {"value": self.value, "type": self.type.value, "unit": self.unit}
+        output = {
+            "value": (
+                round(self.value, self.decimal_places) if self.type is NodeType.FLOAT and not self.incremental_node and self.value is not None else self.value
+            ),
+            "type": self.type.value,
+            "unit": self.unit,
+        }
 
         if self.type in {NodeType.FLOAT, NodeType.INT} and not self.incremental_node:
             if self.min_alarm:
@@ -529,6 +536,7 @@ class Node:
         """
         Generates a log entry for the node, capturing statistical data or the current value
         depending on its type and configuration. Resets internal value state after submission.
+        Applies rounding for FLOAT non-incremental nodes.
 
         Args:
             date_time (datetime): Timestamp marking the end of the logging period.
@@ -542,9 +550,9 @@ class Node:
         output = {"name": self.name, "unit": self.unit, "start_time": self.last_log_datetime, "end_time": date_time}
 
         if self.type in {NodeType.INT, NodeType.FLOAT} and not self.incremental_node:
-            output["mean_value"] = self.mean_value
-            output["min_value"] = self.min_value
-            output["max_value"] = self.max_value
+            output["mean_value"] = round(self.mean_value, self.decimal_places)
+            output["min_value"] = round(self.min_value, self.decimal_places) if self.type is NodeType.FLOAT and self.min_value is not None else self.min_value
+            output["max_value"] = round(self.max_value, self.decimal_places) if self.type is NodeType.FLOAT and self.max_value is not None else self.max_value
         else:
             output["value"] = self.value
 
