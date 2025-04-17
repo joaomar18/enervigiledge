@@ -1041,5 +1041,5 @@ class EnergyMeter(Device):
             "protocol": self.protocol,
             "connected": self.connected,
             "options": self.meter_options.get_meter_options(),
-            "type": self.meter_type.value,
+            "type": self.meter_type,
         }

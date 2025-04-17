@@ -23,7 +23,6 @@ class NodeRecord:
     configurations (e.g., calculated or internal logic nodes). It stores all relevant configuration details.
 
     Attributes:
-        device_name (str): Name of the device this node belongs to.
         device_id (int): Unique identifier of the parent device in the database.
         name (str): Unique name identifying the node.
         protocol (str): Communication protocol associated with the node.
@@ -50,11 +49,18 @@ class NodeRecord:
                 - For "opcua": node_id (str): OPC UA Node ID used to access the value.
     """
 
-    device_name: str
-    device_id: int
+    device_id: Optional[int]
     name: str
     protocol: str
     config: Dict[str, Any]
+
+    def __eq__(self, other):
+        if not isinstance(other, NodeRecord):
+            return False
+        return (self.device_id, self.name, self.protocol) == (other.device_id, other.name, other.protocol)
+
+    def __hash__(self):
+        return hash((self.device_id, self.name, self.protocol))
 
 
 @dataclass
@@ -63,6 +69,7 @@ class EnergyMeterRecord:
     Represents the full configuration of an energy meter for persistence in SQLite.
 
     Attributes:
+        id (int | None): id of the device, when inserting leave None
         name (str): Human-readable name of the energy meter (e.g., "OR-WE-516 Energy Meter").
         protocol (str): Communication protocol used by the meter (e.g., "modbus_rtu", "opcua").
         device_type (str): Type of the meter, typically based on electrical configuration (e.g., "three_phase", "single_phase").
@@ -76,6 +83,7 @@ class EnergyMeterRecord:
     meter_options: Dict[str, Any]
     connection_options: Dict[str, Any]
     nodes: Set[NodeRecord]
+    id: Optional[int] = None
 
 
 class SQLiteDBClient:
@@ -151,15 +159,15 @@ class SQLiteDBClient:
 
     def insert_energy_meter(self, record: EnergyMeterRecord) -> int | None:
         """
-        Inserts a new energy meter (device) into the database.
+        Inserts a new energy meter (device) into the database along with all associated nodes.
 
         Args:
-            record (EnergyMeterRecord): Structured energy meter data containing
-                protocol, meter type, and configuration options.
+            record (EnergyMeterRecord): Structured energy meter data including nodes.
 
         Returns:
             int | None: The ID of the inserted device if successful, None otherwise.
         """
+
         logger = LoggerManager.get_logger(__name__)
 
         try:
@@ -170,38 +178,79 @@ class SQLiteDBClient:
                 """,
                 (record.name, record.protocol, record.device_type, json.dumps(record.meter_options), json.dumps(record.connection_options)),
             )
+            device_id = self.cursor.lastrowid
+
+            for node in record.nodes:
+                node.device_id = device_id
+                self.cursor.execute(
+                    """
+                    INSERT INTO nodes (device_id, name, protocol, config)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (device_id, node.name, node.protocol, json.dumps(node.config)),
+                )
+
             self.conn.commit()
-            return self.cursor.lastrowid  # Return the generated device ID
+            return device_id
+
         except Exception as e:
-            logger.exception(f"Failed to insert device '{record.name}': {e}")
+            logger.exception(f"Failed to insert energy meter '{record.name}': {e}")
+            self.conn.rollback()
             return None
 
-    def insert_node(self, record: NodeRecord) -> bool:
+    def get_all_energy_meters(self) -> List[EnergyMeterRecord]:
         """
-        Inserts a new node (data point) associated with a specific device.
-
-        Args:
-            record (NodeRecord): Structured node data including the parent device ID,
-                protocol type, and full node configuration.
+        Retrieves all energy meters from the database, including their associated nodes.
 
         Returns:
-            bool: True if the insertion was successful, False otherwise.
+            List[EnergyMeterRecord]: A list of fully populated energy meter records.
         """
+
         logger = LoggerManager.get_logger(__name__)
+
+        meters: List[EnergyMeterRecord] = []
 
         try:
             self.cursor.execute(
                 """
-                INSERT INTO nodes (device_id, name, protocol, config)
-                VALUES (?, ?, ?, ?)
-                """,
-                (record.device_id, record.name, record.protocol, json.dumps(record.config)),
+                SELECT id, name, protocol, device_type, meter_options, connection_options
+                FROM devices
+            """
             )
-            self.conn.commit()
-            return True
+            device_rows = self.cursor.fetchall()
+
+            for device_row in device_rows:
+                device_id, name, protocol, device_type, meter_opts_str, conn_opts_str = device_row
+
+                self.cursor.execute(
+                    """
+                    SELECT name, protocol, config FROM nodes WHERE device_id = ?
+                """,
+                    (device_id,),
+                )
+                node_rows = self.cursor.fetchall()
+
+                nodes = set()
+                for node_name, node_protocol, config_str in node_rows:
+                    node = NodeRecord(device_id=device_id, name=node_name, protocol=node_protocol, config=json.loads(config_str))
+                    nodes.add(node)
+
+                meter = EnergyMeterRecord(
+                    id=device_id,
+                    name=name,
+                    protocol=protocol,
+                    device_type=device_type,
+                    meter_options=json.loads(meter_opts_str),
+                    connection_options=json.loads(conn_opts_str),
+                    nodes=nodes,
+                )
+
+                meters.append(meter)
+
         except Exception as e:
-            logger.exception(f"Failed to insert node '{record.name}' for device ID {record.device_id}: {e}")
-            return False
+            logger.exception(f"Failed to retrieve energy meters: {e}")
+
+        return meters
 
     def close(self):
         """

@@ -2,15 +2,16 @@
 
 import asyncio
 from asyncua import Client, ua
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Optional, Set
+from typing import List, Dict, Set, Optional, Any
 import logging
 
 ############### LOCAL IMPORTS ###############
 
 from util.debug import LoggerManager
 from controller.device import Protocol
-from controller.node import Node, NodeType
+from controller.node import Node, OPCUANode
 from controller.meter import EnergyMeter, EnergyMeterType, EnergyMeterOptions
 
 LoggerManager.get_logger(__name__).setLevel(logging.ERROR)
@@ -38,69 +39,15 @@ class OPCUAOptions:
     read_period: int = 5
     timeout: int = 5
 
+    def get_connection_options(self) -> Dict[str, Any]:
+        """
+        Returns a dictionary representation of the current OPC-UA options.
 
-class OPCUANode(Node):
-    """
-    Represents an OPC UA node (data point) with specific metadata and state tracking.
+        Returns:
+            Dict[str, Any]: A dictionary with all configuration flags and their values.
+        """
 
-    This class extends the generic Node to include the necessary configuration
-    for identifying and reading values from an OPC UA server.
-
-    Inherits from:
-        Node: Base class representing a generic data point.
-
-    Args:
-        name (str): Unique name identifying the node.
-        type (NodeType): Type of the node (e.g., NodeType.FLOAT).
-        node_id (str): OPC UA Node ID used to access the value on the server (e.g., 'ns=2;s=Voltage_L1').
-        unit (str): Unit of measurement (e.g., 'V', 'A').
-        publish (bool): Whether to publish the node value via MQTT (default: True).
-        calculated (bool): Whether the value is calculated instead of read directly (default: False).
-        logging (bool): Whether the node value should be logged (default: False).
-        logging_period (int): Logging interval in minutes (default: 15).
-        min_alarm (bool): Enable alarm if value drops below `min_alarm_value` (default: False).
-        max_alarm (bool): Enable alarm if value rises above `max_alarm_value` (default: False).
-        min_alarm_value (float): Minimum threshold for triggering a minimum value alarm (default: 0.0).
-        max_alarm_value (float): Maximum threshold for triggering a maximum value alarm (default: 0.0).
-
-    Attributes:
-        node_id (str): OPC UA Node ID used to query values.
-        connected (bool): Indicates whether the node is currently reachable/responding.
-    """
-
-    def __init__(
-        self,
-        name: str,
-        type: NodeType,
-        node_id: str,
-        unit: str,
-        publish: bool = True,
-        calculated: bool = False,
-        logging: bool = False,
-        logging_period: int = 15,
-        min_alarm: bool = False,
-        max_alarm: bool = False,
-        min_alarm_value: float = 0.0,
-        max_alarm_value: float = 0.0,
-    ):
-        super().__init__(
-            name=name,
-            type=type,
-            unit=unit,
-            publish=publish,
-            calculated=calculated,
-            logging=logging,
-            logging_period=logging_period,
-            min_alarm=min_alarm,
-            max_alarm=max_alarm,
-            min_alarm_value=min_alarm_value,
-            max_alarm_value=max_alarm_value,
-        )
-        self.node_id = node_id
-        self.connected = False
-
-    def set_connection_state(self, state: bool):
-        self.connected = state
+        return asdict(self)
 
 
 class OPCUAEnergyMeter(EnergyMeter):

@@ -13,7 +13,7 @@ from typing import Dict, Any
 #############LOCAL IMPORTS#############
 
 from util.debug import LoggerManager
-from controller.device import DeviceManager
+from controller.manager import DeviceManager
 from db.timedb import TimeDBClient
 
 #######################################
@@ -147,7 +147,7 @@ class HTTPServer:
                 all_states = [device.get_device_state() for device in self.device_manager.devices]
                 return JSONResponse(content=all_states)
             except Exception as e:
-                logger.error(f"Failed to retrieve all device states: {e}")
+                logger.exception(f"Failed to retrieve all device states: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
         @self.server.get("/get_nodes_state")

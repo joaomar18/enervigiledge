@@ -8,30 +8,10 @@ from abc import ABC
 
 #############LOCAL IMPORTS#############
 
-from mqtt.client import MQTTMessage
+from controller.enums import Protocol
 from controller.node import Node
 
 #######################################
-
-
-class Protocol:
-    """
-    Enumeration of supported device communication protocols.
-
-    Attributes:
-        OPC_UA (str): OPC UA protocol identifier.
-        MQTT (str): MQTT protocol identifier.
-        MODBUS_TCP (str): Modbus TCP protocol identifier.
-        MODBUS_RTU (str): Modbus RTU protocol identifier.
-        VALID_PROTOCOLS (set): Set containing all supported protocol strings for validation.
-    """
-
-    OPC_UA = "OPC_UA"
-    MQTT = "MQTT"
-    MODBUS_TCP = "MODBUS_TCP"
-    MODBUS_RTU = "MODBUS_RTU"
-
-    VALID_PROTOCOLS = {OPC_UA, MQTT, MODBUS_TCP, MODBUS_RTU}
 
 
 class Device(ABC):
@@ -55,7 +35,7 @@ class Device(ABC):
         self.publish_queue = publish_queue
         self.measurements_queue = measurements_queue
         self.nodes = nodes
-        if protocol not in Protocol.VALID_PROTOCOLS:
+        if protocol not in Protocol.valid_protocols():
             raise ValueError(f"Invalid protocol: {protocol}")
 
         self.protocol = protocol
@@ -80,81 +60,6 @@ class Device(ABC):
             and connection status.
         """
 
+        print(f"Protocol: {self.protocol}")
+
         return {"id": self.id, "name": self.name, "protocol": self.protocol, "connected": self.connected}
-
-
-class DeviceManager:
-    """
-    Manages a collection of devices and periodically publishes their state.
-
-    Attributes:
-        devices (Set[Device]): Set of registered devices.
-        publish_queue (asyncio.Queue): Queue used for publishing MQTT messages.
-    """
-
-    def __init__(self, publish_queue: asyncio.Queue):
-        self.devices: Set[Device] = set()
-        self.publish_queue = publish_queue
-        self.start()
-
-    def start(self) -> None:
-        """
-        Starts the background task that handles device state publishing.
-        """
-
-        loop = asyncio.get_event_loop()
-        self.handler_task = loop.create_task(self.handle_devices())
-
-
-    def add_device(self, device: Device):
-        """
-        Registers a new device.
-
-        Args:
-            device (Device): The device instance to add.
-        """
-
-        self.devices.add(device)
-
-    def delete_device(self, device: Device) -> None:
-        """
-        Removes a device from the manager if it exists.
-
-        Args:
-            device (Device): The device instance to remove.
-        """
-
-        self.devices.discard(device)
-        
-
-    def get_device(self, name: str, device_id: int) -> Optional[Device]:
-        """
-        Retrieves a device by name and ID.
-
-        Args:
-            name (str): The name of the device.
-            device_id (int): The unique identifier of the device.
-
-        Returns:
-            Optional[Device]: The matched device, or None if not found.
-        """
-
-        return next((device for device in self.devices if device.name == name and device.id == device_id), None)
-
-    async def handle_devices(self):
-        """
-        Periodically publishes the state of all registered devices.
-        """
-
-        while True:
-            await self.publish_devices_state()
-            await asyncio.sleep(10)
-
-    async def publish_devices_state(self):
-        """
-        Publishes a dictionary of all device states to the MQTT queue.
-        """
-
-        topic = "devices_state"
-        payload: Dict[int, Dict[str, Any]] = {device.id: device.get_device_state() for device in self.devices}
-        await self.publish_queue.put(MQTTMessage(qos=0, topic=topic, payload=payload))
