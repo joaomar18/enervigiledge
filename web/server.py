@@ -1,12 +1,15 @@
 ###########EXTERNAL IMPORTS############
 
+import os
 import asyncio
 import logging
+import json
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from uvicorn import Config, Server
 from datetime import datetime
 from typing import Dict, Any
+from passlib.hash import pbkdf2_sha256
 
 #######################################
 
@@ -17,6 +20,8 @@ from controller.manager import DeviceManager
 from db.timedb import TimeDBClient
 
 #######################################
+
+USER_CONFIG_PATH = "user_config.json"  # Path to user/password file
 
 
 class HTTPServer:
@@ -79,6 +84,97 @@ class HTTPServer:
         await server.serve()
 
     def setup_routes(self):
+
+        @self.server.post("/login")
+        async def login(request: Request):
+            """
+            Handles user login authentication via POST request.
+
+            Expects a JSON payload with the following fields:
+                - username (str): The username to authenticate.
+                - password (str): The corresponding plaintext password.
+
+            Workflow:
+                - Loads stored credentials from a local JSON config file.
+                - Verifies if the provided username matches the stored one.
+                - Verifies the password using pbkdf2_sha256 hash comparison.
+                - Returns a success message if credentials are valid.
+                - Returns a 400 response with an error message if any step fails.
+
+            Responses:
+                - 200 OK: Login successful.
+                - 400 Bad Request: Missing fields or invalid credentials.
+            """
+
+            logger = LoggerManager.get_logger(__name__)
+
+            try:
+                payload: Dict[str, Any] = await request.json()
+                username = payload.get("username")
+                password = payload.get("password")
+
+                if not username or not password:
+                    raise ValueError("Username and password required")
+
+                with open(USER_CONFIG_PATH, "r") as file:
+                    config: Dict[str, Any] = json.load(file)
+
+                stored_username = config.get("username")
+                stored_hash = config.get("password_hash")
+
+                if username != stored_username or not pbkdf2_sha256.verify(password, stored_hash):
+                    raise ValueError("Invalid credentials")
+
+                return {"message": "Login successful"}
+
+            except Exception as e:
+                logger.warning(f"Failed to login with given user and password credentials: {e}")
+                return JSONResponse(status_code=400, content={"error": str(e)})
+
+        @self.server.post("/create_login")
+        async def create_login(request: Request):
+            """
+            Creates a new login by generating a config file with username and hashed password.
+
+            Expects a JSON payload with:
+                - username (str): Desired username.
+                - password (str): Desired password (will be hashed before storage).
+
+            Behavior:
+                - If the config file already exists, returns an error to prevent overwriting.
+                - Otherwise, creates the file with securely hashed credentials.
+
+            Returns:
+                - 200 OK: Login created successfully.
+                - 400 Bad Request: Missing fields or login already exists.
+            """
+
+            logger = LoggerManager.get_logger(__name__)
+
+            try:
+                if os.path.exists(USER_CONFIG_PATH):
+                    logger.warning("Attempted to create login, but a configuration already exists.")
+                    return JSONResponse(status_code=400, content={"error": "Login already exists. Impossible to overwrite existing configuration."})
+
+                payload: Dict[str, Any] = await request.json()
+                username = payload.get("username")
+                password = payload.get("password")
+
+                if not username or not password:
+                    raise ValueError("Username and password required")
+
+                hashed_password = pbkdf2_sha256.hash(password)
+
+                config: Dict[str, Any] = {"username": username, "password_hash": hashed_password}
+
+                with open(USER_CONFIG_PATH, "w") as file:
+                    json.dump(config, file, indent=4)
+
+                return {"message": "Login created successfully."}
+
+            except Exception as e:
+                logger.error(f"Failed to create login: {e}")
+                return JSONResponse(status_code=400, content={"error": str(e)})
 
         @self.server.get("/get_device_state")
         async def get_device_state(request: Request):
@@ -164,7 +260,6 @@ class HTTPServer:
                 - name
                 - value
                 - unit
-                - alarms state
 
             Returns:
                 JSONResponse:
