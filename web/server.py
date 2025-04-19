@@ -26,6 +26,31 @@ from db.timedb import TimeDBClient
 
 
 @dataclass
+class LoginToken:
+    """
+    Represents an active user session containing the JWT token and session metadata.
+
+    This class is used to manage and track information about an authenticated user's session,
+    including their token, associated username, originating IP address, and session persistence settings.
+
+    Attributes:
+        token (str): The JWT token issued upon successful login.
+        user (str): The username associated with this session.
+        ip (str): The IP address from which the user authenticated.
+        auto_login (bool): Whether the session should persist without requiring manual login
+                           again from the same IP (e.g., "remember me" functionality).
+        keep_session_until (Optional[datetime]): If set, defines the timestamp until which the session
+                                                 remains valid without re-authentication, even if inactive.
+    """
+
+    token: str
+    user: str
+    ip: str
+    auto_login: bool
+    keep_session_until: Optional[datetime]
+
+
+@dataclass
 class RequestsSafety:
     """
     Represents security-related tracking data for request attempts on a specific endpoint.
@@ -50,16 +75,18 @@ class HTTPSafety:
 
     Key Responsibilities:
         - Validate user passwords for minimum complexity requirements.
-        - Validate and decode JWT tokens for protected endpoints.
-        - Track failed requests per IP and endpoint to prevent brute-force attacks.
-        - Temporarily block IPs from accessing sensitive endpoints after too many failures.
+        - Decode and verify JWT tokens provided in request headers.
+        - Track failed request attempts per IP and endpoint to mitigate brute-force attacks.
+        - Temporarily block IPs from accessing specific endpoints after repeated failures.
+        - Manage active user sessions through the LoginToken structure, allowing optional auto-login logic.
 
     Attributes:
         USER_CONFIG_PATH (str): Path to the user configuration JSON file containing hashed credentials and the JWT secret.
-        MAX_REQUEST_ATTEMPTS (int): Maximum number of failed attempts allowed before blocking.
-        BLOCK_TIME (timedelta): Duration for which a client IP is blocked after exceeding the allowed attempts.
+        MAX_REQUEST_ATTEMPTS (int): Maximum number of failed attempts allowed before an IP is blocked for an endpoint.
+        BLOCK_TIME (timedelta): Duration an IP remains blocked after exceeding the failed request limit.
         failed_requests (Dict[str, Dict[str, RequestsSafety]]): Tracks failed attempts per IP and endpoint.
-        active_tokens (Dict[str, str]): Currently active JWT tokens mapped by username.
+        active_tokens (Dict[str, LoginToken]): Stores active JWT tokens per username, including session metadata like IP,
+                                               auto-login status, and keep-alive timestamp.
     """
 
     USER_CONFIG_PATH = "user_config.json"  # Path to user/password file
@@ -68,7 +95,7 @@ class HTTPSafety:
 
     def __init__(self):
         self.failed_requests: Dict[str, RequestsSafety] = {}
-        self.active_tokens: Dict[str, str] = {}
+        self.active_tokens: Dict[str, LoginToken] = {}
 
     def validate_password(self, password: str) -> bool:
         """
@@ -87,42 +114,50 @@ class HTTPSafety:
 
         return bool(password) and len(password.strip()) >= 5
 
-    def check_authorization_token(self, authorization: str) -> str:
+    def check_authorization_token(self, authorization: Optional[str], request: Optional[Request]) -> str:
         """
-        Validates the provided Bearer token from the Authorization header.
+        Validates and verifies a JWT token for user authentication.
 
-        This method performs the following checks:
-            - Ensures the header exists and follows the "Bearer <token>" format.
-            - Loads the JWT secret from the local configuration file.
-            - Decodes and verifies the token using the stored secret.
-            - Confirms that the token matches the active session stored in memory.
+        This method performs token extraction and verification in the following order:
+            1. Attempts to extract the token from the 'Authorization' header using the Bearer scheme.
+            2. If the header is missing or invalid, attempts to retrieve the token from request cookies.
+            3. Loads the JWT secret key from the local user configuration file.
+            4. Decodes and verifies the JWT token using the secret key.
+            5. Ensures that the token matches the one stored in memory for the authenticated user.
+            6. Confirms that the session's username matches the one encoded in the token.
 
-        If all checks pass, it returns the username associated with the token.
+        If all checks pass, the method returns the authenticated username.
 
         Args:
-            authorization (str): The value of the Authorization header (expected format: "Bearer <token>").
+            authorization (Optional[str]): The value of the 'Authorization' header (format: "Bearer <token>").
+            request (Optional[Request]): The incoming FastAPI request object, used to access cookies if needed.
 
         Returns:
-            str: The username embedded in the token if validation is successful.
+            str: The username embedded in the validated JWT token.
 
         Raises:
-            ValueError: If the token is missing, malformed, invalid, or no longer part of an active session.
+            ValueError: If no token is found, the token is invalid or expired,
+                        or the session does not match the stored user and token.
         """
 
-        if not authorization or not authorization.startswith("Bearer "):
-            raise ValueError("Authorization header missing or malformed")
+        token = None
 
-        token = authorization.split(" ")[1]
+        if authorization and authorization.startswith("Bearer "):
+            token = authorization.split(" ")[1]
+        else:
+            token = request.cookies.get("token")
+
+        if not token:
+            raise ValueError("No valid token found")
 
         with open(HTTPSafety.USER_CONFIG_PATH, "r") as file:
             config: Dict[str, Any] = json.load(file)
 
         jwt_secret = config.get("jwt_secret")
-
         payload: Dict[str, Any] = jwt.decode(token, jwt_secret, algorithms=["HS256"])
         username = payload.get("user")
 
-        if self.active_tokens.get(username) != token:
+        if self.active_tokens.get(username).token != token or self.active_tokens.get(username).user != username:
             raise ValueError("Token is invalid or session expired")
 
         return username
@@ -297,20 +332,86 @@ class HTTPServer:
 
     def setup_routes(self):
 
+        @self.server.post("/auto_login")
+        async def auto_login(request: Request):
+            """
+            Attempts to automatically log in a user based on a valid token stored in cookies.
+
+            This endpoint is typically called on initial page load by the frontend to verify if the user's
+            session is still valid. If a valid token is found in the request cookies:
+                - It is verified using the JWT secret from the config.
+                - A new token is generated to refresh the session.
+                - The new token is stored in memory and sent back to the client as an HttpOnly cookie.
+
+            Returns:
+                JSONResponse:
+                    - 200 OK: If the auto-login is successful.
+                        {
+                            "message": "Auto-login successful",
+                            "username": "admin"
+                        }
+                    - 401 Unauthorized: If the token is missing, invalid, or expired.
+                        {
+                            "error": "Auto-login failed, please reauthenticate."
+                        }
+            """
+
+            try:
+                username = self.safety.check_authorization_token(None, request)
+
+                # Token is valid, generate a new one to refresh session
+                with open(self.safety.USER_CONFIG_PATH, "r") as file:
+                    config = json.load(file)
+
+                jwt_secret = config["jwt_secret"]
+                new_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
+                new_token = jwt.encode(new_payload, jwt_secret, algorithm="HS256")
+
+                self.safety.active_tokens[username].token = new_token
+
+                response = JSONResponse(content={"message": "Auto-login successful", "username": username})
+                response.set_cookie(key="token", value=new_token, httponly=True, secure=False, samesite="Strict")
+
+                return response
+
+            except Exception as e:
+                return JSONResponse(status_code=401, content={"error": "Auto-login failed, please reauthenticate."})
+
         @self.server.post("/login")
         async def login(request: Request):
             """
-            Handles user login authentication via POST request.
+            Authenticates a user and issues a session token via HTTP-only cookie.
 
-            Implements IP-based login attempt tracking and blocking.
+            This endpoint handles login requests with brute-force protection per IP and optional auto-login support.
 
-            Expects:
-                - username (str)
-                - password (str)
+            Expected JSON Payload:
+                - username (str): Username to authenticate.
+                - password (str): Corresponding plaintext password.
+                - auto_login (bool, optional): If true, the session cookie will persist beyond 1 hour.
+
+            Workflow:
+                - Verifies that the IP is not temporarily blocked from repeated failed attempts.
+                - Loads stored credentials from the local configuration file.
+                - Validates the provided username and password using PBKDF2 hashing.
+                - If valid, generates a new JWT token and associates it with the IP/session.
+                - Stores the token in memory and sets it as an HTTP-only cookie.
 
             Returns:
-                - 200 OK: If credentials are correct
-                - 400 Bad Request: If missing fields, invalid credentials, or IP is temporarily blocked
+                - 200 OK: If login is successful, with a cookie set and a response message.
+                    {
+                        "message": "Login successful",
+                        "username": "<user>"
+                    }
+                - 400 Bad Request: If validation fails, credentials are invalid, or IP is blocked.
+
+            Security:
+                - Uses PBKDF2 (passlib) for secure password hashing.
+                - JWT tokens include the login timestamp (`iat`) and are stored alongside session metadata.
+                - Cookie is marked `HttpOnly` and `SameSite=Strict` to prevent access via JavaScript and reduce CSRF/XSS risks.
+
+            Notes:
+                - Cookie `secure` is currently set to `False` (use `True` in production with HTTPS).
+                - By default, session cookie expires after 1 hour unless `auto_login` is set.
             """
 
             logger = LoggerManager.get_logger(__name__)
@@ -324,6 +425,7 @@ class HTTPServer:
                 payload: Dict[str, Any] = await request.json()
                 username = payload.get("username")
                 password = payload.get("password")
+                auto_login = payload.get("auto_login", False)
 
                 if not username or not password:
                     raise ValueError("Username and password required.")
@@ -344,11 +446,18 @@ class HTTPServer:
                 token_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
                 token = jwt.encode(token_payload, jwt_secret, algorithm="HS256")
 
-                self.safety.active_tokens[username] = token
+                self.safety.active_tokens[username] = LoginToken(token=token, user=username, ip=ip, auto_login=auto_login, keep_session_until=None)
 
                 self.safety.clean_failed_requests(ip, "/login")
 
-                return {"token": token}
+                response = JSONResponse(content={"message": "Login successful", "username": username})
+
+                if auto_login:
+                    response.set_cookie(key="token", value=token, httponly=True, secure=False, samesite="Strict")
+                else:
+                    response.set_cookie(key="token", value=token, httponly=True, secure=False, samesite="Strict", max_age=3600)  # 1 hour
+
+                return response
 
             except Exception as e:
 
@@ -357,7 +466,7 @@ class HTTPServer:
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
         @self.server.post("/logout")
-        async def logout(authorization: str = Header(None)):
+        async def logout(request: Request = None, authorization: str = Header(None)):
             """
             Logs out the current user by invalidating their JWT token.
 
@@ -376,10 +485,12 @@ class HTTPServer:
             logger = LoggerManager.get_logger(__name__)
 
             try:
-                username = self.safety.check_authorization_token(authorization)
+                username = self.safety.check_authorization_token(authorization, request)
                 del self.safety.active_tokens[username]
 
-                return {"message": "Logout successful"}
+                response = JSONResponse(content={"message": "Logout sucessfull"})
+                response.delete_cookie("token")
+                return response
 
             except Exception as e:
                 logger.warning(f"Logout failed: {e}")
@@ -421,7 +532,7 @@ class HTTPServer:
                 if not username or not password:
                     raise ValueError("Username and password required")
 
-                if not self.validate_password(password):
+                if not self.safety.validate_password(password):
                     raise ValueError("Password must be at least 5 characters and not just whitespace.")
 
                 hashed_password = pbkdf2_sha256.hash(password)
@@ -470,7 +581,7 @@ class HTTPServer:
                     return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
                 # Validate token and get username from it
-                username_from_token = self.safety.check_authorization_token(authorization)
+                username_from_token = self.safety.check_authorization_token(authorization, request)
 
                 payload: Dict[str, str] = await request.json()
                 username = payload.get("username")
@@ -509,7 +620,7 @@ class HTTPServer:
                 with open(self.safety.USER_CONFIG_PATH, "w") as file:
                     json.dump(config, file, indent=4)
 
-                self.clean_failed_requests(ip, "/change_password")
+                self.safety.clean_failed_requests(ip, "/change_password")
                 return {"message": "Password changed successfully."}
 
             except Exception as e:
@@ -722,7 +833,7 @@ class HTTPServer:
                 if self.safety.is_blocked(ip, "/delete_logs"):
                     return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
-                self.safety.check_authorization_token(authorization)
+                self.safety.check_authorization_token(authorization, request)
                 data = await request.json()
                 name = data.get("name")
                 id = data.get("id")
@@ -787,7 +898,7 @@ class HTTPServer:
                 if self.safety.is_blocked(ip, "/delete_all_logs"):
                     return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
-                self.safety.check_authorization_token(authorization)
+                self.safety.check_authorization_token(authorization, request)
                 data = await request.json()
                 name = data.get("name")
                 id = data.get("id")
