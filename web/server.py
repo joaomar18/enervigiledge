@@ -10,6 +10,7 @@ from uvicorn import Config, Server
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Set, Optional, Any
 from passlib.hash import pbkdf2_sha256
+from dataclasses import dataclass
 import jwt
 import secrets
 
@@ -23,85 +24,51 @@ from db.timedb import TimeDBClient
 
 #######################################
 
-USER_CONFIG_PATH = "user_config.json"  # Path to user/password file
+
+@dataclass
+class RequestsSafety:
+    """
+    Represents security-related tracking data for request attempts on a specific endpoint.
+
+    Attributes:
+        endpoint (str): The API endpoint being tracked (e.g., "/login", "/delete_logs").
+        count (int): The number of failed attempts made to this endpoint.
+        last_attempt_time (Optional[datetime]): The timestamp of the most recent attempt.
+        blocked_until (Optional[datetime]): If set, indicates the IP is blocked until this time.
+    """
+
+    endpoint: str
+    count: int
+    last_attempt_time: Optional[datetime]
+    blocked_until: Optional[datetime]
 
 
-class HTTPServer:
+class HTTPSafety:
+    """
+    Provides security mechanisms for HTTP endpoints including user authentication,
+    JWT session validation, and per-endpoint request rate limiting by IP address.
 
+    Key Responsibilities:
+        - Validate user passwords for minimum complexity requirements.
+        - Validate and decode JWT tokens for protected endpoints.
+        - Track failed requests per IP and endpoint to prevent brute-force attacks.
+        - Temporarily block IPs from accessing sensitive endpoints after too many failures.
+
+    Attributes:
+        USER_CONFIG_PATH (str): Path to the user configuration JSON file containing hashed credentials and the JWT secret.
+        MAX_REQUEST_ATTEMPTS (int): Maximum number of failed attempts allowed before blocking.
+        BLOCK_TIME (timedelta): Duration for which a client IP is blocked after exceeding the allowed attempts.
+        failed_requests (Dict[str, Dict[str, RequestsSafety]]): Tracks failed attempts per IP and endpoint.
+        active_tokens (Dict[str, str]): Currently active JWT tokens mapped by username.
+    """
+
+    USER_CONFIG_PATH = "user_config.json"  # Path to user/password file
     MAX_REQUEST_ATTEMPTS = 5  # Max failed request attempts for sensitive endpoints (login, deletes, ...)
     BLOCK_TIME = timedelta(minutes=15)  # IP Block Time on exceeding max request attempts
 
-    """
-    Asynchronous HTTP server built with FastAPI to manage energy meter devices,
-    authentication, node data access, and historical logging operations.
-
-    Core Responsibilities:
-        - Provide secure login system using JWT tokens.
-        - Allow creation of a one-time user credential file.
-        - Interface with the DeviceManager to query and validate registered devices and nodes.
-        - Interact with the time-series database (InfluxDB) to serve and manage historical logs.
-
-    Components:
-        - `device_manager` (DeviceManager): Access and manage device and node instances.
-        - `timedb` (TimeDBClient): Interface to query and delete logs from the InfluxDB.
-        - `active_tokens` (Dict[str, str]): In-memory store of active session tokens and it's users (JWT-based).
-        - `FastAPI` server: Handles async HTTP requests.
-        - Automatically starts via background task when instantiated.
-
-    Endpoints:
-        - `POST /login`: Authenticates a user and returns a JWT token.
-        - `POST /logout`: Invalidates the user's session by removing their token from memory.
-        - `POST /create_login`: Creates a one-time user config file with hashed credentials.
-        - `GET /get_device_state`: Returns state metadata of a specific device.
-        - `GET /get_all_device_state`: Lists the state of all active devices.
-        - `GET /get_nodes_state`: Lists all nodes of a specific device, with optional filtering.
-        - `GET /get_logs`: Retrieves historical logs from a specific node and time range.
-        - `POST /delete_logs`: Deletes logs from a specific device/node combination.
-        - `POST /delete_all_logs`: Deletes the full log history for a device.
-
-    Notes:
-        - Authentication is required for protected routes.
-        - JWT tokens are stored in memory and are removed on logout or server restart.
-        - Endpoint behavior includes error handling and detailed logging via LoggerManager.
-    """
-
-    def __init__(self, host: str, port: int, device_manager: DeviceManager, timedb: TimeDBClient):
-        self.host = host
-        self.port = port
-        self.device_manager = device_manager
-        self.timedb = timedb
-        self.server = FastAPI()
+    def __init__(self):
+        self.failed_requests: Dict[str, RequestsSafety] = {}
         self.active_tokens: Dict[str, str] = {}
-        self.failed_requests: Dict[str, Dict[str, Dict[str, Any]]] = {}  # Structure: { ip: { endpoint: { count, last_attempt_time, blocked_until } } }
-        self.setup_routes()
-        self.start()
-
-    def start(self) -> None:
-        """
-        Starts the HTTP server asynchronously using the current event loop.
-
-        This method creates a background task that runs the FastAPI server using `asyncio.create_task`.
-        It should be called once during initialization or startup of the HTTP server component.
-        """
-
-        loop = asyncio.get_event_loop()
-        self.run_task = loop.create_task(self.run_server())
-
-    async def run_server(self):
-        """
-        Asynchronously starts the FastAPI HTTP server using Uvicorn.
-
-        This method builds a Uvicorn `Server` with the provided configuration:
-            - Binds the server to the specified host and port.
-            - Disables live reload.
-            - Suppresses default logging output.
-
-        It runs the server within the asyncio event loop.
-        """
-
-        config = Config(app=self.server, host=self.host, port=self.port, reload=False, log_level=logging.CRITICAL + 1)
-        server = Server(config)
-        await server.serve()
 
     def validate_password(self, password: str) -> bool:
         """
@@ -147,7 +114,7 @@ class HTTPServer:
 
         token = authorization.split(" ")[1]
 
-        with open(USER_CONFIG_PATH, "r") as file:
+        with open(HTTPSafety.USER_CONFIG_PATH, "r") as file:
             config: Dict[str, Any] = json.load(file)
 
         jwt_secret = config.get("jwt_secret")
@@ -162,44 +129,46 @@ class HTTPServer:
 
     def is_blocked(self, ip: str, endpoint: str) -> bool:
         """
-        Checks whether the given IP address is currently blocked due to too many failed login attempts.
+        Checks whether the given IP address is currently blocked for a specific endpoint
+        due to too many failed login attempts.
 
-        If the block duration has expired or the last attempt was too long ago, the IP is unblocked and cleared.
+        If the block duration has expired or the last attempt was too long ago, the IP
+        entry is removed, and the IP is considered unblocked.
 
         Args:
             ip (str): The IP address to check.
-            endpoint (str): The name of the endpoint trying to be used
+            endpoint (str): The name of the endpoint being accessed.
 
         Returns:
-            bool: True if the IP is currently blocked for the endpoint given, False otherwise.
+            bool: True if the IP is currently blocked for the given endpoint, False otherwise.
         """
 
-        record = self.failed_requests.get(ip, {}).get(endpoint)
+        ip_attempts = self.failed_requests.get(ip, {})
+        attempt: Optional[RequestsSafety] = ip_attempts.get(endpoint)
 
-        if not record:
+        if not attempt:
             return False
 
         now = datetime.now(timezone.utc)
-        blocked_until = record.get("blocked_until")
-        last_attempt = record.get("last_attempt_time")
 
-        # Still blocked
-        if blocked_until and now < blocked_until:
+        if attempt.blocked_until and now < attempt.blocked_until:
             return True
 
-        # Clean if old
-        if last_attempt and now - last_attempt > HTTPServer.BLOCK_TIME:
+        if attempt.last_attempt_time and now - attempt.last_attempt_time > HTTPSafety.BLOCK_TIME:
             self.clean_failed_requests(ip, endpoint)
 
         return False
 
     def clean_failed_requests(self, ip: str, endpoint: str) -> None:
         """
-        Clears the failed login tracking record for the given IP address, removing any count or block state.
+        Removes tracking information related to a specific IP and endpoint combination.
+
+        This method deletes the stored `RequestsSafety` object associated with the provided IP and endpoint.
+        If the IP has no other endpoints being tracked afterward, it also removes the IP entry entirely.
 
         Args:
-            ip (str): The IP address to clear.
-            endpoint (str): The name of the endpoint trying to be used
+            ip (str): The IP address whose record should be cleared.
+            endpoint (str): The endpoint path for which the tracking data should be removed.
         """
 
         if ip in self.failed_requests and endpoint in self.failed_requests[ip]:
@@ -210,36 +179,121 @@ class HTTPServer:
 
     def increment_failed_requests(self, ip: str, endpoint: str) -> None:
         """
-        Increments the failed login attempt counter for the given IP.
+        Increments the failed request counter for a given IP and endpoint.
 
-        If the time since the last failed attempt exceeds the block duration,
-        the attempt count is reset. When the maximum number of attempts is reached,
-        the IP is blocked for a defined period.
+        If the previous block has expired, the counter is reset. When the failed count
+        reaches the maximum allowed attempts, the IP is temporarily blocked from accessing
+        the specified endpoint.
 
         Args:
-            ip (str): The IP address to track.
-            endpoint (str): The name of the endpoint trying to be used
+            ip (str): The client's IP address.
+            endpoint (str): The name of the endpoint being accessed.
         """
 
         logger = LoggerManager.get_logger(__name__)
-
         now = datetime.now(timezone.utc)
 
-        ip_record = self.failed_requests.setdefault(ip, {})
-        attempt = ip_record.get(endpoint, {"count": 0, "last_attempt_time": now, "blocked_until": None})
+        ip_record: Dict[str, RequestsSafety] = self.failed_requests.setdefault(ip, {})
 
-        # Reset if block expired
-        if attempt.get("blocked_until") and now >= attempt["blocked_until"]:
-            attempt = {"count": 0, "last_attempt_time": now, "blocked_until": None}
+        record: RequestsSafety = ip_record.get(endpoint, RequestsSafety(endpoint, 0, None, None))
 
-        attempt["count"] += 1
-        attempt["last_attempt_time"] = now
+        # Reset record if block expired
+        if record.blocked_until and now >= record.blocked_until:
+            record = RequestsSafety(endpoint, 0, None, None)
 
-        if attempt["count"] >= HTTPServer.MAX_REQUEST_ATTEMPTS:
-            attempt["blocked_until"] = now + HTTPServer.BLOCK_TIME
-            logger.warning(f"IP {ip} blocked from {endpoint} for {HTTPServer.BLOCK_TIME}.")
+        record.count += 1
+        record.last_attempt_time = now
 
-        ip_record[endpoint] = attempt
+        if record.count >= HTTPSafety.MAX_REQUEST_ATTEMPTS:
+            record.blocked_until = now + HTTPSafety.BLOCK_TIME
+            logger.warning(f"IP {ip} blocked from {endpoint} for {HTTPSafety.BLOCK_TIME}.")
+
+        ip_record[endpoint] = record
+
+
+class HTTPServer:
+    """
+    Asynchronous HTTP server built with FastAPI for secure and efficient management of energy meter devices.
+
+    This server provides a REST API for managing devices, retrieving real-time and historical data,
+    handling secure user authentication, and protecting sensitive operations through token validation
+    and request rate limiting.
+
+    Core Responsibilities:
+        - Manage a set of energy meters and their nodes via the DeviceManager.
+        - Serve historical log data through integration with a TimeDB (InfluxDB) client.
+        - Authenticate users using a one-time credential file and JWT-based sessions.
+        - Secure endpoints using IP-based blocking after repeated failed attempts.
+        - Expose RESTful endpoints for device state, log access, and critical operations (e.g., password change, log deletion).
+
+    Components:
+        - `device_manager` (DeviceManager): Interface for device registration, validation, and data retrieval.
+        - `timedb` (TimeDBClient): Used to query, filter, and delete time-series logs.
+        - `safety` (HTTPSafety): Handles security logic including token validation, password rules, and failed request tracking.
+        - `server` (FastAPI): FastAPI application that registers and serves HTTP endpoints.
+        - Runs as a background task on instantiation using asyncio's event loop and Uvicorn.
+
+    Endpoints:
+        - `POST /login`: Authenticates a user and returns a JWT token.
+        - `POST /logout`: Invalidates the session token.
+        - `POST /create_login`: Creates the initial credential config with hashed password and signing key.
+        - `POST /change_password`: Securely updates the stored password (requires current credentials and token).
+        - `GET /get_device_state`: Returns the state metadata of a specified device.
+        - `GET /get_all_device_state`: Lists all currently active device states.
+        - `GET /get_nodes_state`: Lists node values of a given device, with optional filtering.
+        - `GET /get_logs`: Retrieves historical logs from a specific node.
+        - `DELETE /delete_logs`: Deletes logs for a specific node on a device.
+        - `DELETE /delete_all_logs`: Wipes all logs associated with a device.
+
+    Security Features:
+        - JWT-based authentication with in-memory token tracking.
+        - IP-based request blocking for brute-force protection.
+        - Password policy enforcement (minimum length, non-whitespace).
+        - Token/session validation for all sensitive routes.
+        - Detailed logging via LoggerManager for auditability and debugging.
+
+    Notes:
+        - Only one user is supported (admin-level) to simplify local/edge deployments.
+        - The server is intended to be deployed as a local configuration and monitoring endpoint.
+        - Authentication is mandatory for any operation that alters or deletes data.
+    """
+
+    def __init__(self, host: str, port: int, device_manager: DeviceManager, timedb: TimeDBClient):
+        self.host = host
+        self.port = port
+        self.device_manager = device_manager
+        self.timedb = timedb
+        self.safety = HTTPSafety()
+        self.server = FastAPI()
+        self.setup_routes()
+        self.start()
+
+    def start(self) -> None:
+        """
+        Starts the HTTP server asynchronously using the current event loop.
+
+        This method creates a background task that runs the FastAPI server using `asyncio.create_task`.
+        It should be called once during initialization or startup of the HTTP server component.
+        """
+
+        loop = asyncio.get_event_loop()
+        self.run_task = loop.create_task(self.run_server())
+
+    async def run_server(self):
+        """
+        Asynchronously starts the FastAPI HTTP server using Uvicorn.
+
+        This method builds a Uvicorn `Server` with the provided configuration:
+            - Binds the server to the specified host and port.
+            - Disables live reload.
+            - Suppresses default logging output.
+
+        It runs the server within the asyncio event loop.
+        """
+
+        config = Config(app=self.server, host=self.host, port=self.port, reload=False, log_level=logging.CRITICAL + 1)
+        server = Server(config)
+        await server.serve()
 
     def setup_routes(self):
 
@@ -264,7 +318,7 @@ class HTTPServer:
 
             try:
 
-                if self.is_blocked(ip, "/login"):
+                if self.safety.is_blocked(ip, "/login"):
                     return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
                 payload: Dict[str, Any] = await request.json()
@@ -274,10 +328,10 @@ class HTTPServer:
                 if not username or not password:
                     raise ValueError("Username and password required.")
 
-                if not os.path.exists(USER_CONFIG_PATH):
+                if not os.path.exists(self.safety.USER_CONFIG_PATH):
                     raise FileNotFoundError("User configuration file does not exist.")
 
-                with open(USER_CONFIG_PATH, "r") as file:
+                with open(self.safety.USER_CONFIG_PATH, "r") as file:
                     config: Dict[str, Any] = json.load(file)
 
                 stored_username = config.get("username")
@@ -290,15 +344,15 @@ class HTTPServer:
                 token_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
                 token = jwt.encode(token_payload, jwt_secret, algorithm="HS256")
 
-                self.active_tokens[username] = token
+                self.safety.active_tokens[username] = token
 
-                self.clean_failed_requests(ip, "/login")
+                self.safety.clean_failed_requests(ip, "/login")
 
                 return {"token": token}
 
             except Exception as e:
 
-                self.increment_failed_requests(ip, "/login")
+                self.safety.increment_failed_requests(ip, "/login")
                 logger.warning(f"Failed login from IP {ip}: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
@@ -322,8 +376,8 @@ class HTTPServer:
             logger = LoggerManager.get_logger(__name__)
 
             try:
-                username = self.check_authorization_token(authorization)
-                del self.active_tokens[username]
+                username = self.safety.check_authorization_token(authorization)
+                del self.safety.active_tokens[username]
 
                 return {"message": "Logout successful"}
 
@@ -357,7 +411,7 @@ class HTTPServer:
             logger = LoggerManager.get_logger(__name__)
 
             try:
-                if os.path.exists(USER_CONFIG_PATH):
+                if os.path.exists(self.safety.USER_CONFIG_PATH):
                     return JSONResponse(status_code=400, content={"error": "Login already exists. Cannot overwrite existing configuration."})
 
                 payload: Dict[str, Any] = await request.json()
@@ -375,7 +429,7 @@ class HTTPServer:
 
                 config = {"username": username, "password_hash": hashed_password, "jwt_secret": jwt_secret}
 
-                with open(USER_CONFIG_PATH, "w") as file:
+                with open(self.safety.USER_CONFIG_PATH, "w") as file:
                     json.dump(config, file, indent=4)
 
                 return {"message": "Login created successfully."}
@@ -412,11 +466,11 @@ class HTTPServer:
             ip = request.client.host
 
             try:
-                if self.is_blocked(ip, "/change_password"):
+                if self.safety.is_blocked(ip, "/change_password"):
                     return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
                 # Validate token and get username from it
-                username_from_token = self.check_authorization_token(authorization)
+                username_from_token = self.safety.check_authorization_token(authorization)
 
                 payload: Dict[str, str] = await request.json()
                 username = payload.get("username")
@@ -433,11 +487,11 @@ class HTTPServer:
                 if old_password != confirm_old_password:
                     raise ValueError("Old password confirmation does not match")
 
-                if not self.validate_password(new_password):
+                if not self.safety.validate_password(new_password):
                     raise ValueError("Password must be at least 5 characters and not just whitespace.")
 
-                with open(USER_CONFIG_PATH, "r") as file:
-                    config = json.load(file)
+                with open(self.safety.USER_CONFIG_PATH, "r") as file:
+                    config: Dict[str, Any] = json.load(file)
 
                 stored_username = config.get("username")
                 stored_hash = config.get("password_hash")
@@ -452,14 +506,14 @@ class HTTPServer:
                 new_hash = pbkdf2_sha256.hash(new_password)
                 config["password_hash"] = new_hash
 
-                with open(USER_CONFIG_PATH, "w") as file:
+                with open(self.safety.USER_CONFIG_PATH, "w") as file:
                     json.dump(config, file, indent=4)
 
                 self.clean_failed_requests(ip, "/change_password")
                 return {"message": "Password changed successfully."}
 
             except Exception as e:
-                self.increment_failed_requests(ip, "/change_password")
+                self.safety.increment_failed_requests(ip, "/change_password")
                 logger.warning(f"Failed password change attempt from IP {ip}: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
@@ -665,10 +719,10 @@ class HTTPServer:
             data: Dict[str, Any] = {}
 
             try:
-                if self.is_blocked(ip, "/delete_logs"):
+                if self.safety.is_blocked(ip, "/delete_logs"):
                     return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
-                self.check_authorization_token(authorization)
+                self.safety.check_authorization_token(authorization)
                 data = await request.json()
                 name = data.get("name")
                 id = data.get("id")
@@ -686,7 +740,7 @@ class HTTPServer:
 
                 result = self.timedb.delete_measurement_data(device_name=name, device_id=id, measurement=measurement)
 
-                self.clean_failed_requests(ip, "/delete_logs")
+                self.safety.clean_failed_requests(ip, "/delete_logs")
 
                 message = (
                     f"Successfully deleted logs for node '{measurement}' from device '{name}' (id {id})."
@@ -696,7 +750,7 @@ class HTTPServer:
                 return JSONResponse(content={"result": message})
 
             except Exception as e:
-                self.increment_failed_requests(ip, "/delete_logs")
+                self.safety.increment_failed_requests(ip, "/delete_logs")
                 logger.error(
                     f"Failed to delete logs for device '{data.get('name', 'unknown')}' with id {data.get('id', 'unknown')}, "
                     f"measurement '{data.get('measurement', 'unknown')}': {e}"
@@ -730,10 +784,10 @@ class HTTPServer:
             data: Dict[str, Any] = {}
 
             try:
-                if self.is_blocked(ip, "/delete_all_logs"):
+                if self.safety.is_blocked(ip, "/delete_all_logs"):
                     return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
-                self.check_authorization_token(authorization)
+                self.safety.check_authorization_token(authorization)
                 data = await request.json()
                 name = data.get("name")
                 id = data.get("id")
@@ -743,7 +797,7 @@ class HTTPServer:
 
                 result = self.timedb.delete_db(device_name=name, device_id=id)
 
-                self.clean_failed_requests(ip, "/delete_all_logs")
+                self.safety.clean_failed_requests(ip, "/delete_all_logs")
 
                 message = (
                     f"Successfully deleted all logs from device '{name}' (id {id})." if result else f"Failed to delete logs from device '{name}' (id {id})."
@@ -751,6 +805,6 @@ class HTTPServer:
                 return JSONResponse(content={"result": message})
 
             except Exception as e:
-                self.increment_failed_requests(ip, "/delete_all_logs")
+                self.safety.increment_failed_requests(ip, "/delete_all_logs")
                 logger.error(f"Failed to delete all logs for device {data.get('name', 'unknown')} with id {data.get('id', 'unknown')}: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
