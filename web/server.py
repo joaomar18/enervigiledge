@@ -25,6 +25,14 @@ from db.timedb import TimeDBClient
 
 #######################################
 
+###############EXCEPTIONS##############
+
+
+class InvalidCredentials(Exception):
+    """Raised when credentials (username and password) are invalid (not recognized)."""
+
+    pass
+
 
 @dataclass
 class LoginToken:
@@ -95,7 +103,7 @@ class HTTPSafety:
     BLOCK_TIME = timedelta(minutes=15)  # IP Block Time on exceeding max request attempts
 
     def __init__(self):
-        self.failed_requests: Dict[str, RequestsSafety] = {}
+        self.failed_requests: Dict[str, Dict[str, RequestsSafety]] = {}
         self.active_tokens: Dict[str, LoginToken] = {}
 
     def validate_password(self, password: str) -> bool:
@@ -404,7 +412,9 @@ class HTTPServer:
                         "message": "Login successful",
                         "username": "<user>"
                     }
-                - 400 Bad Request: If validation fails, credentials are invalid, or IP is blocked.
+                - 401 Unauthorized: Credentials are invalid
+                - 429 Too many requests: IP trying to make the request is blocked
+                - 500 Internal Error: Server or request error
 
             Security:
                 - Uses PBKDF2 (passlib) for secure password hashing.
@@ -422,7 +432,10 @@ class HTTPServer:
             try:
 
                 if self.safety.is_blocked(ip, "/login"):
-                    return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
+                    unlocked_date = self.safety.failed_requests.get(ip, {}).get("/login").blocked_until.isoformat()
+                    return JSONResponse(
+                        status_code=429, content={"code": "IP_BLOCKED", "UNLOCKED": unlocked_date, "error": "Too many failed attempts. Try again later."}
+                    )
 
                 payload: Dict[str, Any] = await request.json()
                 username = payload.get("username")
@@ -443,7 +456,7 @@ class HTTPServer:
                 jwt_secret = config.get("jwt_secret")
 
                 if username != stored_username or not pbkdf2_sha256.verify(password, stored_hash):
-                    raise ValueError("Invalid credentials.")
+                    raise InvalidCredentials("Invalid credentials.")
 
                 token_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
                 token = jwt.encode(token_payload, jwt_secret, algorithm="HS256")
@@ -454,18 +467,25 @@ class HTTPServer:
 
                 response = JSONResponse(content={"message": "Login successful", "username": username})
 
-                if auto_login:
-                    response.set_cookie(key="token", value=token, httponly=True, secure=False, samesite="Strict")
-                else:
-                    response.set_cookie(key="token", value=token, httponly=True, secure=False, samesite="Strict", max_age=3600)  # 1 hour
+                response.set_cookie(key="token", value=token, httponly=True, secure=False, samesite="Strict", max_age=3600 if not auto_login else None)
 
                 return response
+
+            except InvalidCredentials as e:
+
+                self.safety.increment_failed_requests(ip, "/login")
+                logger.warning(f"Failed login from IP {ip} due to invalid credentials: {e}")
+                requests_count = self.safety.failed_requests.get(ip, {}).get("/login").count
+                remaining_requests: int = self.safety.MAX_REQUEST_ATTEMPTS - requests_count if requests_count else self.safety.MAX_REQUEST_ATTEMPTS
+                return JSONResponse(status_code=401, content={"code": "INVALID_CREDENTIALS", "remaining": remaining_requests, "error": str(e)})
 
             except Exception as e:
 
                 self.safety.increment_failed_requests(ip, "/login")
-                logger.warning(f"Failed login from IP {ip}: {e}")
-                return JSONResponse(status_code=400, content={"error": str(e)})
+                logger.warning(f"Failed login from IP {ip} due to server error: {e}")
+                requests_count = self.safety.failed_requests.get(ip, {}).get("/login").count
+                remaining_requests: int = self.safety.MAX_REQUEST_ATTEMPTS - requests_count if requests_count else self.safety.MAX_REQUEST_ATTEMPTS
+                return JSONResponse(status_code=500, content={"code": "UNKNOWN_ERROR", "remaining": remaining_requests, "error": str(e)})
 
         @self.server.post("/logout")
         async def logout(request: Request = None, authorization: str = Header(None)):
