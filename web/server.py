@@ -5,6 +5,7 @@ import asyncio
 import logging
 import json
 from fastapi import FastAPI, Request, Header
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from uvicorn import Config, Server
 from datetime import datetime, timezone, timedelta
@@ -300,6 +301,7 @@ class HTTPServer:
         self.timedb = timedb
         self.safety = HTTPSafety()
         self.server = FastAPI()
+        self.server.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
         self.setup_routes()
         self.start()
 
