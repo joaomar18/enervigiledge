@@ -434,7 +434,7 @@ class HTTPServer:
                 if self.safety.is_blocked(ip, "/login"):
                     unlocked_date = self.safety.failed_requests.get(ip, {}).get("/login").blocked_until.isoformat()
                     return JSONResponse(
-                        status_code=429, content={"code": "IP_BLOCKED", "UNLOCKED": unlocked_date, "error": "Too many failed attempts. Try again later."}
+                        status_code=429, content={"code": "IP_BLOCKED", "unlocked": unlocked_date, "error": "Too many failed attempts. Try again later."}
                     )
 
                 payload: Dict[str, Any] = await request.json()
@@ -482,7 +482,7 @@ class HTTPServer:
                 else:
                     unlocked_date = self.safety.failed_requests.get(ip, {}).get("/login").blocked_until.isoformat()
                     return JSONResponse(
-                        status_code=429, content={"code": "IP_BLOCKED", "UNLOCKED": unlocked_date, "error": "Too many failed attempts. Try again later."}
+                        status_code=429, content={"code": "IP_BLOCKED", "unlocked": unlocked_date, "error": "Too many failed attempts. Try again later."}
                     )
 
             except Exception as e:
