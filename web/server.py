@@ -480,6 +480,7 @@ class HTTPServer:
                 if remaining_requests > 0:
                     return JSONResponse(status_code=401, content={"code": "INVALID_CREDENTIALS", "remaining": remaining_requests, "error": str(e)})
                 else:
+                    unlocked_date = self.safety.failed_requests.get(ip, {}).get("/login").blocked_until.isoformat()
                     return JSONResponse(
                         status_code=429, content={"code": "IP_BLOCKED", "UNLOCKED": unlocked_date, "error": "Too many failed attempts. Try again later."}
                     )
