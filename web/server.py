@@ -477,7 +477,12 @@ class HTTPServer:
                 logger.warning(f"Failed login from IP {ip} due to invalid credentials: {e}")
                 requests_count = self.safety.failed_requests.get(ip, {}).get("/login").count
                 remaining_requests: int = self.safety.MAX_REQUEST_ATTEMPTS - requests_count if requests_count else self.safety.MAX_REQUEST_ATTEMPTS
-                return JSONResponse(status_code=401, content={"code": "INVALID_CREDENTIALS", "remaining": remaining_requests, "error": str(e)})
+                if remaining_requests > 0:
+                    return JSONResponse(status_code=401, content={"code": "INVALID_CREDENTIALS", "remaining": remaining_requests, "error": str(e)})
+                else:
+                    return JSONResponse(
+                        status_code=429, content={"code": "IP_BLOCKED", "UNLOCKED": unlocked_date, "error": "Too many failed attempts. Try again later."}
+                    )
 
             except Exception as e:
 
