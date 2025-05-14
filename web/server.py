@@ -309,7 +309,7 @@ class HTTPServer:
         self.timedb = timedb
         self.safety = HTTPSafety()
         self.server = FastAPI()
-        self.server.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+        self.server.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
         self.setup_routes()
         self.start()
 
@@ -378,9 +378,11 @@ class HTTPServer:
                 new_token = jwt.encode(new_payload, jwt_secret, algorithm="HS256")
 
                 self.safety.active_tokens[username].token = new_token
+                auto_login = self.safety.active_tokens[username].auto_login
 
                 response = JSONResponse(content={"message": "Auto-login successful", "username": username})
-                response.set_cookie(key="token", value=new_token, httponly=True, secure=False, samesite="Strict")
+
+                response.set_cookie(key="token", value=new_token, httponly=True, secure=True, samesite="None", max_age=3600 if not auto_login else 2592000)
 
                 return response
 
@@ -438,9 +440,9 @@ class HTTPServer:
                     )
 
                 payload: Dict[str, Any] = await request.json()
-                username = payload.get("username")
-                password = payload.get("password")
-                auto_login = payload.get("auto_login", False)
+                username: str = payload.get("username")
+                password: str = payload.get("password")
+                auto_login: bool = payload.get("auto_login", False)
 
                 if not username or not password:
                     raise ValueError("Username and password required.")
@@ -467,7 +469,7 @@ class HTTPServer:
 
                 response = JSONResponse(content={"message": "Login successful", "username": username})
 
-                response.set_cookie(key="token", value=token, httponly=True, secure=False, samesite="Strict", max_age=3600 if not auto_login else None)
+                response.set_cookie(key="token", value=token, httponly=True, secure=True, samesite="None", max_age=3600 if not auto_login else 2592000)
 
                 return response
 
@@ -659,13 +661,13 @@ class HTTPServer:
         @self.server.get("/get_device_state")
         async def get_device_state(request: Request):
             """
-            Endpoint to retrieve the current state of a device.
+            Endpoint to retrieve the current state of a device via GET query parameters.
 
-            Expects a JSON payload with:
-                - name (str): The name of the device.
-                - id (int): The unique ID of the device.
+            Expects two query parameters:
+            - name (str): The name of the device.
+            - id   (int): The unique ID of the device.
 
-            Validates the request payload and ensures the specified device exists. If valid,
+            Validates the query parameters and ensures the specified device exists. If valid,
             returns a JSON response with the current device state, including metadata, protocol,
             connection status, and configuration.
 
@@ -674,27 +676,29 @@ class HTTPServer:
                     - 200 OK with the device state if successful.
                     - 400 Bad Request with an error message if validation fails or an exception occurs.
             """
-
             logger = LoggerManager.get_logger(__name__)
-            data: Dict[str, Any] = {}
 
             try:
-                data = await request.json()
-                name = data.get("name")
-                id = data.get("id")
+                # Read parameters from the query string, not the JSON body
+                name = request.query_params.get("name")
+                id_raw = request.query_params.get("id")
 
-                if not all([name, id]):
-                    raise ValueError("Missing one or more required fields: 'name', 'id'.")
+                if not name or not id_raw:
+                    raise ValueError("Missing required query parameters: 'name' and 'id'")
 
-                device = self.device_manager.get_device(name, id)
+                try:
+                    device_id = int(id_raw)
+                except ValueError:
+                    raise ValueError(f"Invalid device id: {id_raw!r}")
 
+                device = self.device_manager.get_device(name, device_id)
                 if not device:
-                    raise KeyError(f"Device with name {name} and id {id} does not exist.")
+                    raise KeyError(f"Device with name {name!r} and id {device_id} does not exist.")
 
                 return JSONResponse(content=device.get_device_state())
 
             except Exception as e:
-                logger.error(f"Failed to get device '{data.get('name', 'unknown')}' with id {data.get('id', 'unknown')} state: {e}")
+                logger.error(f"Failed to get device state for name={name!r}, id={id_raw!r}: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
         @self.server.get("/get_all_device_state")
