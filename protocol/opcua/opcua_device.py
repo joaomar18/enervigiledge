@@ -261,3 +261,28 @@ class OPCUAEnergyMeter(EnergyMeter):
         except Exception:
             pass
         self.connection_open = False
+
+    def get_device_state(self) -> Dict[str, Any]:
+        """
+        Returns the current state of the opc ua energy meter device, including metadata and configuration.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the device's:
+                - ID
+                - Name
+                - Protocol
+                - Connection status
+                - Meter options
+                - Communication options
+                - Meter type
+        """
+
+        return {
+            "id": self.id,
+            "name": self.name,
+            "protocol": self.protocol,
+            "connected": self.connected,
+            "options": self.meter_options.get_meter_options(),
+            "communication_options": self.connection_options.get_connection_options(),
+            "type": self.meter_type,
+        }
