@@ -664,8 +664,8 @@ class HTTPServer:
             Endpoint to retrieve the current state of a device via GET query parameters.
 
             Expects two query parameters:
-            - name (str): The name of the device.
-            - id   (int): The unique ID of the device.
+                - name (str): The name of the device.
+                - id   (int): The unique ID of the device.
 
             Validates the query parameters and ensures the specified device exists. If valid,
             returns a JSON response with the current device state, including metadata, protocol,
@@ -676,6 +676,7 @@ class HTTPServer:
                     - 200 OK with the device state if successful.
                     - 400 Bad Request with an error message if validation fails or an exception occurs.
             """
+
             logger = LoggerManager.get_logger(__name__)
 
             try:
@@ -780,28 +781,81 @@ class HTTPServer:
                 logger.error(f"Failed to get node states for device '{data.get('name', 'unknown')}' with id {data.get('id', 'unknown')}: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
-        @self.server.get("/get_logs")
-        async def get_logs_from_measurement(request: Request):
+        @self.server.get("/get_nodes_config")
+        async def get_nodes_config(request: Request):
             """
-            Deletes log data for a specific node (measurement) from a device.
+            Endpoint to retrieve the configuration of all nodes in a specific device.
 
-            Requirements:
-                - Authorization: Must provide a valid JWT token via the Authorization header ("Bearer <token>").
-                - Request Body: JSON object containing:
-                    - name (str): Name of the target device.
-                    - id (int): Unique ID of the target device.
-                    - measurement (str): Node name (measurement) whose logs will be deleted.
-
-            Behavior:
-                - Validates that the device and measurement exist.
-                - Ensures the provided token is valid and corresponds to the active session.
-                - Tracks failed login attempts per IP for this endpoint, blocking further attempts if abuse is detected.
-                - Automatically resets failed attempt count after a successful request.
+            Expects three query parameters:
+                - name (str): The name of the device.
+                - id   (int): The unique ID of the device.
+                - filter (str, optional): If provided, only return nodes whose names contain this string.
 
             Returns:
                 JSONResponse:
-                    - 200 OK: If deletion is successful.
-                    - 400 Bad Request: If validation, authorization, or deletion fails.
+                    - 200 OK with a list of node configuration dictionaries.
+                    - 400 Bad Request with an error message if validation fails or an exception occurs.
+            """
+
+            logger = LoggerManager.get_logger(__name__)
+
+            try:
+
+                name = request.query_params.get("name")
+                id_raw = request.query_params.get("id")
+                filter_str = request.query_params.get("filter")
+
+                if not name or not id_raw:
+                    raise ValueError("Missing required query parameters: 'name' and 'id'")
+
+                device = self.device_manager.get_device(name, int(id_raw))
+
+                if not device:
+                    raise KeyError(f"Device with name {name} and id {id} does not exist.")
+
+                if filter_str:
+                    nodes_config = {}
+                    for node in device.nodes:
+                        if filter_str in node.name:
+                            record = node.get_node_record()
+                            record.device_id = int(id_raw)
+                            nodes_config[node.name] = record.__dict__
+                else:
+                    nodes_config = {}
+                    for node in device.nodes:
+                        record = node.get_node_record()
+                        record.device_id = int(id_raw)
+                        nodes_config[node.name] = record.__dict__
+
+                return JSONResponse(content=nodes_config)
+
+            except Exception as e:
+                logger.error(f"Failed to get device nodes configuration for name={name!r}, id={id_raw!r}: {e}")
+                return JSONResponse(status_code=400, content={"error": str(e)})
+
+        @self.server.get("/get_logs")
+        async def get_logs_from_measurement(request: Request):
+            """
+            Retrieves historical log data for a specific node (measurement) from a device.
+
+            Requirements:
+                - Request Body: JSON object containing:
+                    - name (str): Name of the target device.
+                    - id (int): Unique ID of the target device.
+                    - measurement (str): Node name (measurement) whose logs will be retrieved.
+                    - start_time (str, optional): ISO format datetime string for the start of the time range.
+                    - end_time (str, optional): ISO format datetime string for the end of the time range.
+
+            Behavior:
+                - Validates that the device and measurement exist.
+                - Retrieves log data from the TimeDB for the specified measurement.
+                - If start_time and end_time are provided, filters results within that time range.
+                - Returns the measurement data in JSON format.
+
+            Returns:
+                JSONResponse:
+                    - 200 OK: If retrieval is successful, returns the log data.
+                    - 400 Bad Request: If validation fails or an exception occurs.
             """
 
             logger = LoggerManager.get_logger(__name__)
@@ -857,6 +911,7 @@ class HTTPServer:
                     - 200 OK with success/failure message.
                     - 400 Bad Request with an error message if validation fails or an exception occurs.
             """
+
             logger = LoggerManager.get_logger(__name__)
             ip = request.client.host
             data: Dict[str, Any] = {}
