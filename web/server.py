@@ -382,7 +382,7 @@ class HTTPServer:
 
                 response = JSONResponse(content={"message": "Auto-login successful", "username": username})
 
-                response.set_cookie(key="token", value=new_token, httponly=True, secure=True, samesite="None", max_age=3600 if not auto_login else 2592000)
+                response.set_cookie(key="token", value=new_token, httponly=True, secure=False, samesite="None", max_age=3600 if not auto_login else 2592000)
 
                 return response
 
@@ -469,7 +469,7 @@ class HTTPServer:
 
                 response = JSONResponse(content={"message": "Login successful", "username": username})
 
-                response.set_cookie(key="token", value=token, httponly=True, secure=True, samesite="None", max_age=3600 if not auto_login else 2592000)
+                response.set_cookie(key="token", value=token, httponly=True, secure=False, samesite="None", max_age=3600 if not auto_login else 2592000)
 
                 return response
 
