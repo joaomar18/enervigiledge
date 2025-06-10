@@ -143,7 +143,7 @@ def get_sm1238_db() -> EnergyMeterRecord:
 
     nodes.add(OPCUANode(name="l1_voltage", type=NodeType.FLOAT, node_id="ns=4;i=7", unit="V", logging=True, logging_period=15))
     nodes.add(OPCUANode(name="l1_current", type=NodeType.FLOAT, node_id="ns=4;i=6", unit="mA"))
-    nodes.add(OPCUANode(name="l1_active_power", type=NodeType.FLOAT, node_id="ns=4;i=8;", unit="W"))
+    nodes.add(OPCUANode(name="l1_active_power", type=NodeType.FLOAT, node_id="ns=4;i=8", unit="W"))
     nodes.add(OPCUANode(name="l1_reactive_power", type=NodeType.FLOAT, node_id="ns=4;i=9", unit="VAr"))
     nodes.add(OPCUANode(name="l1_apparent_power", type=NodeType.FLOAT, node_id="ns=4;i=10", unit="VA"))
     nodes.add(OPCUANode(name="l1_power_factor", type=NodeType.FLOAT, node_id="ns=4;i=11", unit=""))

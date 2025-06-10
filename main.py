@@ -12,7 +12,6 @@ from mqtt.client import MQTTClient
 from controller.manager import DeviceManager
 from web.server import HTTPServer
 from util.debug import LoggerManager
-import data.nodes as nodes
 
 #######################################
 
