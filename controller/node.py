@@ -603,9 +603,9 @@ class Node:
         configuration["positive_incremental"] = self.positive_incremental
         configuration["calculate_increment"] = self.calculate_increment
 
-        if isinstance(self, ModbusRTUNode):
+        if hasattr(self, "register") and self.protocol == Protocol.MODBUS_RTU:
             configuration["register"] = self.register
-        elif isinstance(self, OPCUANode):
+        elif hasattr(self, "node_id") and self.protocol == Protocol.OPC_UA:
             configuration["node_id"] = self.node_id
 
         return NodeRecord(device_id=None, name=self.name, protocol=self.protocol, config=configuration)
@@ -716,7 +716,6 @@ class OPCUANode(Node):
         type: NodeType,
         node_id: str,
         unit: str,
-        protocol=Protocol.OPC_UA,
         publish: bool = True,
         calculated: bool = False,
         logging: bool = False,
@@ -730,6 +729,7 @@ class OPCUANode(Node):
             name=name,
             type=type,
             unit=unit,
+            protocol=Protocol.OPC_UA,
             publish=publish,
             calculated=calculated,
             logging=logging,
