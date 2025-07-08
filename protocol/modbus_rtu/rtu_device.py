@@ -189,7 +189,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         while True:
             try:
                 if self.connection_open:
-                    tasks = [asyncio.to_thread(self.read_float, node) for node in self.modbus_rtu_nodes]
+                    tasks = [asyncio.to_thread(self.read_float, node) for node in self.modbus_rtu_nodes if node.enabled]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
                     failed_nodes = []
 

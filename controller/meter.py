@@ -169,6 +169,10 @@ class EnergyMeterNodes:
             UnitError: If the unit for the node is not one of the valid options.
         """
 
+        if node.custom:
+            # Custom nodes are not validated against the predefined sets
+            return
+
         base_name = functions.remove_phase_string(node.name)
 
         if base_name not in EnergyMeterNodes.VALID_NODES:
@@ -200,6 +204,8 @@ class EnergyMeterNodes:
             LoggingPeriodError: If any mismatch is found across types or phases within a category.
         """
 
+
+
         category_suffixes = {
             "energy": ("_energy",),
             "power": ("_power", "_power_factor", "power_factor_direction"),
@@ -211,7 +217,7 @@ class EnergyMeterNodes:
         for category, suffixes in category_suffixes.items():
 
             if node_to_check is None:
-                logging_nodes = [node for node in nodes.values() if any(node.name.endswith(suffix) for suffix in suffixes) and node.logging]
+                logging_nodes = [node for node in nodes.values() if any(node.name.endswith(suffix) for suffix in suffixes) and node.logging and not node.custom]
             else:
                 if not node_to_check.logging:
                     return
@@ -219,7 +225,7 @@ class EnergyMeterNodes:
                 if not any(node_to_check.name.endswith(suffix) for suffix in suffixes):
                     continue
 
-                logging_nodes = [node for node in nodes.values() if any(node.name.endswith(suffix) for suffix in suffixes) and node.logging]
+                logging_nodes = [node for node in nodes.values() if any(node.name.endswith(suffix) for suffix in suffixes) and node.logging and not node.custom]
 
             if not logging_nodes:
                 continue
@@ -363,7 +369,7 @@ class EnergyMeterNodes:
         node_name = f"{phase}{energy_type}_energy"
         node = self.nodes.get(node_name)
 
-        if not node or not node.calculated:
+        if not node or not node.calculated or not node.custom:
             return
 
         if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
@@ -408,7 +414,7 @@ class EnergyMeterNodes:
         node_name = f"{phase}{power_type}_power"
         node = self.nodes.get(node_name)
 
-        if not node or not node.calculated:
+        if not node or not node.calculated or not node.custom:
             return
 
         if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
@@ -456,7 +462,7 @@ class EnergyMeterNodes:
         node_name = f"{phase}power_factor"
         node = self.nodes.get(node_name)
 
-        if not node or not node.calculated:
+        if not node or not node.calculated or not node.custom:
             return
 
         if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
@@ -499,7 +505,7 @@ class EnergyMeterNodes:
         node_name = f"{phase}power_factor_direction"
         node = self.nodes.get(node_name)
 
-        if not node or not node.calculated:
+        if not node or not node.calculated or not node.custom:
             return
 
         if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
@@ -671,7 +677,7 @@ class EnergyMeter(Device):
         current_time = datetime.now()
 
         for node in self.meter_nodes.nodes.values():
-            if not node.logging:
+            if not node.logging or not node.enabled:
                 continue
 
             if node.last_log_datetime is None:
@@ -739,7 +745,7 @@ class EnergyMeter(Device):
 
         logger = LoggerManager.get_logger(__name__)
 
-        calculated_nodes: Dict[str, Node] = {name: node for name, node in self.meter_nodes.nodes.items() if node.calculated}
+        calculated_nodes: Dict[str, Node] = {name: node for name, node in self.meter_nodes.nodes.items() if node.calculated and node.enabled}
         tasks = []
 
         for node in calculated_nodes.values():

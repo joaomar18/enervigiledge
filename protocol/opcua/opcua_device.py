@@ -187,7 +187,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         while True:
             try:
                 if self.connection_open:
-                    tasks = [asyncio.create_task(self.read_float(node)) for node in self.opcua_nodes]
+                    tasks = [asyncio.create_task(self.read_float(node)) for node in self.opcua_nodes if node.enabled]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
 
                     failed_nodes = []

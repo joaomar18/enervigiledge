@@ -35,8 +35,10 @@ class NodeRecord:
             Common fields:
                 - type (str): Data type of the node (e.g., "float", "int").
                 - unit (str): Unit of measurement (e.g., "V", "A").
+                - enabled (bool): Whether the node is enabled for reading or calculation.
                 - publish (bool): Whether the value should be published via MQTT.
                 - calculated (bool): Whether the value is calculated instead of read.
+                - custom (bool): Whether the value is a custom node (custom name or unit).
                 - logging (bool): Whether the value should be logged.
                 - logging_period (int): Logging interval in minutes.
                 - min_alarm (bool): Whether to enable a minimum threshold alarm.

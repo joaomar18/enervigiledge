@@ -48,11 +48,13 @@ class Node:
         type (NodeType): Type of the node value (e.g., FLOAT, BOOL).
         unit (str): Measurement unit (e.g., 'V', 'kWh').
         protocol (Protocol): protocol of the node (None if virtual or calculated node, Modbus RTU, OPC UA...)
+        enabled (bool): Whether the node is enabled for data collection and processing.
         incremental_node (bool): Whether the node represents an incremental counter.
         positive_incremental (bool): Whether to increment positively (used with incremental_node).
         calculate_increment (bool): Whether to compute increment from the initial value (used with incremental_node)
         publish (bool): Whether to publish this node over MQTT.
         calculated (bool): If the value is computed rather than read from hardware.
+        custom (bool): If the node is a custom node (custom name and unit).
         logging (bool): Whether to log historical values.
         logging_period (int): Time in minutes between log entries.
         min_alarm (bool): Enables alarm for values below `min_alarm_value`.
@@ -84,11 +86,13 @@ class Node:
         type: NodeType,
         unit: str,
         protocol: Protocol = Protocol.NONE,
-        incremental_node=False,
-        positive_incremental=False,
-        calculate_increment=True,
+        enabled: bool = True,
+        incremental_node: bool = False,
+        positive_incremental: bool = False,
+        calculate_increment: bool = True,
         publish: bool = True,
         calculated: bool = False,
+        custom: bool = False,
         logging: bool = False,
         logging_period: int = 15,
         min_alarm: bool = False,
@@ -103,8 +107,10 @@ class Node:
         self.type = type
         self.unit = unit
         self.protocol = protocol
+        self.enabled = enabled
         self.publish = publish
         self.calculated = calculated
+        self.custom = custom
         self.decimal_places = decimal_places
         self.on_value_change = on_value_change
 
@@ -338,17 +344,19 @@ class Node:
             value (Union[float, int, str, bool]): The new value to assign to the node.
         """
 
-        self.update_timestamp()
+        if self.enabled:
 
-        if self.type in {NodeType.BOOL, NodeType.STRING}:
-            self.set_value_str_bool(value)
-        elif self.incremental_node:
-            self.set_value_incremental(value)
-        else:
-            self.set_value_standard(value)
+            self.update_timestamp()
 
-        if self.on_value_change:
-            self.on_value_change(self)
+            if self.type in {NodeType.BOOL, NodeType.STRING}:
+                self.set_value_str_bool(value)
+            elif self.incremental_node:
+                self.set_value_incremental(value)
+            else:
+                self.set_value_standard(value)
+
+            if self.on_value_change:
+                self.on_value_change(self)
 
     def update_timestamp(self) -> None:
         """
@@ -588,10 +596,12 @@ class Node:
         """
 
         configuration: Dict[str, Any] = {}
+        configuration["enabled"] = self.enabled
         configuration["type"] = self.type.value
         configuration["unit"] = self.unit
         configuration["publish"] = self.publish
         configuration["calculated"] = self.calculated
+        configuration["custom"] = self.custom
         configuration["decimal_places"] = self.decimal_places
         configuration["logging"] = self.logging
         configuration["logging_period"] = self.logging_period
@@ -624,8 +634,10 @@ class ModbusRTUNode(Node):
         type (NodeType): Type of the node (e.g., NodeType.FLOAT, NodeType.STRING).
         register (int): Modbus register address where the value is located.
         unit (str): Unit of measurement (e.g., 'V', 'A').
+        enabled (bool): Whether the node is enabled for data collection and processing.
         publish (bool): Whether to publish the node value via MQTT (default: True).
         calculated (bool): Whether the value is calculated instead of read directly (default: False).
+        custom (bool): If the node is a custom node (custom name and unit).
         logging (bool): Whether the node value should be logged (default: False).
         logging_period (int): Logging interval in minutes (default: 15).
         min_alarm (bool): Enable alarm if value drops below `min_alarm_value` (default: False).
@@ -643,8 +655,10 @@ class ModbusRTUNode(Node):
         type: NodeType,
         register: int,
         unit: str,
+        enabled: bool = True,
         publish: bool = True,
         calculated: bool = False,
+        custom: bool = False,
         logging: bool = False,
         logging_period: int = 15,
         min_alarm: bool = False,
@@ -657,8 +671,10 @@ class ModbusRTUNode(Node):
             type=type,
             unit=unit,
             protocol=Protocol.MODBUS_RTU,
+            enabled=enabled,
             publish=publish,
             calculated=calculated,
+            custom=custom,
             logging=logging,
             logging_period=logging_period,
             min_alarm=min_alarm,
@@ -696,8 +712,10 @@ class OPCUANode(Node):
         type (NodeType): Type of the node (e.g., NodeType.FLOAT).
         node_id (str): OPC UA Node ID used to access the value on the server (e.g., 'ns=2;s=Voltage_L1').
         unit (str): Unit of measurement (e.g., 'V', 'A').
+        enabled (bool): Whether the node is enabled for data collection and processing.
         publish (bool): Whether to publish the node value via MQTT (default: True).
         calculated (bool): Whether the value is calculated instead of read directly (default: False).
+        custom (bool): If the node is a custom node (custom name and unit).
         logging (bool): Whether the node value should be logged (default: False).
         logging_period (int): Logging interval in minutes (default: 15).
         min_alarm (bool): Enable alarm if value drops below `min_alarm_value` (default: False).
@@ -716,8 +734,10 @@ class OPCUANode(Node):
         type: NodeType,
         node_id: str,
         unit: str,
+        enabled: bool = True,
         publish: bool = True,
         calculated: bool = False,
+        custom: bool = False,
         logging: bool = False,
         logging_period: int = 15,
         min_alarm: bool = False,
@@ -730,8 +750,10 @@ class OPCUANode(Node):
             type=type,
             unit=unit,
             protocol=Protocol.OPC_UA,
+            enabled=enabled,
             publish=publish,
             calculated=calculated,
+            custom=custom,
             logging=logging,
             logging_period=logging_period,
             min_alarm=min_alarm,
