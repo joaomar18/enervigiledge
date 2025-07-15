@@ -369,7 +369,7 @@ class EnergyMeterNodes:
         node_name = f"{phase}{energy_type}_energy"
         node = self.nodes.get(node_name)
 
-        if not node or not node.calculated or not node.custom:
+        if not node or not node.calculated or node.custom:
             return
 
         if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
@@ -414,7 +414,7 @@ class EnergyMeterNodes:
         node_name = f"{phase}{power_type}_power"
         node = self.nodes.get(node_name)
 
-        if not node or not node.calculated or not node.custom:
+        if not node or not node.calculated or node.custom:
             return
 
         if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
@@ -462,7 +462,7 @@ class EnergyMeterNodes:
         node_name = f"{phase}power_factor"
         node = self.nodes.get(node_name)
 
-        if not node or not node.calculated or not node.custom:
+        if not node or not node.calculated or node.custom:
             return
 
         if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
@@ -505,7 +505,7 @@ class EnergyMeterNodes:
         node_name = f"{phase}power_factor_direction"
         node = self.nodes.get(node_name)
 
-        if not node or not node.calculated or not node.custom:
+        if not node or not node.calculated or node.custom:
             return
 
         if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
