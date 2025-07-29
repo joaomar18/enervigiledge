@@ -97,9 +97,9 @@ class Node:
         logging_period: int = 15,
         min_alarm: bool = False,
         max_alarm: bool = False,
-        min_alarm_value: float = 0.0,
-        max_alarm_value: float = 0.0,
-        decimal_places: int = 3,
+        min_alarm_value: float | None = 0.0,
+        max_alarm_value: float | None = 0.0,
+        decimal_places: int | None = 3,
         on_value_change: Optional[Callable[["Node"], None]] = None,
     ):
         # Configuration
@@ -111,7 +111,7 @@ class Node:
         self.publish = publish
         self.calculated = calculated
         self.custom = custom
-        self.decimal_places = decimal_places
+        self.decimal_places = decimal_places if (self.type is NodeType.FLOAT) else None
         self.on_value_change = on_value_change
 
         # Logging
@@ -122,8 +122,8 @@ class Node:
         # Alarms
         self.min_alarm = min_alarm
         self.max_alarm = max_alarm
-        self.min_alarm_value = min_alarm_value
-        self.max_alarm_value = max_alarm_value
+        self.min_alarm_value = min_alarm_value if (self.type is NodeType.FLOAT or self.type is NodeType.INT) else None
+        self.max_alarm_value = max_alarm_value if (self.type is NodeType.FLOAT or self.type is NodeType.INT) else None
         self.min_alarm_state = False
         self.max_alarm_state = False
 
