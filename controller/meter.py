@@ -13,7 +13,7 @@ from dataclasses import dataclass, asdict
 #############LOCAL IMPORTS#############
 
 from controller.device import Device
-from controller.node import Node
+from controller.node import NodeType, Node
 from mqtt.client import MQTTMessage
 from db.timedb import Measurement
 from util.debug import LoggerManager
@@ -159,14 +159,34 @@ class EnergyMeterNodes:
     @staticmethod
     def validate_node(node: Node) -> None:
         """
-        Validates a node's name and unit according to predefined valid options.
+        Validates a node's name and unit according to predefined valid options for energy meter nodes.
+
+        This method performs comprehensive validation for energy meter nodes with the following logic:
+        
+        1. **Custom Node Exemption**: Custom nodes (node.custom=True) bypass all validation
+        2. **Base Name Extraction**: Removes phase prefixes from node names (e.g., "l1_voltage" → "voltage")
+        3. **Node Name Validation**: Verifies the base name exists in the VALID_NODES set
+        4. **Unit Validation by Node Type**:
+           - Non-numeric nodes (BOOL, STRING): Must have unit=None (no units allowed)
+           - Numeric nodes (FLOAT, INT): Must have a unit from the predefined valid units for that node type
+
+        The validation ensures that only recognized energy meter parameters are used and that
+        units are appropriate for the data type and measurement category.
 
         Args:
-            node (Node): The node to validate.
+            node (Node): The node to validate containing name, type, unit, and custom flag.
 
         Raises:
-            NodeUnknownError: If the node name is not recognized.
-            UnitError: If the unit for the node is not one of the valid options.
+            NodeUnknownError: If the node's base name is not found in VALID_NODES.
+            UnitError: If unit validation fails for any of these scenarios:
+                - Non-numeric nodes (BOOL/STRING) have a non-None unit
+                - Numeric nodes (FLOAT/INT) have units not in VALID_UNITS for that node type
+                - Numeric nodes have None units when valid units are defined for that node type
+
+        Note:
+            Custom nodes are completely exempt from validation and always considered valid.
+            Phase prefixes like 'l1_', 'l2_', 'l3_', 'total_' are automatically stripped
+            before validation to allow phase-specific variations of base measurements.
         """
 
         if node.custom:
@@ -177,6 +197,12 @@ class EnergyMeterNodes:
 
         if base_name not in EnergyMeterNodes.VALID_NODES:
             raise NodeUnknownError(f"Invalid node {node.name} with type {node.type}")
+
+        if (node.type is not NodeType.FLOAT and node.type is not NodeType.INT):
+            if node.unit is None:
+                return
+            else:
+                raise UnitError(f"Invalid unit '{node.unit}' for node '{node.name}'. Non numeric nodes can't have units")
 
         valid_units = EnergyMeterNodes.VALID_UNITS.get(base_name)
 

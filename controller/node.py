@@ -46,12 +46,12 @@ class Node:
     Attributes:
         name (str): Unique name of the node.
         type (NodeType): Type of the node value (e.g., FLOAT, BOOL).
-        unit (str): Measurement unit (e.g., 'V', 'kWh').
-        protocol (Protocol): protocol of the node (None if virtual or calculated node, Modbus RTU, OPC UA...)
+        unit (str | None): Measurement unit (e.g., 'V', 'kWh'). Automatically set to None for BOOL/STRING nodes.
+        protocol (Protocol): Protocol of the node (NONE if virtual or calculated node, MODBUS_RTU, OPC_UA...).
         enabled (bool): Whether the node is enabled for data collection and processing.
-        incremental_node (bool): Whether the node represents an incremental counter.
-        positive_incremental (bool): Whether to increment positively (used with incremental_node).
-        calculate_increment (bool): Whether to compute increment from the initial value (used with incremental_node)
+        incremental_node (bool | None): Whether the node represents an incremental counter. None for BOOL/STRING nodes.
+        positive_incremental (bool | None): Whether to increment positively (used with incremental_node). None for non-incremental nodes.
+        calculate_increment (bool | None): Whether to compute increment from the initial value (used with incremental_node). None for non-incremental nodes.
         publish (bool): Whether to publish this node over MQTT.
         calculated (bool): If the value is computed rather than read from hardware.
         custom (bool): If the node is a custom node (custom name and unit).
@@ -59,37 +59,37 @@ class Node:
         logging_period (int): Time in minutes between log entries.
         min_alarm (bool): Enables alarm for values below `min_alarm_value`.
         max_alarm (bool): Enables alarm for values above `max_alarm_value`.
-        min_alarm_value (float): Lower threshold for minimum value alarm triggering.
-        max_alarm_value (float): Upper threshold for maximum value alarm triggering.
-        decimal_places (int): Number of decimal places to round values to (if float).
-        on_value_change (Optional[Callable]): Optional callback triggered when value updates.
-
-        value (Any): Current value of the node.
-        timestamp (float): Timestamp of the last value update.
-        elapsed_time (float): Time difference (seconds) between last and current update.
-        initial_value (Any): First observed value (for incremental nodes).
-        positive_direction (bool): True if value increased since last change.
-        negative_direction (bool): True if value decreased since last change.
-        min_value (float): Lowest observed value since last reset.
-        max_value (float): Highest observed value since last reset.
-        mean_value (float): Average value since last reset.
-        mean_sum (float): Cumulative value used to calculate mean.
-        mean_count (int): Number of values used to calculate mean.
-        last_log_datetime (datetime): Timestamp of last logged entry.
+        min_alarm_value (float | None): Lower threshold for minimum value alarm triggering. Automatically set to None for BOOL/STRING nodes.
+        max_alarm_value (float | None): Upper threshold for maximum value alarm triggering. Automatically set to None for BOOL/STRING nodes.
+        decimal_places (int | None): Number of decimal places to round values to. Automatically set to None for non-FLOAT nodes.
+        on_value_change (Optional[Callable[["Node"], None]]): Optional callback triggered when value updates.
+        last_log_datetime (Optional[datetime]): Timestamp of last logged entry.
         min_alarm_state (bool): True if a value dropped below the minimum threshold. Resets only on value reset.
         max_alarm_state (bool): True if a value exceeded the maximum threshold. Resets only on value reset.
+
+        value (Union[float, int, str, bool] | None): Current value of the node.
+        timestamp (Optional[float]): Timestamp of the last value update.
+        elapsed_time (Optional[float]): Time difference (seconds) between last and current update.
+        initial_value (Union[float, int] | None): First observed value (for incremental nodes).
+        positive_direction (bool): True if value increased since last change.
+        negative_direction (bool): True if value decreased since last change.
+        min_value (Union[float, int] | None): Lowest observed value since last reset.
+        max_value (Union[float, int] | None): Highest observed value since last reset.
+        mean_value (Union[float, int] | None): Average value since last reset.
+        mean_sum (float): Cumulative value used to calculate mean.
+        mean_count (int): Number of values used to calculate mean.
     """
 
     def __init__(
         self,
         name: str,
         type: NodeType,
-        unit: str,
+        unit: str | None,
         protocol: Protocol = Protocol.NONE,
         enabled: bool = True,
-        incremental_node: bool = False,
-        positive_incremental: bool = False,
-        calculate_increment: bool = True,
+        incremental_node: bool | None = False,
+        positive_incremental: bool | None = False,
+        calculate_increment: bool | None = True,
         publish: bool = True,
         calculated: bool = False,
         custom: bool = False,
@@ -105,7 +105,7 @@ class Node:
         # Configuration
         self.name = name
         self.type = type
-        self.unit = unit
+        self.unit = unit if (self.type is NodeType.FLOAT or self.type is NodeType.INT) else None
         self.protocol = protocol
         self.enabled = enabled
         self.publish = publish
@@ -128,9 +128,9 @@ class Node:
         self.max_alarm_state = False
 
         # Incremental logic
-        self.incremental_node = incremental_node
-        self.positive_incremental = positive_incremental
-        self.calculate_increment = calculate_increment
+        self.incremental_node = incremental_node if (self.type is NodeType.FLOAT or self.type is NodeType.INT) else None
+        self.positive_incremental = positive_incremental if (self.incremental_node is not None) else None
+        self.calculate_increment = calculate_increment if (self.incremental_node is not None) else None
         self.initial_value: Union[float, int] = None
 
         # Value and tracking
@@ -185,11 +185,11 @@ class Node:
                 raise ValueError("Alarms are not applicable to incremental nodes.")
 
         # Alarm threshold without enable flags
-        if not self.min_alarm and self.min_alarm_value != 0.0:
-            raise ValueError("min_alarm_value is set but min_alarm is disabled.")
+        if self.min_alarm and self.min_alarm_value is None:
+            raise ValueError("min_alarm is enabled but min_alarm_value is None.")
 
-        if not self.max_alarm and self.max_alarm_value != 0.0:
-            raise ValueError("max_alarm_value is set but max_alarm is disabled.")
+        if self.max_alarm and self.max_alarm_value is None:
+            raise ValueError("max_alarm is enabled but max_alarm_value is None.")
 
         # Logging period must be valid if logging is enabled
         if self.logging and (not isinstance(self.logging_period, int) or self.logging_period <= 0):
@@ -226,12 +226,6 @@ class Node:
                 raise ValueError(f"incremental_node is not valid for {self.type.name} nodes.")
             if self.min_alarm or self.max_alarm:
                 raise ValueError("Alarms are not applicable to incremental nodes.")
-
-            if not self.min_alarm and self.min_alarm_value != 0.0:
-                raise ValueError("min_alarm_value is set but min_alarm is disabled.")
-
-            if not self.max_alarm and self.max_alarm_value != 0.0:
-                raise ValueError("max_alarm_value is set but max_alarm is disabled.")
 
         self.incremental_node = incremental_node
 
@@ -287,11 +281,11 @@ class Node:
             if min_alarm or max_alarm:
                 raise ValueError("Alarms are not supported for incremental nodes.")
 
-        if not min_alarm and min_alarm_value != 0.0:
-            raise ValueError("min_alarm_value is set but min_alarm is disabled.")
+        if min_alarm and min_alarm_value is None:
+            raise ValueError("min_alarm is enabled but min_alarm_value is None.")
 
-        if not max_alarm and max_alarm_value != 0.0:
-            raise ValueError("max_alarm_value is set but max_alarm is disabled.")
+        if max_alarm and max_alarm_value is None:
+            raise ValueError("max_alarm is enabled but max_alarm_value is None.")
 
         self.min_alarm = min_alarm
         self.max_alarm = max_alarm
