@@ -679,8 +679,27 @@ class HTTPServer:
 
                 payload = await request.json()
 
-                self.safety.clean_failed_requests(ip, "/add_device")
-                return JSONResponse(content={"message": "Device added sucessfully."})
+                device_data = payload.get("deviceData")
+                device_name = device_data.get("name")
+                device_nodes = payload.get("deviceNodes")
+                device_image = payload.get("deviceImage")
+
+                if not all([device_data, device_nodes]):
+                    raise ValueError("All fields are required")
+
+                # Tries to initialize a new energy meter with the given configuration. Throws exception if an error is found in the configuration
+                energy_meter: ModbusRTUEnergyMeter | OPCUAEnergyMeter = convert_dict_to_energy_meter(device_data, device_nodes)
+                energy_meter_record = energy_meter.get_meter_record()
+
+                device_id = self.db.insert_energy_meter(energy_meter_record)
+                if device_id is not None:
+                    energy_meter.id = device_id
+                    self.device_manager.add_device(energy_meter)
+
+                    self.safety.clean_failed_requests(ip, "/add_device")
+                    return JSONResponse(content={"message": "Device added sucessfully."})
+                else:
+                    raise Exception(f"Could not add device with name {device_name} and id {device_id} in the database.")
 
             except Exception as e:
                 self.safety.increment_failed_requests(ip, "/add_device")
@@ -702,11 +721,9 @@ class HTTPServer:
                 payload = await request.json()
 
                 device_data = payload.get("deviceData")
-                device_name = str(device_data['name'])
-                device_id = int(device_data['id'])
-
+                device_name = device_data.get("name")
+                device_id = device_data.get("id")
                 device_nodes = payload.get("deviceNodes")
-
                 device_image = payload.get("deviceImage")
 
                 if not all([device_data, device_nodes]):
@@ -728,9 +745,9 @@ class HTTPServer:
 
                     self.safety.clean_failed_requests(ip, "/edit_device")
                     return JSONResponse(content={"message": "Device edited sucessfully."})
-                
+
                 else:
-                    raise Exception("Could not update device with name {device_name} and id {device_id} in the database.")
+                    raise Exception(f"Could not update device with name {device_name} and id {device_id} in the database.")
 
             except Exception as e:
                 self.safety.increment_failed_requests(ip, "/edit_device")
@@ -767,9 +784,9 @@ class HTTPServer:
 
                     self.safety.clean_failed_requests(ip, "/delete_device")
                     return JSONResponse(content={"message": "Device deleted sucessfully."})
-                
+
                 else:
-                    raise Exception("Could not delete device with name {device_name} and id {device_id} from the database.")
+                    raise Exception(f"Could not delete device with name {device_name} and id {device_id} from the database.")
 
             except Exception as e:
                 self.safety.increment_failed_requests(ip, "/delete_device")

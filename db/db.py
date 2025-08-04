@@ -358,7 +358,7 @@ class SQLiteDBClient:
             logger.exception(f"Failed to retrieve energy meters: {e}")
 
         return meters
-
+    
     def close(self):
         """
         Closes the SQLite connection.

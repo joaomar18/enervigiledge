@@ -162,38 +162,43 @@ def convert_dict_to_comm_options(dict_communication_options: Dict[str, any], pro
 
 def convert_dict_to_node(dict_node: Dict[str, any]) -> Node:
     """
-    Converts a dictionary representation of a node into the appropriate Node object.
+    Converts a node configuration dictionary into the appropriate protocol-specific Node object.
 
-    This function extracts node configuration fields from a dictionary and creates
-    a properly typed Node instance based on the protocol specified in the dictionary.
+    Extracts node configuration from a structured dictionary and creates the correct Node
+    subclass (ModbusRTUNode, OPCUANode, or base Node) based on the specified protocol.
+    Validates all configuration fields and converts string enums to proper types.
+
+    Dictionary Structure:
+    - Top level: Contains 'name', 'protocol', and 'config' keys
+    - Config section: Contains all node-specific configuration parameters
 
     Args:
-        dict_node (Dict[str, any]): Dictionary containing node configuration fields.
-            Expected keys:
-                - name (str): Unique name of the node
-                - type (str): Node type (INT, FLOAT, BOOL, STRING)
+        dict_node (Dict[str, any]): Node configuration dictionary.
+            Top-level fields:
+                - name (str): Unique identifier for the node
+                - protocol (str): Communication protocol ('MODBUS_RTU', 'OPC_UA', 'NONE')
+            Config section fields:
+                - type (str): Data type ('INT', 'FLOAT', 'BOOL', 'STRING')
                 - unit (str): Unit of measurement
-                - protocol (str): Communication protocol (MODBUS_RTU, OPC_UA)
-                - enabled (bool): Whether the node is enabled
-                - publish (bool): Whether to publish over MQTT
+                - enabled (bool): Whether the node is active
+                - publish (bool): Whether to publish via MQTT
                 - calculated (bool): Whether the value is calculated
                 - custom (bool): Whether it's a custom node
                 - logging (bool): Whether to log historical values
                 - logging_period (int): Logging interval in minutes
-                - min_alarm (bool): Enable minimum alarm
-                - max_alarm (bool): Enable maximum alarm
-                - min_alarm_value (float): Minimum alarm threshold
-                - max_alarm_value (float): Maximum alarm threshold
-                - register (int): Modbus register address (for ModbusRTUNode)
-                - node_id (str): OPC UA Node ID (for OPCUANode)
+                - min_alarm/max_alarm (bool): Alarm configuration
+                - min_alarm_value/max_alarm_value (float): Alarm thresholds
+                - incremental_node (bool): For energy accumulation
+                - Protocol-specific: 'register' (Modbus) or 'node_id' (OPC UA)
 
     Returns:
-        Node: A Node instance (ModbusRTUNode or OPCUANode) with the extracted configuration.
+        Node: Protocol-specific Node instance (ModbusRTUNode, OPCUANode, or base Node)
+        with validated configuration and proper type conversions.
 
     Raises:
-        KeyError: If any required field is missing from the input dictionary.
-        TypeError: If any field has an incorrect type.
-        ValueError: If the input dictionary is None or empty, or if the protocol is not supported.
+        KeyError: If required fields are missing from the configuration.
+        TypeError: If field types cannot be converted to expected types.
+        ValueError: If input is invalid, protocol unsupported, or enum conversion fails.
     """
 
     if not dict_node:
@@ -205,7 +210,7 @@ def convert_dict_to_node(dict_node: Dict[str, any]) -> Node:
         raise ValueError("Node configuration dictionary cannot be None or empty")
 
     # Extract common required fields
-    required_common_fields = ['name', 'device_id', 'protocol']
+    required_common_fields = ['name', 'protocol']
 
     required_config_fields = [
         'type',
@@ -401,55 +406,56 @@ def convert_dict_to_energy_nodes(list_nodes: List[Dict[str, any]]) -> Set[Node]:
 
 def convert_dict_to_energy_meter(dict_energy_meter: Dict[str, any], dict_nodes: Dict[str, any]) -> ModbusRTUEnergyMeter | OPCUAEnergyMeter:
     """
-    Converts dictionary representations into a protocol-specific EnergyMeter instance.
+    Converts dictionary configurations into a fully initialized protocol-specific EnergyMeter instance.
 
-    This function creates a fully configured energy meter object by converting dictionary
-    configurations into the appropriate dataclass instances and protocol-specific objects.
-    It validates all input data, converts strings to enums, and instantiates the correct
-    meter type based on the communication protocol.
+    Creates a complete energy meter object by parsing configuration dictionaries, validating
+    data types, converting to appropriate enums, and instantiating the correct protocol-specific
+    class with all dependencies properly configured.
 
-    The function integrates multiple conversion utilities:
-    - convert_dict_to_meter_options() for general meter configuration
-    - convert_dict_to_comm_options() for protocol-specific communication settings
-    - convert_dict_to_energy_nodes() for node configurations
+    Process Flow:
+    1. Validates required fields and extracts basic configuration
+    2. Converts string values to proper enum types (Protocol, EnergyMeterType)
+    3. Uses helper functions to convert meter options, communication options, and nodes
+    4. Instantiates the appropriate energy meter class based on protocol
 
     Args:
         dict_energy_meter (Dict[str, any]): Energy meter configuration dictionary.
-            Required keys:
-                - id (int): Unique identifier of the energy meter
+            Required fields:
                 - name (str): Display name of the meter
                 - protocol (str): Communication protocol ('MODBUS_RTU' or 'OPC_UA')
                 - type (str): Meter type ('SINGLE_PHASE' or 'THREE_PHASE')
                 - options (Dict): General meter configuration options
                 - communication_options (Dict): Protocol-specific communication parameters
+            Optional fields:
+                - id (int): Unique identifier (None for new meters)
         dict_nodes (List[Dict[str, any]]): List of node configuration dictionaries.
 
     Returns:
-        ModbusRTUEnergyMeter | OPCUAEnergyMeter: Protocol-specific energy meter instance
-        with validated configuration, initialized queues, and converted node set.
+        ModbusRTUEnergyMeter | OPCUAEnergyMeter: Fully configured protocol-specific energy meter
+        instance with validated configuration, temporary queues, and converted node set.
 
     Raises:
-        KeyError: If required fields are missing from input dictionaries.
+        KeyError: If required configuration fields are missing.
         TypeError: If field types cannot be converted to expected types.
-        ValueError: If input is None/empty, protocol unsupported, or enum conversion fails.
+        ValueError: If input is invalid, protocol unsupported, or enum conversion fails.
 
     Note:
-        Creates new asyncio.Queue instances for publish_queue and measurements_queue.
-        These may need to be replaced with actual queues by the calling code.
+        Creates temporary asyncio.Queue instances for publish_queue and measurements_queue.
+        These should be replaced with actual application queues after instantiation.
     """
 
     if not dict_energy_meter:
         raise ValueError("Input dictionary cannot be None or empty")
 
     # Extract common required fields
-    required_fields = ['id', 'name', 'protocol', 'type', 'options', 'communication_options']
+    required_fields = ['name', 'protocol', 'type', 'options', 'communication_options']
     missing_fields = [field for field in required_fields if field not in dict_energy_meter]
     if missing_fields:
         raise KeyError(f"Missing required fields: {', '.join(missing_fields)}")
 
     # Extract and validate common fields
     try:
-        meter_id = int(dict_energy_meter['id'])
+        meter_id = int(dict_energy_meter['id']) if dict_energy_meter.get('id') else None
         name = str(dict_energy_meter['name'])
         protocol_str = str(dict_energy_meter['protocol'])
         meter_type_str = str(dict_energy_meter['type'])
