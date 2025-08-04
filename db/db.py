@@ -90,27 +90,24 @@ class EnergyMeterRecord:
 
 class SQLiteDBClient:
     """
-    Client for storing device and node configurations using SQLite.
+    SQLite client for storing and retrieving energy meter device configurations.
 
-    This class provides methods to:
-        - Create necessary tables for storing device and node configurations.
-        - Insert or update device and node records.
-        - Check database file accessibility.
-        - Cleanly close the database connection.
-
-    Intended for use as a local configuration store in industrial monitoring platforms
-    like ENERVIGIL.
+    Provides basic CRUD operations for energy meters and their associated nodes.
+    Uses WAL mode for better concurrent access and maintains referential integrity
+    through foreign key constraints.
 
     Attributes:
-        db_path (str): Filesystem path to the SQLite database file.
-        conn (sqlite3.Connection): Connection object to the SQLite database.
-        cursor (sqlite3.Cursor): Cursor object for executing SQL commands.
+        db_path (str): Path to the SQLite database file.
+        conn (sqlite3.Connection): Database connection object.
+        cursor (sqlite3.Cursor): Database cursor for executing queries.
     """
 
     def __init__(self, db_path: str = "config.db"):
         self.db_path = db_path
         self.conn = sqlite3.connect(self.db_path)
         self.cursor = self.conn.cursor()
+        # Enable WAL mode
+        self.conn.execute("PRAGMA journal_mode=WAL;")
         self._create_tables()
 
     def _create_tables(self):
@@ -199,6 +196,114 @@ class SQLiteDBClient:
             logger.exception(f"Failed to insert energy meter '{record.name}': {e}")
             self.conn.rollback()
             return None
+
+    def update_energy_meter(self, record: EnergyMeterRecord) -> bool:
+        """
+        Updates an existing energy meter configuration by replacing it entirely.
+
+        This method performs a complete replacement of the energy meter configuration
+        by deleting the existing record and inserting the new one. Uses database
+        transactions to ensure atomicity and data consistency.
+
+        Args:
+            record (EnergyMeterRecord): New energy meter configuration including nodes.
+                Must have a valid id field to identify the record to update.
+
+        Returns:
+            bool: True if update successful, False otherwise.
+        """
+
+        logger = LoggerManager.get_logger(__name__)
+
+        if record.id is None:
+            logger.error("Cannot update energy meter: record ID is required")
+            return False
+
+        try:
+            # Begin transaction
+            self.cursor.execute("BEGIN TRANSACTION")
+
+            # Delete existing device (nodes will be cascade deleted due to foreign key)
+            self.cursor.execute("DELETE FROM devices WHERE id = ?", (record.id,))
+            
+            if self.cursor.rowcount == 0:
+                logger.warning(f"No energy meter found with ID {record.id}")
+                self.conn.rollback()
+                return False
+
+            # Insert the updated device configuration
+            self.cursor.execute(
+                """
+                INSERT INTO devices (id, name, protocol, device_type, meter_options, connection_options)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (record.id, record.name, record.protocol, record.device_type, 
+                 json.dumps(record.meter_options), json.dumps(record.connection_options)),
+            )
+
+            # Insert all associated nodes
+            for node in record.nodes:
+                node.device_id = record.id
+                self.cursor.execute(
+                    """
+                    INSERT INTO nodes (device_id, name, protocol, config)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (record.id, node.name, node.protocol, json.dumps(node.config)),
+                )
+
+            # Commit transaction
+            self.conn.commit()
+            logger.info(f"Successfully updated energy meter '{record.name}' with ID {record.id}")
+            return True
+
+        except Exception as e:
+            logger.exception(f"Failed to update energy meter '{record.name}' with ID {record.id}: {e}")
+            self.conn.rollback()
+            return False
+        
+    def delete_energy_meter(self, record: EnergyMeterRecord) -> bool:
+        """
+        Deletes an energy meter and all its associated nodes from the database.
+
+        Uses database transactions to ensure atomicity. The foreign key cascade
+        constraint automatically removes all associated nodes when the device is deleted.
+
+        Args:
+            record (EnergyMeterRecord): Energy meter record to delete.
+                Must have a valid id field to identify the record.
+
+        Returns:
+            bool: True if deletion successful, False otherwise.
+        """
+
+        logger = LoggerManager.get_logger(__name__)
+
+        if record.id is None:
+            logger.error("Cannot delete energy meter: record ID is required")
+            return False
+
+        try:
+            # Begin transaction
+            self.cursor.execute("BEGIN TRANSACTION")
+
+            # Delete the device (nodes will be cascade deleted due to foreign key)
+            self.cursor.execute("DELETE FROM devices WHERE id = ?", (record.id,))
+            
+            if self.cursor.rowcount == 0:
+                logger.warning(f"No energy meter found with ID {record.id}")
+                self.conn.rollback()
+                return False
+
+            # Commit transaction
+            self.conn.commit()
+            logger.info(f"Successfully deleted energy meter '{record.name}' with ID {record.id}")
+            return True
+
+        except Exception as e:
+            logger.exception(f"Failed to delete energy meter '{record.name}' with ID {record.id}: {e}")
+            self.conn.rollback()
+            return False
 
     def get_all_energy_meters(self) -> List[EnergyMeterRecord]:
         """

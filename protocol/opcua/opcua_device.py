@@ -11,6 +11,7 @@ import logging
 
 from util.debug import LoggerManager
 from controller.device import Protocol
+from db.db import NodeRecord, EnergyMeterRecord
 from controller.node import Node, OPCUANode
 from controller.meter import EnergyMeter, EnergyMeterType, EnergyMeterOptions
 
@@ -111,6 +112,13 @@ class OPCUAEnergyMeter(EnergyMeter):
         self.nodes = nodes if nodes else set()
         self.opcua_nodes: Set[OPCUANode] = {node for node in self.nodes if isinstance(node, OPCUANode)}
         self.connection_open = False
+
+        self.run_connection_task = False
+        self.run_receiver_task = False
+
+        self.connection_task: asyncio.Task | None = None
+        self.receiver_task: asyncio.Task | None = None
+
         self.start()
 
     def start(self) -> None:
@@ -125,8 +133,29 @@ class OPCUAEnergyMeter(EnergyMeter):
         """
 
         loop = asyncio.get_event_loop()
+        self.run_connection_task = True
+        self.run_receiver_task = True
         self.connection_task = loop.create_task(self.manage_connection())
         self.receiver_task = loop.create_task(self.receiver())
+
+    def stop(self) -> None:
+        """
+        Stops the background tasks for the energy meter.
+
+        This method gracefully shuts down the device by:
+            - Setting control flags to stop the connection manager and receiver loops
+            - Clearing the task references to allow garbage collection
+            - Should be called during device shutdown or when stopping monitoring
+
+        Note:
+            The actual tasks may take a short time to complete their current cycle
+            before fully stopping due to the async nature of the loops.
+        """
+
+        self.run_connection_task = False
+        self.run_receiver_task = False
+        self.connection_task = None
+        self.receiver_task = None
 
     async def manage_connection(self):
         """
@@ -146,7 +175,7 @@ class OPCUAEnergyMeter(EnergyMeter):
 
         logger = LoggerManager.get_logger(__name__)
 
-        while True:
+        while self.run_connection_task:
             try:
                 logger.info(f"Trying to connect OPC UA client {self.name} with id {self.id}...")
                 await self.client.connect()
@@ -184,7 +213,7 @@ class OPCUAEnergyMeter(EnergyMeter):
 
         logger = LoggerManager.get_logger(__name__)
 
-        while True:
+        while self.run_receiver_task:
             try:
                 if self.connection_open:
                     tasks = [asyncio.create_task(self.read_float(node)) for node in self.opcua_nodes if node.enabled]
@@ -286,3 +315,27 @@ class OPCUAEnergyMeter(EnergyMeter):
             "communication_options": self.connection_options.get_connection_options(),
             "type": self.meter_type,
         }
+
+    def get_meter_record(self) -> EnergyMeterRecord:
+        """
+        Creates a database record representation of the energy meter configuration.
+
+        Returns:
+            EnergyMeterRecord: Record containing meter configuration and all associated nodes.
+        """
+
+        node_records: Set[NodeRecord] = set()
+
+        for node in self.nodes:
+            record = node.get_node_record()
+            node_records.add(record)
+
+        return EnergyMeterRecord(
+            name=self.name,
+            id=self.id,
+            protocol=self.protocol,
+            device_type=self.meter_type,
+            meter_options=self.meter_options.get_meter_options(),
+            connection_options=self.connection_options.get_connection_options(),
+            nodes=node_records,
+        )

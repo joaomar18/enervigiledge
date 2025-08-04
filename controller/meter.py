@@ -7,6 +7,7 @@ import traceback
 from typing import List, Dict, Set, Optional, Any
 from enum import Enum
 from dataclasses import dataclass, asdict
+from abc import ABC, abstractmethod
 
 #######################################
 
@@ -16,6 +17,7 @@ from controller.device import Device
 from controller.node import NodeType, Node
 from mqtt.client import MQTTMessage
 from db.timedb import Measurement
+from db.db import EnergyMeterRecord
 from util.debug import LoggerManager
 import util.functions as functions
 
@@ -162,7 +164,7 @@ class EnergyMeterNodes:
         Validates a node's name and unit according to predefined valid options for energy meter nodes.
 
         This method performs comprehensive validation for energy meter nodes with the following logic:
-        
+
         1. **Custom Node Exemption**: Custom nodes (node.custom=True) bypass all validation
         2. **Base Name Extraction**: Removes phase prefixes from node names (e.g., "l1_voltage" → "voltage")
         3. **Node Name Validation**: Verifies the base name exists in the VALID_NODES set
@@ -198,7 +200,7 @@ class EnergyMeterNodes:
         if base_name not in EnergyMeterNodes.VALID_NODES:
             raise NodeUnknownError(f"Invalid node {node.name} with type {node.type}")
 
-        if (node.type is not NodeType.FLOAT and node.type is not NodeType.INT):
+        if node.type is not NodeType.FLOAT and node.type is not NodeType.INT:
             if node.unit is None:
                 return
             else:
@@ -229,8 +231,6 @@ class EnergyMeterNodes:
         Raises:
             LoggingPeriodError: If any mismatch is found across types or phases within a category.
         """
-
-
 
         category_suffixes = {
             "energy": ("_energy",),
@@ -637,7 +637,7 @@ class EnergyMeter(Device):
         self,
         id: int,
         name: str,
-        protocol: int,
+        protocol: str,
         publish_queue: asyncio.Queue,
         measurements_queue: asyncio.Queue,
         meter_type: EnergyMeterType,
@@ -667,6 +667,34 @@ class EnergyMeter(Device):
         }
 
         self.disconnected_calculation = False
+
+    @abstractmethod
+    def start(self) -> None:
+        """
+        Starts the energy meter device operations.
+
+        This method should be implemented by subclasses to initialize and start
+        the communication protocol, begin data acquisition, and set up any
+        necessary background tasks for the specific meter type.
+
+        Raises:
+            NotImplementedError: If the subclass does not implement this method.
+        """
+        pass
+
+    @abstractmethod
+    def stop(self) -> None:
+        """
+        Stops the energy meter device operations.
+
+        This method should be implemented by subclasses to gracefully shutdown
+        the communication protocol, stop data acquisition, and clean up any
+        resources or background tasks associated with the specific meter type.
+
+        Raises:
+            NotImplementedError: If the subclass does not implement this method.
+        """
+        pass
 
     async def process_nodes(self) -> None:
         """
@@ -1075,3 +1103,13 @@ class EnergyMeter(Device):
             "options": self.meter_options.get_meter_options(),
             "type": self.meter_type,
         }
+
+    @abstractmethod
+    def get_meter_record(self) -> EnergyMeterRecord:
+        """
+        Creates a database record representation of the energy meter configuration.
+
+        Returns:
+            EnergyMeterRecord: Record containing meter configuration and all associated nodes.
+        """
+        pass

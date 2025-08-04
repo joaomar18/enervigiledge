@@ -650,6 +650,9 @@ class ModbusRTUNode(Node):
         register: int,
         unit: str,
         enabled: bool = True,
+        incremental_node: bool | None = False,
+        positive_incremental: bool | None = False,
+        calculate_increment: bool | None = True,
         publish: bool = True,
         calculated: bool = False,
         custom: bool = False,
@@ -659,6 +662,7 @@ class ModbusRTUNode(Node):
         max_alarm: bool = False,
         min_alarm_value: float = 0.0,
         max_alarm_value: float = 0.0,
+        decimal_places: int | None = 3,
     ):
         super().__init__(
             name=name,
@@ -666,6 +670,9 @@ class ModbusRTUNode(Node):
             unit=unit,
             protocol=Protocol.MODBUS_RTU,
             enabled=enabled,
+            incremental_node=incremental_node,
+            positive_incremental=positive_incremental,
+            calculate_increment=calculate_increment,
             publish=publish,
             calculated=calculated,
             custom=custom,
@@ -675,6 +682,7 @@ class ModbusRTUNode(Node):
             max_alarm=max_alarm,
             min_alarm_value=min_alarm_value,
             max_alarm_value=max_alarm_value,
+            decimal_places=decimal_places,
         )
 
         self.register = register
@@ -729,6 +737,9 @@ class OPCUANode(Node):
         node_id: str,
         unit: str,
         enabled: bool = True,
+        incremental_node: bool | None = False,
+        positive_incremental: bool | None = False,
+        calculate_increment: bool | None = True,
         publish: bool = True,
         calculated: bool = False,
         custom: bool = False,
@@ -738,6 +749,7 @@ class OPCUANode(Node):
         max_alarm: bool = False,
         min_alarm_value: float = 0.0,
         max_alarm_value: float = 0.0,
+        decimal_places: int | None = 3,
     ):
         super().__init__(
             name=name,
@@ -745,6 +757,9 @@ class OPCUANode(Node):
             unit=unit,
             protocol=Protocol.OPC_UA,
             enabled=enabled,
+            incremental_node=incremental_node,
+            positive_incremental=positive_incremental,
+            calculate_increment=calculate_increment,
             publish=publish,
             calculated=calculated,
             custom=custom,
@@ -754,6 +769,7 @@ class OPCUANode(Node):
             max_alarm=max_alarm,
             min_alarm_value=min_alarm_value,
             max_alarm_value=max_alarm_value,
+            decimal_places=decimal_places,
         )
         self.node_id = node_id
         self.connected = False

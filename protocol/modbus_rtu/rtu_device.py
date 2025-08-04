@@ -15,6 +15,7 @@ from dataclasses import dataclass, asdict
 
 from util.debug import LoggerManager
 from controller.device import Protocol
+from db.db import NodeRecord, EnergyMeterRecord
 from controller.node import Node, ModbusRTUNode
 from controller.meter import EnergyMeter, EnergyMeterType, EnergyMeterOptions
 
@@ -35,9 +36,9 @@ class ModbusRTUOptions:
         stopbits (int): Number of stop bits used in the serial connection (usually 1 or 2).
         parity (str): Parity setting ('N' for None, 'E' for Even, 'O' for Odd).
         bytesize (int): Number of data bits (commonly 8).
-        read_period (int): Time in seconds between consecutive read cycles.
-        timeout (float): Timeout duration in seconds for a single request.
-        retries (int): Number of retry attempts before marking a read as failed.
+        read_period (int): Time in seconds between consecutive read cycles (default: 5).
+        timeout (int): Timeout duration in seconds for a single request (default: 5).
+        retries (int): Number of retry attempts before marking a read as failed (default: 3).
     """
 
     slave_id: int
@@ -46,9 +47,9 @@ class ModbusRTUOptions:
     stopbits: int
     parity: str
     bytesize: int
-    read_period: int
-    timeout: float
-    retries: int
+    read_period: int = 5
+    timeout: int = 5
+    retries: int = 3
 
     def get_connection_options(self) -> Dict[str, Any]:
         """
@@ -121,13 +122,20 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             stopbits=self.connection_options.stopbits,
             parity=self.connection_options.parity,
             bytesize=self.connection_options.bytesize,
-            timeout=self.connection_options.timeout,
+            timeout=float(self.connection_options.timeout),
             retries=self.connection_options.retries,
         )
 
         self.nodes = nodes if nodes else set()
         self.modbus_rtu_nodes: Set[ModbusRTUNode] = {node for node in self.nodes if isinstance(node, ModbusRTUNode)}
+
         self.connection_open = False
+
+        self.run_connection_task = False
+        self.run_receiver_task = False
+
+        self.connection_task: asyncio.Task | None = None
+        self.receiver_task: asyncio.Task | None = None
         self.start()
 
     def start(self) -> None:
@@ -142,8 +150,29 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         """
 
         loop = asyncio.get_event_loop()
-        self.connection_task: asyncio.Task = loop.create_task(self.manage_connection())
-        self.receiver_task: asyncio.Task = loop.create_task(self.receiver())
+        self.run_connection_task = True
+        self.run_receiver_task = True
+        self.connection_task = loop.create_task(self.manage_connection())
+        self.receiver_task = loop.create_task(self.receiver())
+
+    def stop(self) -> None:
+        """
+        Stops the background tasks for the energy meter.
+
+        This method gracefully shuts down the device by:
+            - Setting control flags to stop the connection manager and receiver loops
+            - Clearing the task references to allow garbage collection
+            - Should be called during device shutdown or when stopping monitoring
+
+        Note:
+            The actual tasks may take a short time to complete their current cycle
+            before fully stopping due to the async nature of the loops.
+        """
+
+        self.run_connection_task = False
+        self.run_receiver_task = False
+        self.connection_task = None
+        self.receiver_task = None
 
     async def manage_connection(self):
         """
@@ -153,7 +182,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
         logger = LoggerManager.get_logger(__name__)
 
-        while True:
+        while self.run_connection_task:
             try:
                 logger.info(f"Trying to connect to client {self.name} with id {self.id}...")
                 self.connection_open = self.client.connect()
@@ -186,7 +215,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
         logger = LoggerManager.get_logger(__name__)
 
-        while True:
+        while self.run_receiver_task:
             try:
                 if self.connection_open:
                     tasks = [asyncio.to_thread(self.read_float, node) for node in self.modbus_rtu_nodes if node.enabled]
@@ -295,3 +324,27 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             "communication_options": self.connection_options.get_connection_options(),
             "type": self.meter_type,
         }
+
+    def get_meter_record(self) -> EnergyMeterRecord:
+        """
+        Creates a database record representation of the energy meter configuration.
+
+        Returns:
+            EnergyMeterRecord: Record containing meter configuration and all associated nodes.
+        """
+
+        node_records: Set[NodeRecord] = set()
+
+        for node in self.nodes:
+            record = node.get_node_record()
+            node_records.add(record)
+
+        return EnergyMeterRecord(
+            name=self.name,
+            id=self.id,
+            protocol=self.protocol,
+            device_type=self.meter_type,
+            meter_options=self.meter_options.get_meter_options(),
+            connection_options=self.connection_options.get_connection_options(),
+            nodes=node_records,
+        )

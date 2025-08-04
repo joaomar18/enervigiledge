@@ -2,7 +2,7 @@
 
 import asyncio
 from typing import Optional, Dict, Set, Any
-from abc import ABC
+from abc import ABC, abstractmethod
 
 #######################################
 
@@ -40,6 +40,34 @@ class Device(ABC):
 
         self.protocol = protocol
 
+    @abstractmethod
+    def start(self) -> None:
+        """
+        Starts the energy meter device operations.
+
+        This method should be implemented by subclasses to initialize and start
+        the communication protocol, begin data acquisition, and set up any
+        necessary background tasks for the specific device type.
+
+        Raises:
+            NotImplementedError: If the subclass does not implement this method.
+        """
+        pass
+
+    @abstractmethod
+    def stop(self) -> None:
+        """
+        Stops the energy meter device operations.
+
+        This method should be implemented by subclasses to gracefully shutdown
+        the communication protocol, stop data acquisition, and clean up any
+        resources or background tasks associated with the specific device type.
+
+        Raises:
+            NotImplementedError: If the subclass does not implement this method.
+        """
+        pass
+
     def set_connection_state(self, state: bool):
         """
         Updates the connection state of the device.
@@ -59,7 +87,5 @@ class Device(ABC):
             Dict[str, Any]: Dictionary containing the device's ID, name, protocol,
             and connection status.
         """
-
-        print(f"Protocol: {self.protocol}")
 
         return {"id": self.id, "name": self.name, "protocol": self.protocol, "connected": self.connected}

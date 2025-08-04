@@ -21,11 +21,17 @@ import secrets
 
 from util.debug import LoggerManager
 from controller.manager import DeviceManager
+from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
+from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
+from protocol.opcua.opcua_device import OPCUAEnergyMeter
+from controller.conversion import convert_dict_to_energy_meter
 
 #######################################
 
 ###############EXCEPTIONS##############
+
+LoggerManager.get_logger(__name__).setLevel(logging.DEBUG)
 
 
 class InvalidCredentials(Exception):
@@ -302,10 +308,11 @@ class HTTPServer:
         - Authentication is mandatory for any operation that alters or deletes data.
     """
 
-    def __init__(self, host: str, port: int, device_manager: DeviceManager, timedb: TimeDBClient):
+    def __init__(self, host: str, port: int, device_manager: DeviceManager, db: SQLiteDBClient, timedb: TimeDBClient):
         self.host = host
         self.port = port
         self.device_manager = device_manager
+        self.db = db
         self.timedb = timedb
         self.safety = HTTPSafety()
         self.server = FastAPI()
@@ -573,7 +580,7 @@ class HTTPServer:
                 with open(self.safety.USER_CONFIG_PATH, "w") as file:
                     json.dump(config, file, indent=4)
 
-                return {"message": "Login created successfully."}
+                return JSONResponse(content={"message": "Login created successfully."})
 
             except Exception as e:
                 logger.error(f"Failed to create login: {e}")
@@ -651,11 +658,122 @@ class HTTPServer:
                     json.dump(config, file, indent=4)
 
                 self.safety.clean_failed_requests(ip, "/change_password")
-                return {"message": "Password changed successfully."}
+                return JSONResponse(content={"message": "Password changed successfully."})
 
             except Exception as e:
                 self.safety.increment_failed_requests(ip, "/change_password")
                 logger.warning(f"Failed password change attempt from IP {ip}: {e}")
+                return JSONResponse(status_code=400, content={"error": str(e)})
+
+        @self.server.post("/add_device")
+        async def add_device(request: Request, authorization: str = Header(None)):
+            logger = LoggerManager.get_logger(__name__)
+            ip = request.client.host
+
+            try:
+                if self.safety.is_blocked(ip, "/add_device"):
+                    return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
+
+                # Check if token is valid
+                self.safety.check_authorization_token(authorization, request)
+
+                payload = await request.json()
+
+                self.safety.clean_failed_requests(ip, "/add_device")
+                return JSONResponse(content={"message": "Device added sucessfully."})
+
+            except Exception as e:
+                self.safety.increment_failed_requests(ip, "/add_device")
+                logger.warning(f"Failed add device attempt from IP {ip}: {e}")
+                return JSONResponse(status_code=400, content={"error": str(e)})
+
+        @self.server.post("/edit_device")
+        async def edit_device(request: Request, authorization: str = Header(None)):
+            logger = LoggerManager.get_logger(__name__)
+            ip = request.client.host
+
+            try:
+                if self.safety.is_blocked(ip, "/edit_device"):
+                    return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
+
+                # Check if token is valid
+                self.safety.check_authorization_token(authorization, request)
+
+                payload = await request.json()
+
+                device_data = payload.get("deviceData")
+                device_name = str(device_data['name'])
+                device_id = int(device_data['id'])
+
+                device_nodes = payload.get("deviceNodes")
+
+                device_image = payload.get("deviceImage")
+
+                if not all([device_data, device_nodes]):
+                    raise ValueError("All fields are required")
+
+                # Tries to initialize a new energy meter with the given configuration. Throws exception if an error is found in the configuration
+                energy_meter: ModbusRTUEnergyMeter | OPCUAEnergyMeter = convert_dict_to_energy_meter(device_data, device_nodes)
+
+                device = self.device_manager.get_device(device_name, device_id)
+                if not device:
+                    raise ValueError(f"Device not found with name {device_name} and id {device_id}")
+
+                device.stop()
+                self.device_manager.delete_device(device)
+
+                if self.db.update_energy_meter(energy_meter.get_meter_record()):
+
+                    self.device_manager.add_device(energy_meter)
+
+                    self.safety.clean_failed_requests(ip, "/edit_device")
+                    return JSONResponse(content={"message": "Device edited sucessfully."})
+                
+                else:
+                    raise Exception("Could not update device with name {device_name} and id {device_id} in the database.")
+
+            except Exception as e:
+                self.safety.increment_failed_requests(ip, "/edit_device")
+                logger.exception(f"Failed edit device attempt from IP {ip}: {e}")
+                return JSONResponse(status_code=400, content={"error": str(e)})
+
+        @self.server.delete("/delete_device")
+        async def delete_device(request: Request, authorization: str = Header(None)):
+            logger = LoggerManager.get_logger(__name__)
+            ip = request.client.host
+
+            try:
+                if self.safety.is_blocked(ip, "/delete_device"):
+                    return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
+
+                # Check if token is valid
+                self.safety.check_authorization_token(authorization, request)
+
+                payload = await request.json()
+
+                device_name = payload.get("deviceName")
+                device_id = payload.get("deviceID")
+
+                if not all([device_name, device_id]):
+                    raise ValueError("All fields are required")
+
+                device = self.device_manager.get_device(device_name, device_id)
+                if not device:
+                    raise ValueError(f"Device not found with name {device_name} and id {device_id}")
+
+                device.stop()
+                self.device_manager.delete_device(device)
+                if self.db.delete_energy_meter(device.get_meter_record()):
+
+                    self.safety.clean_failed_requests(ip, "/delete_device")
+                    return JSONResponse(content={"message": "Device deleted sucessfully."})
+                
+                else:
+                    raise Exception("Could not delete device with name {device_name} and id {device_id} from the database.")
+
+            except Exception as e:
+                self.safety.increment_failed_requests(ip, "/delete_device")
+                logger.warning(f"Failed delete device attempt from IP {ip}: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
         @self.server.get("/get_device_state")

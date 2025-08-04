@@ -187,15 +187,18 @@ class DeviceManager:
                         name=node_record.name,
                         type=node_type,
                         register=cfg["register"],
-                        unit=cfg["unit"],
+                        unit=cfg.get("unit"),
                         publish=cfg.get("publish", True),
                         calculated=cfg.get("calculated", False),
                         logging=cfg.get("logging", False),
                         logging_period=cfg.get("logging_period", 15),
                         min_alarm=cfg.get("min_alarm", False),
                         max_alarm=cfg.get("max_alarm", False),
-                        min_alarm_value=cfg.get("min_alarm_value", 0.0),
-                        max_alarm_value=cfg.get("max_alarm_value", 0.0),
+                        min_alarm_value=cfg.get("min_alarm_value"),
+                        max_alarm_value=cfg.get("max_alarm_value"),
+                        incremental_node=cfg.get("incremental_node"),
+                        positive_incremental=cfg.get("positive_incremental"),
+                        calculate_increment=cfg.get("calculate_increment"),
                     )
                 )
 
@@ -205,15 +208,18 @@ class DeviceManager:
                         name=node_record.name,
                         type=node_type,
                         node_id=cfg["node_id"],
-                        unit=cfg["unit"],
+                        unit=cfg.get("unit"),
                         publish=cfg.get("publish", True),
                         calculated=cfg.get("calculated", False),
                         logging=cfg.get("logging", False),
                         logging_period=cfg.get("logging_period", 15),
                         min_alarm=cfg.get("min_alarm", False),
                         max_alarm=cfg.get("max_alarm", False),
-                        min_alarm_value=cfg.get("min_alarm_value", 0.0),
-                        max_alarm_value=cfg.get("max_alarm_value", 0.0),
+                        min_alarm_value=cfg.get("min_alarm_value"),
+                        max_alarm_value=cfg.get("max_alarm_value"),
+                        incremental_node=cfg.get("incremental_node"),
+                        positive_incremental=cfg.get("positive_incremental"),
+                        calculate_increment=cfg.get("calculate_increment"),
                     )
                 )
 
@@ -222,18 +228,18 @@ class DeviceManager:
                     Node(
                         name=node_record.name,
                         type=node_type,
-                        unit=cfg["unit"],
+                        unit=cfg.get("unit"),
                         publish=cfg.get("publish", True),
                         calculated=cfg.get("calculated", False),
                         logging=cfg.get("logging", False),
                         logging_period=cfg.get("logging_period", 15),
                         min_alarm=cfg.get("min_alarm", False),
                         max_alarm=cfg.get("max_alarm", False),
-                        min_alarm_value=cfg.get("min_alarm_value", 0.0),
-                        max_alarm_value=cfg.get("max_alarm_value", 0.0),
-                        incremental_node=cfg.get("incremental_node", False),
-                        positive_incremental=cfg.get("positive_incremental", False),
-                        calculate_increment=cfg.get("calculate_increment", True),
+                        min_alarm_value=cfg.get("min_alarm_value"),
+                        max_alarm_value=cfg.get("max_alarm_value"),
+                        incremental_node=cfg.get("incremental_node"),
+                        positive_incremental=cfg.get("positive_incremental"),
+                        calculate_increment=cfg.get("calculate_increment"),
                     )
                 )
 
