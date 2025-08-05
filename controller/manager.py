@@ -87,19 +87,18 @@ class DeviceManager:
 
         self.devices.discard(device)
 
-    def get_device(self, name: str, device_id: int) -> Optional[Device]:
+    def get_device(self, device_id: int) -> Optional[Device]:
         """
-        Retrieves a device by name and ID.
+        Retrieves a device by ID.
 
         Args:
-            name (str): The name of the device.
             device_id (int): The unique identifier of the device.
 
         Returns:
             Optional[Device]: The matched device, or None if not found.
         """
 
-        return next((device for device in self.devices if device.name == name and device.id == device_id), None)
+        return next((device for device in self.devices if device.id == device_id), None)
 
     async def handle_devices(self):
         """

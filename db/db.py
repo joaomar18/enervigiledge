@@ -190,6 +190,7 @@ class SQLiteDBClient:
                 )
 
             self.conn.commit()
+            logger.info(f"Successfully added energy meter '{record.name}' with ID {device_id}")
             return device_id
 
         except Exception as e:
@@ -225,7 +226,7 @@ class SQLiteDBClient:
 
             # Delete existing device (nodes will be cascade deleted due to foreign key)
             self.cursor.execute("DELETE FROM devices WHERE id = ?", (record.id,))
-            
+
             if self.cursor.rowcount == 0:
                 logger.warning(f"No energy meter found with ID {record.id}")
                 self.conn.rollback()
@@ -237,8 +238,7 @@ class SQLiteDBClient:
                 INSERT INTO devices (id, name, protocol, device_type, meter_options, connection_options)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (record.id, record.name, record.protocol, record.device_type, 
-                 json.dumps(record.meter_options), json.dumps(record.connection_options)),
+                (record.id, record.name, record.protocol, record.device_type, json.dumps(record.meter_options), json.dumps(record.connection_options)),
             )
 
             # Insert all associated nodes
@@ -261,7 +261,7 @@ class SQLiteDBClient:
             logger.exception(f"Failed to update energy meter '{record.name}' with ID {record.id}: {e}")
             self.conn.rollback()
             return False
-        
+
     def delete_energy_meter(self, record: EnergyMeterRecord) -> bool:
         """
         Deletes an energy meter and all its associated nodes from the database.
@@ -289,7 +289,7 @@ class SQLiteDBClient:
 
             # Delete the device (nodes will be cascade deleted due to foreign key)
             self.cursor.execute("DELETE FROM devices WHERE id = ?", (record.id,))
-            
+
             if self.cursor.rowcount == 0:
                 logger.warning(f"No energy meter found with ID {record.id}")
                 self.conn.rollback()
@@ -358,7 +358,7 @@ class SQLiteDBClient:
             logger.exception(f"Failed to retrieve energy meters: {e}")
 
         return meters
-    
+
     def close(self):
         """
         Closes the SQLite connection.

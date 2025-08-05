@@ -4,10 +4,15 @@ from cryptography.fernet import Fernet
 from datetime import datetime
 import random
 import time
+import os
+from fastapi import UploadFile
+from PIL import Image
+import io
 
 #######################################
 
 #############LOCAL IMPORTS#############
+
 
 #######################################
 
@@ -91,3 +96,55 @@ def subtract_datetime_mins(date_time_01: datetime, date_time_02: datetime) -> in
     minutes_01 = date_time_01.minute + (date_time_01.hour * 60)
     minutes_02 = date_time_02.minute + (date_time_02.hour * 60)
     return minutes_01 - minutes_02
+
+
+def process_and_save_image(image: UploadFile, device_id: int, min_px: int) -> None:
+    """
+    Processes and saves an uploaded image with resizing and optimization.
+
+    The function:
+    1. Validates the uploaded file is an image
+    2. Resizes the image maintaining aspect ratio (200px minimum dimension)
+    3. Saves as PNG with optimization (preserves transparency)
+    4. Saves to db/device_img/ directory
+
+    Args:
+        image (UploadFile): The uploaded image file from FastAPI
+        device_id (int): The device ID to use as filename
+        min_px (int); The minimum number of pixels in a direction of the image to be saved
+
+    Raises:
+        ValueError: If the file is not a valid image or processing fails
+    """
+
+    # Validate content type
+    if not image.content_type or not image.content_type.startswith('image/'):
+        raise ValueError(f"Invalid file type: {image.content_type}. Only image files are allowed.")
+
+    save_dir = "db/device_img"
+    os.makedirs(save_dir, exist_ok=True)
+
+    try:
+        image_data = image.file.read()
+
+        with Image.open(io.BytesIO(image_data)) as img:
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+
+            original_width, original_height = img.size
+
+            if original_width <= original_height:
+                new_width = min_px
+                new_height = int((original_height * min_px) / original_width)
+            else:
+                new_height = min_px
+                new_width = int((original_width * min_px) / original_height)
+
+            resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            png_path = os.path.join(save_dir, f"{device_id}.png")
+            resized_img.save(png_path, format='PNG', optimize=True)
+
+    except Exception as e:
+        raise ValueError(f"Failed to process image: {str(e)}")
+    finally:
+        image.file.seek(0)

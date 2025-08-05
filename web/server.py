@@ -4,7 +4,7 @@ import os
 import asyncio
 import logging
 import json
-from fastapi import FastAPI, Request, Header
+from fastapi import FastAPI, Request, Header, Form, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from uvicorn import Config, Server
@@ -20,6 +20,7 @@ import secrets
 #############LOCAL IMPORTS#############
 
 from util.debug import LoggerManager
+from util.functions import process_and_save_image
 from controller.manager import DeviceManager
 from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
@@ -677,12 +678,28 @@ class HTTPServer:
                 # Check if token is valid
                 self.safety.check_authorization_token(authorization, request)
 
-                payload = await request.json()
+                content_type = request.headers.get("content-type", "")
 
-                device_data = payload.get("deviceData")
-                device_name = device_data.get("name")
-                device_nodes = payload.get("deviceNodes")
-                device_image = payload.get("deviceImage")
+                if content_type.startswith("multipart/form-data"):
+                    form = await request.form()
+
+                    device_data_str = form.get("deviceData")
+                    device_nodes_str = form.get("deviceNodes")
+                    device_image = form.get("deviceImage")
+
+                    if not device_data_str or not device_nodes_str:
+                        raise ValueError("Device data and device nodes are required")
+
+                    device_data = json.loads(device_data_str)
+                    device_nodes = json.loads(device_nodes_str)
+
+                else:
+                    payload = await request.json()
+                    device_data = payload.get("deviceData")
+                    device_nodes = payload.get("deviceNodes")
+                    device_image = None
+
+                device_name = device_data.get("name") if device_data else None
 
                 if not all([device_data, device_nodes]):
                     raise ValueError("All fields are required")
@@ -694,6 +711,10 @@ class HTTPServer:
                 device_id = self.db.insert_energy_meter(energy_meter_record)
                 if device_id is not None:
                     energy_meter.id = device_id
+                    
+                    if device_image:
+                        process_and_save_image(device_image, device_id, 200)
+                    
                     self.device_manager.add_device(energy_meter)
 
                     self.safety.clean_failed_requests(ip, "/add_device")
@@ -703,7 +724,7 @@ class HTTPServer:
 
             except Exception as e:
                 self.safety.increment_failed_requests(ip, "/add_device")
-                logger.warning(f"Failed add device attempt from IP {ip}: {e}")
+                logger.exception(f"Failed add device attempt from IP {ip}: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
         @self.server.post("/edit_device")
@@ -718,13 +739,31 @@ class HTTPServer:
                 # Check if token is valid
                 self.safety.check_authorization_token(authorization, request)
 
-                payload = await request.json()
+                content_type = request.headers.get("content-type", "")
 
-                device_data = payload.get("deviceData")
-                device_name = device_data.get("name")
-                device_id = device_data.get("id")
-                device_nodes = payload.get("deviceNodes")
-                device_image = payload.get("deviceImage")
+                if content_type.startswith("multipart/form-data"):
+                    form = await request.form()
+
+                    device_data_str = form.get("deviceData")
+                    device_nodes_str = form.get("deviceNodes")
+                    device_image = form.get("deviceImage")  # This will be the file
+
+                    if not device_data_str or not device_nodes_str:
+                        raise ValueError("Device data and device nodes are required")
+
+                    device_data = json.loads(device_data_str)
+                    device_nodes = json.loads(device_nodes_str)
+
+                    if device_image and hasattr(device_image, 'filename'):
+                        logger.info(f"Received image file: {device_image.filename}")
+
+                else:
+                    payload = await request.json()
+                    device_data = payload.get("deviceData")
+                    device_nodes = payload.get("deviceNodes")
+                    device_image = None
+
+                device_id = device_data.get("id") if device_data else None
 
                 if not all([device_data, device_nodes]):
                     raise ValueError("All fields are required")
@@ -732,14 +771,23 @@ class HTTPServer:
                 # Tries to initialize a new energy meter with the given configuration. Throws exception if an error is found in the configuration
                 energy_meter: ModbusRTUEnergyMeter | OPCUAEnergyMeter = convert_dict_to_energy_meter(device_data, device_nodes)
 
-                device = self.device_manager.get_device(device_name, device_id)
+                device = self.device_manager.get_device(device_id)
                 if not device:
-                    raise ValueError(f"Device not found with name {device_name} and id {device_id}")
+                    raise ValueError(f"Device not found with id {device_id}")
 
                 device.stop()
                 self.device_manager.delete_device(device)
 
                 if self.db.update_energy_meter(energy_meter.get_meter_record()):
+                    
+                    # Process and save image if provided
+                    if device_image:
+                        try:
+                            image_path = process_and_save_image(device_image, device_id)
+                            logger.info(f"Image updated successfully: {image_path}")
+                        except Exception as img_error:
+                            logger.warning(f"Failed to process image: {img_error}")
+                            # Continue without failing the device update
 
                     self.device_manager.add_device(energy_meter)
 
@@ -747,7 +795,7 @@ class HTTPServer:
                     return JSONResponse(content={"message": "Device edited sucessfully."})
 
                 else:
-                    raise Exception(f"Could not update device with name {device_name} and id {device_id} in the database.")
+                    raise Exception(f"Could not update device with name {device.name if device else 'not found'} and id {device_id} in the database.")
 
             except Exception as e:
                 self.safety.increment_failed_requests(ip, "/edit_device")
@@ -774,9 +822,12 @@ class HTTPServer:
                 if not all([device_name, device_id]):
                     raise ValueError("All fields are required")
 
-                device = self.device_manager.get_device(device_name, device_id)
+                device = self.device_manager.get_device(device_id)
                 if not device:
-                    raise ValueError(f"Device not found with name {device_name} and id {device_id}")
+                    raise ValueError(f"Device not found with id {device_id}")
+
+                if device.name != device_name:
+                    raise ValueError(f"Device name does not match request device_name {device_name} for id {device_id}")
 
                 device.stop()
                 self.device_manager.delete_device(device)
@@ -786,7 +837,7 @@ class HTTPServer:
                     return JSONResponse(content={"message": "Device deleted sucessfully."})
 
                 else:
-                    raise Exception(f"Could not delete device with name {device_name} and id {device_id} from the database.")
+                    raise Exception(f"Could not delete device with name {device.name if device else 'not found'} and id {device_id} from the database.")
 
             except Exception as e:
                 self.safety.increment_failed_requests(ip, "/delete_device")
@@ -798,8 +849,7 @@ class HTTPServer:
             """
             Endpoint to retrieve the current state of a device via GET query parameters.
 
-            Expects two query parameters:
-                - name (str): The name of the device.
+            Expects one query parameters:
                 - id   (int): The unique ID of the device.
 
             Validates the query parameters and ensures the specified device exists. If valid,
@@ -816,25 +866,24 @@ class HTTPServer:
 
             try:
                 # Read parameters from the query string, not the JSON body
-                name = request.query_params.get("name")
                 id_raw = request.query_params.get("id")
 
-                if not name or not id_raw:
-                    raise ValueError("Missing required query parameters: 'name' and 'id'")
+                if not id_raw:
+                    raise ValueError("Missing required query parameters: 'id'")
 
                 try:
                     device_id = int(id_raw)
                 except ValueError:
                     raise ValueError(f"Invalid device id: {id_raw!r}")
 
-                device = self.device_manager.get_device(name, device_id)
+                device = self.device_manager.get_device(device_id)
                 if not device:
-                    raise KeyError(f"Device with name {name!r} and id {device_id} does not exist.")
+                    raise KeyError(f"Device with id {device_id} does not exist.")
 
                 return JSONResponse(content=device.get_device_state())
 
             except Exception as e:
-                logger.error(f"Failed to get device state for name={name!r}, id={id_raw!r}: {e}")
+                logger.error(f"Failed to get device state for id={id_raw!r}: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
         @self.server.get("/get_all_device_state")
@@ -873,7 +922,6 @@ class HTTPServer:
             Endpoint to retrieve the state of all nodes in a specific device.
 
             Expects a JSON payload with:
-                - name (str): The name of the device.
                 - id (int): The unique ID of the device.
                 - filter (str, optional): If provided, only return nodes whose names contain this string.
 
@@ -893,17 +941,16 @@ class HTTPServer:
 
             try:
                 data = await request.json()
-                name = data.get("name")
                 id = data.get("id")
                 filter_str = data.get("filter")  # Optional
 
-                if not all([name, id]):
-                    raise ValueError("Missing one or more required fields: 'name', 'id'.")
+                if not all([id]):
+                    raise ValueError("Missing one or more required fields: 'id'.")
 
-                device = self.device_manager.get_device(name, id)
+                device = self.device_manager.get_device(id)
 
                 if not device:
-                    raise KeyError(f"Device with name {name} and id {id} does not exist.")
+                    raise KeyError(f"Device with id {id} does not exist.")
 
                 if filter_str:
                     nodes_state = {node.name: node.get_publish_format() for node in device.nodes if filter_str in node.name}
@@ -913,7 +960,7 @@ class HTTPServer:
                 return JSONResponse(content=nodes_state)
 
             except Exception as e:
-                logger.error(f"Failed to get node states for device '{data.get('name', 'unknown')}' with id {data.get('id', 'unknown')}: {e}")
+                logger.error(f"Failed to get node states for device with id {data.get('id', 'unknown')}: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
         @self.server.get("/get_nodes_config")
@@ -921,8 +968,7 @@ class HTTPServer:
             """
             Endpoint to retrieve the configuration of all nodes in a specific device.
 
-            Expects three query parameters:
-                - name (str): The name of the device.
+            Expects two query parameters:
                 - id   (int): The unique ID of the device.
                 - filter (str, optional): If provided, only return nodes whose names contain this string.
 
@@ -936,17 +982,16 @@ class HTTPServer:
 
             try:
 
-                name = request.query_params.get("name")
                 id_raw = request.query_params.get("id")
                 filter_str = request.query_params.get("filter")
 
-                if not name or not id_raw:
-                    raise ValueError("Missing required query parameters: 'name' and 'id'")
+                if not id_raw:
+                    raise ValueError("Missing required query parameters: 'id'")
 
-                device = self.device_manager.get_device(name, int(id_raw))
+                device = self.device_manager.get_device(int(id_raw))
 
                 if not device:
-                    raise KeyError(f"Device with name {name} and id {id} does not exist.")
+                    raise KeyError(f"Device with id {id} does not exist.")
 
                 if filter_str:
                     nodes_config = {}
@@ -965,7 +1010,7 @@ class HTTPServer:
                 return JSONResponse(content=nodes_config)
 
             except Exception as e:
-                logger.error(f"Failed to get device nodes configuration for name={name!r}, id={id_raw!r}: {e}")
+                logger.error(f"Failed to get device nodes configuration for id={id_raw!r}: {e}")
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
         @self.server.get("/get_logs")
@@ -975,7 +1020,6 @@ class HTTPServer:
 
             Requirements:
                 - Request Body: JSON object containing:
-                    - name (str): Name of the target device.
                     - id (int): Unique ID of the target device.
                     - measurement (str): Node name (measurement) whose logs will be retrieved.
                     - start_time (str, optional): ISO format datetime string for the start of the time range.
@@ -998,35 +1042,34 @@ class HTTPServer:
 
             try:
                 data = await request.json()
-                name = data.get("name")
                 id = data.get("id")
                 measurement = data.get("measurement")
                 start_time_str = data.get("start_time")
                 end_time_str = data.get("end_time")
 
-                if not all([name, id, measurement]):
-                    raise ValueError("Missing one or more required fields: 'name', 'id', 'measurement'.")
+                if not all([id, measurement]):
+                    raise ValueError("Missing one or more required fields: 'id', 'measurement'.")
 
                 # Optional time range parsing
                 start_time = datetime.fromisoformat(start_time_str) if start_time_str else None
                 end_time = datetime.fromisoformat(end_time_str) if end_time_str else None
 
-                device = self.device_manager.get_device(name, id)
+                device = self.device_manager.get_device(id)
 
                 if not device:
-                    raise KeyError(f"Device with name {name} and id {id} does not exist.")
+                    raise KeyError(f"Device with id {id} does not exist.")
 
                 if not any(measurement == node.name for node in device.nodes):
-                    raise KeyError(f"Node with name {measurement} does not exist in device {name} with id {id}")
+                    raise KeyError(f"Node with name {measurement} does not exist in device {device.name if device else 'not found'} with id {id}")
 
                 response = self.timedb.get_measurement_data_between(
-                    device_name=name, device_id=id, measurement=measurement, start_time=start_time, end_time=end_time
+                    device_name=device.name, device_id=id, measurement=measurement, start_time=start_time, end_time=end_time
                 )
                 return JSONResponse(content=response)
 
             except Exception as e:
                 logger.error(
-                    f"Failed to retrieve logs for device '{data.get('name', 'unknown')}' with id {data.get('id', 'unknown')}, "
+                    f"Failed to retrieve logs for device '{device.name if device else 'not found'}' with id {data.get('id', 'unknown')}, "
                     f"measurement '{data.get('measurement', 'unknown')}': {e}"
                 )
                 return JSONResponse(status_code=400, content={"error": str(e)})
@@ -1037,7 +1080,6 @@ class HTTPServer:
             Endpoint to delete log data for a specific node from a device.
 
             Expects a JSON payload with the following fields:
-                - name (str): The name of the device.
                 - id (int): The unique ID of the device.
                 - measurement (str): The name of the node to delete logs for.
 
@@ -1057,35 +1099,34 @@ class HTTPServer:
 
                 self.safety.check_authorization_token(authorization, request)
                 data = await request.json()
-                name = data.get("name")
                 id = data.get("id")
                 measurement = data.get("measurement")
 
-                if not all([name, id, measurement]):
+                if not all([id, measurement]):
                     raise ValueError("Missing one or more required fields: 'name', 'id', 'measurement'.")
 
-                device = self.device_manager.get_device(name, id)
+                device = self.device_manager.get_device(id)
                 if not device:
-                    raise KeyError(f"Device with name {name} and id {id} does not exist.")
+                    raise KeyError(f"Device with id {id} does not exist.")
 
                 if not any(measurement == node.name for node in device.nodes):
-                    raise KeyError(f"Node with name {measurement} does not exist in device {name} with id {id}.")
+                    raise KeyError(f"Node with name {measurement} does not exist in device {device.name if device else 'not found'} with id {id}.")
 
-                result = self.timedb.delete_measurement_data(device_name=name, device_id=id, measurement=measurement)
+                result = self.timedb.delete_measurement_data(device_name=device.name, device_id=id, measurement=measurement)
 
                 self.safety.clean_failed_requests(ip, "/delete_logs")
 
                 message = (
-                    f"Successfully deleted logs for node '{measurement}' from device '{name}' (id {id})."
+                    f"Successfully deleted logs for node '{measurement}' from device '{device.name}' (id {id})."
                     if result
-                    else f"Failed to delete logs for node '{measurement}' from device '{name}' (id {id})."
+                    else f"Failed to delete logs for node '{measurement}' from device '{device.name}' (id {id})."
                 )
                 return JSONResponse(content={"result": message})
 
             except Exception as e:
                 self.safety.increment_failed_requests(ip, "/delete_logs")
                 logger.error(
-                    f"Failed to delete logs for device '{data.get('name', 'unknown')}' with id {data.get('id', 'unknown')}, "
+                    f"Failed to delete logs for device '{device.name if device else 'not found'}' with id {data.get('id', 'unknown')}, "
                     f"measurement '{data.get('measurement', 'unknown')}': {e}"
                 )
                 return JSONResponse(status_code=400, content={"error": str(e)})
