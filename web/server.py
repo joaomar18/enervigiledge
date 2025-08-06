@@ -4,7 +4,7 @@ import os
 import asyncio
 import logging
 import json
-from fastapi import FastAPI, Request, Header, Form, File, UploadFile
+from fastapi import FastAPI, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from uvicorn import Config, Server
@@ -20,7 +20,7 @@ import secrets
 #############LOCAL IMPORTS#############
 
 from util.debug import LoggerManager
-from util.functions import process_and_save_image
+from util.functions import process_and_save_image, get_device_image, delete_device_image
 from controller.manager import DeviceManager
 from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
@@ -711,10 +711,10 @@ class HTTPServer:
                 device_id = self.db.insert_energy_meter(energy_meter_record)
                 if device_id is not None:
                     energy_meter.id = device_id
-                    
+
                     if device_image:
-                        process_and_save_image(device_image, device_id, 200)
-                    
+                        process_and_save_image(device_image, device_id, 200, "db/device_img/")
+
                     self.device_manager.add_device(energy_meter)
 
                     self.safety.clean_failed_requests(ip, "/add_device")
@@ -779,15 +779,10 @@ class HTTPServer:
                 self.device_manager.delete_device(device)
 
                 if self.db.update_energy_meter(energy_meter.get_meter_record()):
-                    
+
                     # Process and save image if provided
                     if device_image:
-                        try:
-                            image_path = process_and_save_image(device_image, device_id)
-                            logger.info(f"Image updated successfully: {image_path}")
-                        except Exception as img_error:
-                            logger.warning(f"Failed to process image: {img_error}")
-                            # Continue without failing the device update
+                        process_and_save_image(device_image, device_id, 200, "db/device_img/")
 
                     self.device_manager.add_device(energy_meter)
 
@@ -833,6 +828,9 @@ class HTTPServer:
                 self.device_manager.delete_device(device)
                 if self.db.delete_energy_meter(device.get_meter_record()):
 
+                    if not delete_device_image(device_id, "db/device_img/"):
+                        raise ValueError(f"Could not delete device image of device id: {device_id}")
+                    
                     self.safety.clean_failed_requests(ip, "/delete_device")
                     return JSONResponse(content={"message": "Device deleted sucessfully."})
 
@@ -849,12 +847,27 @@ class HTTPServer:
             """
             Endpoint to retrieve the current state of a device via GET query parameters.
 
-            Expects one query parameters:
-                - id   (int): The unique ID of the device.
+            Expects one query parameter:
+                - id (int): The unique ID of the device.
 
             Validates the query parameters and ensures the specified device exists. If valid,
             returns a JSON response with the current device state, including metadata, protocol,
-            connection status, and configuration.
+            connection status, configuration, and device image.
+
+            Device State Response Includes:
+                - ID
+                - Name
+                - Protocol
+                - Connection status
+                - Meter options
+                - Meter type
+                - Image (base64-encoded device image or default image)
+
+            Image Handling:
+                - If a device-specific image exists (db/device_img/{device_id}.png), it will be included.
+                - If no device-specific image exists, falls back to the default image (db/device_img/default.png).
+                - If neither image exists, the image field will be null.
+                - Image data is base64-encoded for JSON transport.
 
             Returns:
                 JSONResponse:
@@ -880,7 +893,9 @@ class HTTPServer:
                 if not device:
                     raise KeyError(f"Device with id {device_id} does not exist.")
 
-                return JSONResponse(content=device.get_device_state())
+                device_state = device.get_device_state()
+                device_state["image"] = get_device_image(device.id, "default", "db/device_img/")
+                return JSONResponse(content=device_state)
 
             except Exception as e:
                 logger.error(f"Failed to get device state for id={id_raw!r}: {e}")
@@ -899,6 +914,13 @@ class HTTPServer:
                 - Connection status
                 - Meter options
                 - Meter type
+                - Image (base64-encoded device image or default image)
+
+            Image Handling:
+                - If a device-specific image exists (db/device_img/{device_id}.png), it will be included.
+                - If no device-specific image exists, falls back to the default image (db/device_img/default.png).
+                - If neither image exists, the image field will be null.
+                - Image data is base64-encoded for JSON transport.
 
             Returns:
                 JSONResponse:
@@ -909,7 +931,12 @@ class HTTPServer:
             logger = LoggerManager.get_logger(__name__)
 
             try:
-                all_states = [device.get_device_state() for device in self.device_manager.devices]
+                all_states = []
+                for device in self.device_manager.devices:
+                    device_state = device.get_device_state()
+                    device_state["image"] = get_device_image(device.id, "default", "db/device_img/")
+                    all_states.append(device_state)
+
                 return JSONResponse(content=all_states)
 
             except Exception as e:
@@ -1072,6 +1099,19 @@ class HTTPServer:
                     f"Failed to retrieve logs for device '{device.name if device else 'not found'}' with id {data.get('id', 'unknown')}, "
                     f"measurement '{data.get('measurement', 'unknown')}': {e}"
                 )
+                return JSONResponse(status_code=400, content={"error": str(e)})
+
+        @self.server.get("/get_default_image")
+        async def get_default_image(request: Request): 
+
+            logger = LoggerManager.get_logger(__name__)
+
+            try:
+                image = get_device_image(device_id=0, default_image_str="default", directory="db/device_img/", force_default=True)
+                return JSONResponse(content=image)
+
+            except Exception as e:
+                logger.error(f"Failed to get device default image")
                 return JSONResponse(status_code=400, content={"error": str(e)})
 
         @self.server.delete("/delete_logs")
