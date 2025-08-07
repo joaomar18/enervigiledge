@@ -66,7 +66,7 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
     nodes.add(ModbusRTUNode(name="l2_active_power", type=NodeType.FLOAT, register=0x0020, unit="kW"))
     nodes.add(ModbusRTUNode(name="l2_reactive_power", type=NodeType.FLOAT, register=0x0028, unit="kVAr"))
     nodes.add(ModbusRTUNode(name="l2_forward_active_energy", type=NodeType.FLOAT, register=0x010C, unit="kWh"))
-    nodes.add(ModbusRTUNode(name="l2_reverse_reactive_energy", type=NodeType.FLOAT, register=0x012C, unit="kVArh"))
+    nodes.add(ModbusRTUNode(name="l2_reverse_active_energy", type=NodeType.FLOAT, register=0x0114, unit="kWh"))
     nodes.add(ModbusRTUNode(name="l2_forward_reactive_energy", type=NodeType.FLOAT, register=0x0124, unit="kVArh"))
     nodes.add(ModbusRTUNode(name="l2_reverse_reactive_energy", type=NodeType.FLOAT, register=0x012C, unit="kVArh"))
     nodes.add(Node(name="l2_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, calculate_increment=False, calculated=True))
@@ -77,6 +77,8 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
 
     nodes.add(ModbusRTUNode(name="l3_voltage", type=NodeType.FLOAT, register=0x0012, unit="V", logging=True, logging_period=1))
     nodes.add(ModbusRTUNode(name="l3_current", type=NodeType.FLOAT, register=0x001A, unit="A"))
+    nodes.add(ModbusRTUNode(name="l3_active_power", type=NodeType.FLOAT, register=0x0022, unit="kW"))
+    nodes.add(ModbusRTUNode(name="l3_reactive_power", type=NodeType.FLOAT, register=0x002A, unit="kVAr"))
     nodes.add(ModbusRTUNode(name="l3_forward_active_energy", type=NodeType.FLOAT, register=0x010E, unit="kWh"))
     nodes.add(ModbusRTUNode(name="l3_reverse_active_energy", type=NodeType.FLOAT, register=0x0116, unit="kWh"))
     nodes.add(ModbusRTUNode(name="l3_forward_reactive_energy", type=NodeType.FLOAT, register=0x0126, unit="kVArh"))
@@ -126,8 +128,8 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
 
     return EnergyMeterRecord(
         name="OR-WE-516 Energy Meter",
-        protocol=Protocol.MODBUS_RTU.value,
-        device_type=EnergyMeterType.THREE_PHASE.value,
+        protocol=Protocol.MODBUS_RTU,
+        device_type=EnergyMeterType.THREE_PHASE,
         meter_options=meter_options,
         connection_options=connection_options,
         nodes=node_records,
@@ -236,8 +238,8 @@ def get_sm1238_db() -> EnergyMeterRecord:
 
     return EnergyMeterRecord(
         name="SM1238 S7-1200 Meter",
-        protocol=Protocol.OPC_UA.value,
-        device_type=EnergyMeterType.THREE_PHASE.value,
+        protocol=Protocol.OPC_UA,
+        device_type=EnergyMeterType.THREE_PHASE,
         meter_options=meter_options,
         connection_options=connection_options,
         nodes=node_records,

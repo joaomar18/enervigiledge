@@ -15,16 +15,22 @@ from abc import ABC, abstractmethod
 
 from controller.device import Device
 from controller.node import NodeType, Node
+from controller.enums import Protocol, EnergyMeterType, PowerFactorDirection
 from mqtt.client import MQTTMessage
 from db.timedb import Measurement
 from db.db import EnergyMeterRecord
-from util.debug import LoggerManager
 import util.functions as functions
+from util.debug import LoggerManager
 
 #######################################
 
-
 ###############EXCEPTIONS##############
+
+
+class MeterError(Exception):
+    """Raised when there is an error on the meter configuration"""
+
+    pass
 
 
 class UnitError(Exception):
@@ -49,39 +55,6 @@ class LoggingPeriodError(Exception):
     """Raised when at least two nodes of the same type have different logging periods."""
 
     pass
-
-
-#############ENUMERATIONS##############
-
-
-class EnergyMeterType(Enum):
-    """
-    Enumeration of supported energy meter configurations.
-
-    Attributes:
-        SINGLE_PHASE (str): Single-phase meter.
-        THREE_PHASE (str): Three-phase meter.
-    """
-
-    SINGLE_PHASE = "SINGLE_PHASE"
-    THREE_PHASE = "THREE_PHASE"
-
-
-class PowerFactorDirection(Enum):
-    """
-    Enumeration representing the direction of power factor.
-
-    Attributes:
-        UNKNOWN (str): Power factor direction is unknown.
-        UNITARY (str): Power factor is unitary (1.0).
-        LAGGING (str): Power factor is lagging (inductive load).
-        LEADING (str): Power factor is leading (capacitive load).
-    """
-
-    UNKNOWN = "UNKNOWN"
-    UNITARY = "UNITARY"
-    LAGGING = "LAGGING"
-    LEADING = "LEADING"
 
 
 ################CLASSES################
@@ -340,19 +313,23 @@ class EnergyMeterNodes:
 
     def validate_nodes(self) -> None:
         """
-        Performs full validation of all nodes configured for the energy meter.
+        Performs comprehensive validation of all nodes configured for the energy meter.
 
-        This includes:
-        - Validating node names and units against predefined valid options.
-        - Ensuring calculated nodes have all required dependencies based on their type and phase.
-        - Checking that power factor and power direction nodes are properly supported.
-        - Verifying logging consistency across related nodes.
+        Validates node names, units, dependencies, and logging consistency based on
+        meter type (single-phase or three-phase) and configuration options.
+
+        Raises:
+            NodeUnknownError: If any node name is not recognized.
+            UnitError: If any node has an invalid unit.
+            NodeMissingError: If required dependency nodes are missing.
+            LoggingPeriodError: If nodes have inconsistent logging periods.
+            MeterError: If the meter type is invalid.
         """
 
         for node in self.nodes.values():
             EnergyMeterNodes.validate_node(node)
 
-        if self.meter_type == EnergyMeterType.SINGLE_PHASE:
+        if self.meter_type is EnergyMeterType.SINGLE_PHASE:
             for energy_type in ("active", "reactive"):
                 self.validate_energy_nodes("", energy_type)
 
@@ -362,7 +339,7 @@ class EnergyMeterNodes:
             self.validate_pf_nodes("")
             self.validate_pf_direction_nodes("")
 
-        elif self.meter_type == EnergyMeterType.THREE_PHASE:
+        elif self.meter_type is EnergyMeterType.THREE_PHASE:
             for phase in ("l1_", "l2_", "l3_", "total_"):
                 for energy_type in ("active", "reactive"):
                     self.validate_energy_nodes(phase, energy_type)
@@ -372,6 +349,8 @@ class EnergyMeterNodes:
 
                 self.validate_pf_nodes(phase)
                 self.validate_pf_direction_nodes(phase)
+        else:
+            raise MeterError(f"Meter type is not valid")
 
         EnergyMeterNodes.validate_logging_consistency(self.nodes)
 
@@ -398,7 +377,7 @@ class EnergyMeterNodes:
         if not node or not node.calculated or node.custom:
             return
 
-        if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
+        if self.meter_type is EnergyMeterType.THREE_PHASE and phase == "total_":
             missing_phases = []
             for p in ["l1_", "l2_", "l3_"]:
                 sub_node = self.nodes.get(f"{p}{energy_type}_energy")
@@ -443,7 +422,7 @@ class EnergyMeterNodes:
         if not node or not node.calculated or node.custom:
             return
 
-        if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
+        if self.meter_type is EnergyMeterType.THREE_PHASE and phase == "total_":
             missing_phases = [f"{p}{power_type}_power" for p in ["l1_", "l2_", "l3_"] if not self.nodes.get(f"{p}{power_type}_power")]
             if missing_phases:
                 raise NodeMissingError(f"Missing phase power nodes for {node_name} calculation: {', '.join(missing_phases)}.")
@@ -491,7 +470,7 @@ class EnergyMeterNodes:
         if not node or not node.calculated or node.custom:
             return
 
-        if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
+        if self.meter_type is EnergyMeterType.THREE_PHASE and phase == "total_":
             missing = []
             for p in ["l1_", "l2_", "l3_"]:
                 active = self.nodes.get(f"{p}active_power")
@@ -534,7 +513,7 @@ class EnergyMeterNodes:
         if not node or not node.calculated or node.custom:
             return
 
-        if self.meter_type == EnergyMeterType.THREE_PHASE and phase == "total_":
+        if self.meter_type is EnergyMeterType.THREE_PHASE and phase == "total_":
             missing = []
             for p in ["l1_", "l2_", "l3_"]:
                 pf = self.nodes.get(f"{p}power_factor")
@@ -637,7 +616,7 @@ class EnergyMeter(Device):
         self,
         id: int,
         name: str,
-        protocol: str,
+        protocol: Protocol,
         publish_queue: asyncio.Queue,
         measurements_queue: asyncio.Queue,
         meter_type: EnergyMeterType,

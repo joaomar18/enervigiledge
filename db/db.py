@@ -10,6 +10,7 @@ from dataclasses import dataclass
 ############### LOCAL IMPORTS ###################
 
 from util.debug import LoggerManager
+from controller.enums import Protocol, EnergyMeterType
 
 #################################################
 
@@ -73,15 +74,15 @@ class EnergyMeterRecord:
     Attributes:
         id (int | None): id of the device, when inserting leave None
         name (str): Human-readable name of the energy meter (e.g., "OR-WE-516 Energy Meter").
-        protocol (str): Communication protocol used by the meter (e.g., "modbus_rtu", "opcua").
-        device_type (str): Type of the meter, typically based on electrical configuration (e.g., "three_phase", "single_phase").
+        protocol (Protocol): Communication protocol used by the meter (e.g., "modbus_rtu", "opcua").
+        device_type (EnergyMeterType): Type of the meter, typically based on electrical configuration (e.g., "three_phase", "single_phase").
         meter_options (Dict[str, Any]): Configuration options related to what the meter should read or expose (e.g., frequency, energy direction).
         connection_options (Dict[str, Any]): Protocol-specific connection settings (e.g., slave ID, port, URL, baudrate).
     """
 
     name: str
-    protocol: str
-    device_type: str
+    protocol: Protocol
+    device_type: EnergyMeterType
     meter_options: Dict[str, Any]
     connection_options: Dict[str, Any]
     nodes: Set[NodeRecord]
@@ -108,6 +109,8 @@ class SQLiteDBClient:
         self.cursor = self.conn.cursor()
         # Enable WAL mode
         self.conn.execute("PRAGMA journal_mode=WAL;")
+        # Enable foreign key constraints
+        self.conn.execute("PRAGMA foreign_keys=ON;")
         self._create_tables()
 
     def _create_tables(self):
@@ -224,7 +227,8 @@ class SQLiteDBClient:
             # Begin transaction
             self.cursor.execute("BEGIN TRANSACTION")
 
-            # Delete existing device (nodes will be cascade deleted due to foreign key)
+            # Delete existing nodes and device
+            self.cursor.execute("DELETE FROM nodes WHERE device_id = ?", (record.id,))
             self.cursor.execute("DELETE FROM devices WHERE id = ?", (record.id,))
 
             if self.cursor.rowcount == 0:
@@ -345,8 +349,8 @@ class SQLiteDBClient:
                 meter = EnergyMeterRecord(
                     id=device_id,
                     name=name,
-                    protocol=protocol,
-                    device_type=device_type,
+                    protocol=Protocol(protocol),
+                    device_type=EnergyMeterType(device_type),
                     meter_options=json.loads(meter_opts_str),
                     connection_options=json.loads(conn_opts_str),
                     nodes=nodes,

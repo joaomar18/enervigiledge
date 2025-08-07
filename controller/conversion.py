@@ -492,7 +492,7 @@ def convert_dict_to_energy_meter(dict_energy_meter: Dict[str, any], dict_nodes: 
             name=name,
             publish_queue=asyncio.Queue(),  # These will need to be provided by the caller
             measurements_queue=asyncio.Queue(),  # These will need to be provided by the caller
-            meter_type=meter_type.value,
+            meter_type=meter_type,
             meter_options=meter_options,
             connection_options=communication_options,
             nodes=nodes,
@@ -505,7 +505,7 @@ def convert_dict_to_energy_meter(dict_energy_meter: Dict[str, any], dict_nodes: 
             name=name,
             publish_queue=asyncio.Queue(),  # These will need to be provided by the caller
             measurements_queue=asyncio.Queue(),  # These will need to be provided by the caller
-            meter_type=meter_type.value,
+            meter_type=meter_type,
             meter_options=meter_options,
             connection_options=communication_options,
             nodes=nodes,

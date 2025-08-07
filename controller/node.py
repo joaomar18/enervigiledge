@@ -9,27 +9,10 @@ from enum import Enum
 
 #############LOCAL IMPORTS#############
 
-from controller.enums import Protocol
+from controller.enums import Protocol, NodeType
 from db.db import NodeRecord
 
 #######################################
-
-
-class NodeType(Enum):
-    """
-    Enumeration of supported node data types.
-
-    Attributes:
-        INT (str): Integer data type.
-        FLOAT (str): Floating point number.
-        BOOL (str): Boolean value.
-        STRING (str): String/text value.
-    """
-
-    INT = "INT"
-    FLOAT = "FLOAT"
-    BOOL = "BOOL"
-    STRING = "STRING"
 
 
 class Node:

@@ -21,14 +21,14 @@ class Device(ABC):
     Attributes:
         id (int): Unique device identifier.
         name (str): Display name of the device.
-        protocol (str): Communication protocol used by the device.
+        protocol (Protocol): Communication protocol used by the device.
         publish_queue (asyncio.Queue): Queue for outgoing MQTT messages.
         measurements_queue (asyncio.Queue): Queue for logging measurements.
         nodes (Set[Node]): Set of nodes (data points) for the device.
         connected (bool): Indicates whether the device is currently connected.
     """
 
-    def __init__(self, id: int, name: str, protocol: str, publish_queue: asyncio.Queue, measurements_queue: asyncio.Queue, nodes: Set[Node]):
+    def __init__(self, id: int, name: str, protocol: Protocol, publish_queue: asyncio.Queue, measurements_queue: asyncio.Queue, nodes: Set[Node]):
         self.id = id
         self.name = name
         self.connected = False
