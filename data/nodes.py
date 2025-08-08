@@ -9,7 +9,7 @@ from typing import Dict, Set, Any
 
 from db.db import NodeRecord, EnergyMeterRecord
 from controller.node import Node, NodeType
-from controller.enums import Protocol
+from controller.types import Protocol
 from controller.meter import EnergyMeterType, EnergyMeterOptions
 from protocol.modbus_rtu.rtu_device import ModbusRTUOptions, ModbusRTUNode
 from protocol.opcua.opcua_device import OPCUAOptions, OPCUANode

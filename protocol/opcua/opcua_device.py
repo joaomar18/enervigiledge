@@ -1,10 +1,10 @@
 ############### EXTERNAL IMPORTS ###############
 
 import asyncio
-from asyncua import Client, ua
+from asyncua import Client
 from dataclasses import dataclass, asdict
 from typing import Optional, Set
-from typing import List, Dict, Set, Optional, Any
+from typing import Dict, Set, Optional, Any
 import logging
 
 ############### LOCAL IMPORTS ###############

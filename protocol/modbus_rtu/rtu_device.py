@@ -6,7 +6,7 @@ from pymodbus.client import ModbusSerialClient as ModbusRTUClient
 from pymodbus import ModbusException
 from typing import Optional, Set
 import logging
-from typing import List, Dict, Set, Optional, Any
+from typing import Dict, Set, Optional, Any
 from dataclasses import dataclass, asdict
 
 #######################################

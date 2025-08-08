@@ -9,7 +9,7 @@ from typing import Optional, Dict, Set, Any
 
 from mqtt.client import MQTTMessage
 from db.db import EnergyMeterRecord, SQLiteDBClient
-from controller.enums import Protocol
+from controller.types import Protocol
 from controller.device import Device
 from controller.node import Node, NodeType
 from controller.meter import EnergyMeterOptions

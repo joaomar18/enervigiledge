@@ -1,14 +1,14 @@
 ###########EXTERNAL IMPORTS############
 
 import asyncio
-from typing import Optional, Dict, Set, Any
+from typing import Dict, Set, Any
 from abc import ABC, abstractmethod
 
 #######################################
 
 #############LOCAL IMPORTS#############
 
-from controller.enums import Protocol
+from controller.types import Protocol
 from controller.node import Node
 
 #######################################

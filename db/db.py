@@ -10,7 +10,7 @@ from dataclasses import dataclass
 ############### LOCAL IMPORTS ###################
 
 from util.debug import LoggerManager
-from controller.enums import Protocol, EnergyMeterType
+from controller.types import Protocol, EnergyMeterType
 
 #################################################
 

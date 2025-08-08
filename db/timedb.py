@@ -11,7 +11,6 @@ from dataclasses import dataclass
 #############LOCAL IMPORTS#############
 
 from util.debug import LoggerManager
-import util.functions as functions
 
 #######################################
 

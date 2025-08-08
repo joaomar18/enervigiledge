@@ -1,6 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
-from typing import Optional, Dict, List, Set, Any
+from typing import Dict, List, Set
 import asyncio
 
 #######################################
@@ -8,11 +8,10 @@ import asyncio
 #############LOCAL IMPORTS#############
 
 from controller.meter import EnergyMeterOptions, EnergyMeterType
-from controller.enums import Protocol
+from controller.types import Protocol
 from protocol.modbus_rtu.rtu_device import ModbusRTUOptions
 from protocol.opcua.opcua_device import OPCUAOptions
 from controller.node import NodeType, Node, ModbusRTUNode, OPCUANode
-from controller.meter import EnergyMeter
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
 from protocol.opcua.opcua_device import OPCUAEnergyMeter
 

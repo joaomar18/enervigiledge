@@ -3,13 +3,12 @@
 from datetime import datetime
 import time
 from typing import Optional, Callable, Dict, Union, Any
-from enum import Enum
 
 #######################################
 
 #############LOCAL IMPORTS#############
 
-from controller.enums import Protocol, NodeType
+from controller.types import Protocol, NodeType
 from db.db import NodeRecord
 
 #######################################
