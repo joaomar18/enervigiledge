@@ -23,6 +23,20 @@ from util.debug import LoggerManager
 
 
 async def auto_login(safety: HTTPSafety, request: Request) -> JSONResponse:
+    """
+    Validates existing session token and generates a new one to refresh the session.
+
+    Args:
+        safety: HTTPSafety instance for token validation and management
+        request: FastAPI request object containing cookies and client info
+
+    Returns:
+        JSONResponse: Success message with refreshed token cookie, or 401 error
+
+    Raises:
+        Exception: Returns 401 status if token validation fails
+    """
+
     try:
         username = safety.check_authorization_token(None, request)
 
@@ -48,6 +62,21 @@ async def auto_login(safety: HTTPSafety, request: Request) -> JSONResponse:
 
 
 async def login(safety: HTTPSafety, request: Request) -> JSONResponse:
+    """
+    Authenticates user with username/password and creates a new session token.
+
+    Args:
+        safety: HTTPSafety instance for security validation and token management
+        request: FastAPI request containing JSON payload with credentials
+
+    Returns:
+        JSONResponse: Success with token cookie (200), invalid credentials (401),
+        IP blocked (429), or server error (500)
+
+    Raises:
+        InvalidCredentials: When username/password combination is invalid
+        Exception: For server errors, missing files, or malformed requests
+    """
 
     logger = LoggerManager.get_logger(__name__)
     ip = request.client.host
@@ -118,6 +147,20 @@ async def login(safety: HTTPSafety, request: Request) -> JSONResponse:
 
 
 async def logout(safety: HTTPSafety, request: Request, authorization: str = Header(None)) -> JSONResponse:
+    """
+    Invalidates the current session token and logs out the user.
+
+    Args:
+        safety: HTTPSafety instance for token validation and management
+        request: FastAPI request object for token extraction from cookies
+        authorization: Optional authorization header with Bearer token
+
+    Returns:
+        JSONResponse: Success message with deleted token cookie, or 401 error
+
+    Raises:
+        Exception: Returns 401 status if token validation fails or user not found
+    """
 
     logger = LoggerManager.get_logger(__name__)
 
@@ -136,6 +179,20 @@ async def logout(safety: HTTPSafety, request: Request, authorization: str = Head
 
 
 async def create_login(safety: HTTPSafety, request: Request) -> JSONResponse:
+    """
+    Creates initial user account with username and password if none exists.
+
+    Args:
+        safety: HTTPSafety instance for password validation and config management
+        request: FastAPI request containing JSON payload with username/password
+
+    Returns:
+        JSONResponse: Success message (200) or error if account exists/invalid data (400)
+
+    Raises:
+        ValueError: When username/password missing or password doesn't meet requirements
+        Exception: For file I/O errors or other server issues
+    """
 
     logger = LoggerManager.get_logger(__name__)
 
@@ -169,9 +226,23 @@ async def create_login(safety: HTTPSafety, request: Request) -> JSONResponse:
 
 
 async def change_password(safety: HTTPSafety, request: Request, authorization: str = Header(None)) -> JSONResponse:
+    """
+    Updates user password after validating current credentials and token.
+
+    Args:
+        safety: HTTPSafety instance for token/password validation and rate limiting
+        request: FastAPI request containing JSON with old/new password fields
+        authorization: Authorization header with Bearer token for authentication
+
+    Returns:
+        JSONResponse: Success message (200) or error for validation failures (400)
+
+    Raises:
+        ValueError: When fields missing, passwords don't match, or validation fails
+        Exception: For token validation errors or file I/O issues
+    """
 
     logger = LoggerManager.get_logger(__name__)
-
     ip = request.client.host
 
     try:

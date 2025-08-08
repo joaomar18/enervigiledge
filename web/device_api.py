@@ -31,9 +31,26 @@ from controller.conversion import convert_dict_to_energy_meter
 async def add_device(
     safety: HTTPSafety, device_manager: DeviceManager, database: SQLiteDBClient, request: Request, authorization: str = Header(None)
 ) -> JSONResponse:
+    """
+    Creates and registers a new energy meter device with optional image upload.
+
+    Args:
+        safety: HTTPSafety instance for token validation and rate limiting
+        device_manager: DeviceManager instance for device registration and lifecycle management
+        database: SQLiteDBClient instance for persisting device configuration
+        request: FastAPI request with device data (JSON or multipart form with image)
+        authorization: Authorization header with Bearer token for authentication
+
+    Returns:
+        JSONResponse: Success message with device creation confirmation (200),
+        or error message (400) if validation fails, unauthorized, or creation fails
+
+    Raises:
+        ValueError: When required fields are missing or device data is invalid
+        Exception: For authentication errors, database issues, or device initialization failures
+    """
 
     logger = LoggerManager.get_logger(__name__)
-
     ip = request.client.host
 
     try:
@@ -98,9 +115,26 @@ async def add_device(
 async def edit_device(
     safety: HTTPSafety, device_manager: DeviceManager, database: SQLiteDBClient, request: Request, authorization: str = Header(None)
 ) -> JSONResponse:
+    """
+    Updates an existing energy meter device configuration with optional image replacement.
+
+    Args:
+        safety: HTTPSafety instance for token validation and rate limiting
+        device_manager: DeviceManager instance for device lifecycle management
+        database: SQLiteDBClient instance for persisting updated configuration
+        request: FastAPI request with updated device data (JSON or multipart form with image)
+        authorization: Authorization header with Bearer token for authentication
+
+    Returns:
+        JSONResponse: Success message with device update confirmation (200),
+        or error message (400) if validation fails, device not found, or update fails
+
+    Raises:
+        ValueError: When required fields are missing, device not found, or data is invalid
+        Exception: For authentication errors, database issues, or device reconfiguration failures
+    """
 
     logger = LoggerManager.get_logger(__name__)
-
     ip = request.client.host
 
     try:
@@ -174,9 +208,26 @@ async def edit_device(
 async def delete_device(
     safety: HTTPSafety, device_manager: DeviceManager, database: SQLiteDBClient, request: Request, authorization: str = Header(None)
 ) -> JSONResponse:
+    """
+    Permanently removes an energy meter device and all associated data including images.
+
+    Args:
+        safety: HTTPSafety instance for token validation and rate limiting
+        device_manager: DeviceManager instance for device lifecycle management
+        database: SQLiteDBClient instance for removing device configuration from storage
+        request: FastAPI request with JSON containing device name and ID for verification
+        authorization: Authorization header with Bearer token for authentication
+
+    Returns:
+        JSONResponse: Success message with device deletion confirmation (200),
+        or error message (400) if validation fails, device not found, or deletion fails
+
+    Raises:
+        ValueError: When required fields are missing, device not found, or name/ID mismatch
+        Exception: For authentication errors, database issues, or image deletion failures
+    """
 
     logger = LoggerManager.get_logger(__name__)
-
     ip = request.client.host
 
     try:
@@ -221,6 +272,22 @@ async def delete_device(
 
 
 async def get_device_state(device_manager: DeviceManager, request: Request) -> JSONResponse:
+    """
+    Retrieves current state and metadata for a specific energy meter device including its image.
+
+    Args:
+        device_manager: DeviceManager instance for device lookup and state access
+        request: FastAPI request with 'id' query parameter specifying the device
+
+    Returns:
+        JSONResponse: Device state dictionary with metadata and base64-encoded image (200),
+        or error message (400) if device not found or invalid ID provided
+
+    Raises:
+        ValueError: When 'id' query parameter is missing or not a valid integer
+        KeyError: When device with specified ID doesn't exist in the device manager
+        Exception: For image processing errors or other state retrieval issues
+    """
 
     logger = LoggerManager.get_logger(__name__)
 
@@ -250,6 +317,19 @@ async def get_device_state(device_manager: DeviceManager, request: Request) -> J
 
 
 async def get_all_devices_state(device_manager: DeviceManager) -> JSONResponse:
+    """
+    Retrieves current state and metadata for all registered energy meter devices with their images.
+
+    Args:
+        device_manager: DeviceManager instance containing all registered devices
+
+    Returns:
+        JSONResponse: List of device state dictionaries, each with metadata and base64-encoded image (200),
+        or error message (400) if state retrieval fails for any device
+
+    Raises:
+        Exception: For image processing errors, device state access issues, or JSON serialization problems
+    """
 
     logger = LoggerManager.get_logger(__name__)
 
@@ -268,7 +348,20 @@ async def get_all_devices_state(device_manager: DeviceManager) -> JSONResponse:
 
 
 async def get_default_image() -> JSONResponse:
-    
+    """
+    Retrieves the default device image used as fallback when no custom image is available.
+
+    Args:
+        None
+
+    Returns:
+        JSONResponse: Base64-encoded default device image (200),
+        or error message (400) if default image retrieval fails
+
+    Raises:
+        Exception: For image file access errors, encoding issues, or file system problems
+    """
+
     logger = LoggerManager.get_logger(__name__)
 
     try:

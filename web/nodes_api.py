@@ -30,9 +30,24 @@ from controller.conversion import convert_dict_to_energy_meter
 
 
 async def get_nodes_state(device_manager: DeviceManager, request: Request) -> JSONResponse:
+    """
+    Retrieves current values and states of nodes for a specified device.
+
+    Args:
+        device_manager: DeviceManager instance for device lookup and node access
+        request: FastAPI request containing JSON with device ID and optional filter
+
+    Returns:
+        JSONResponse: Dictionary of node names to their publish format data (200),
+        or error message (400) if device not found or invalid parameters
+
+    Raises:
+        ValueError: When required 'id' parameter is missing
+        KeyError: When device with specified ID doesn't exist
+        Exception: For other processing errors or invalid data types
+    """
 
     logger = LoggerManager.get_logger(__name__)
-
     data: Dict[str, Any] = {}
 
     try:
@@ -61,6 +76,22 @@ async def get_nodes_state(device_manager: DeviceManager, request: Request) -> JS
 
 
 async def get_nodes_config(device_manager: DeviceManager, request: Request) -> JSONResponse:
+    """
+    Retrieves configuration details of nodes for a specified device.
+
+    Args:
+        device_manager: DeviceManager instance for device lookup and node access
+        request: FastAPI request with query parameters 'id' and optional 'filter'
+
+    Returns:
+        JSONResponse: Dictionary of node names to their configuration records (200),
+        or error message (400) if device not found or invalid parameters
+
+    Raises:
+        ValueError: When required 'id' query parameter is missing
+        KeyError: When device with specified ID doesn't exist
+        Exception: For other processing errors or invalid data types
+    """
 
     logger = LoggerManager.get_logger(__name__)
 
@@ -99,13 +130,30 @@ async def get_nodes_config(device_manager: DeviceManager, request: Request) -> J
 
 
 async def get_logs_from_node(device_manager: DeviceManager, timedb: TimeDBClient, request: Request) -> JSONResponse:
+    """
+    Retrieves historical log data for a specific node within an optional time range.
+
+    Args:
+        device_manager: DeviceManager instance for device and node validation
+        timedb: TimeDBClient instance for querying historical measurement data
+        request: FastAPI request with JSON containing device ID, node name, and optional time range
+
+    Returns:
+        JSONResponse: Historical measurement data for the specified node (200),
+        or error message (400) if device/node not found or invalid parameters
+
+    Raises:
+        ValueError: When required fields ('id', 'node') are missing
+        KeyError: When device or node with specified names/IDs don't exist
+        Exception: For time parsing errors, database issues, or other processing errors
+    """
 
     logger = LoggerManager.get_logger(__name__)
     data: Dict[str, Any] = {}
 
     try:
         data = await request.json()
-        
+
         id_raw = data.get("id")
         node_name = data.get("node")
         start_time_str = data.get("start_time")
@@ -141,9 +189,27 @@ async def get_logs_from_node(device_manager: DeviceManager, timedb: TimeDBClient
 async def delete_logs_from_node(
     safety: HTTPSafety, device_manager: DeviceManager, timedb: TimeDBClient, request: Request, authorization: str = Header(None)
 ) -> JSONResponse:
+    """
+    Deletes all historical log data for a specific node after authentication.
+
+    Args:
+        safety: HTTPSafety instance for token validation and rate limiting
+        device_manager: DeviceManager instance for device and node validation
+        timedb: TimeDBClient instance for deleting measurement data
+        request: FastAPI request with JSON containing device ID and node name
+        authorization: Authorization header with Bearer token for authentication
+
+    Returns:
+        JSONResponse: Success message with deletion confirmation (200),
+        or error message (400) if validation fails, unauthorized, or deletion fails
+
+    Raises:
+        ValueError: When required fields ('id', 'node') are missing
+        KeyError: When device or node with specified names/IDs don't exist
+        Exception: For authentication errors, database issues, or deletion failures
+    """
 
     logger = LoggerManager.get_logger(__name__)
-
     ip = request.client.host
     data: Dict[str, Any] = {}
 
@@ -188,9 +254,25 @@ async def delete_logs_from_node(
 
 
 async def delete_all_logs(safety: HTTPSafety, timedb: TimeDBClient, request: Request, authorization: str = Header(None)) -> JSONResponse:
+    """
+    Deletes entire database of historical logs for a device after authentication.
+
+    Args:
+        safety: HTTPSafety instance for token validation and rate limiting
+        timedb: TimeDBClient instance for database deletion operations
+        request: FastAPI request with JSON containing device name and ID
+        authorization: Authorization header with Bearer token for authentication
+
+    Returns:
+        JSONResponse: Success message with deletion confirmation (200),
+        or error message (400) if validation fails, unauthorized, or deletion fails
+
+    Raises:
+        ValueError: When required fields ('name', 'id') are missing
+        Exception: For authentication errors, database issues, or deletion failures
+    """
 
     logger = LoggerManager.get_logger(__name__)
-
     ip = request.client.host
     data: Dict[str, Any] = {}
 

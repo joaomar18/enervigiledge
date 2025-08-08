@@ -32,49 +32,81 @@ from controller.conversion import convert_dict_to_energy_meter
 
 class HTTPServer:
     """
-    Asynchronous HTTP server built with FastAPI for secure and efficient management of energy meter devices.
+    Asynchronous HTTP server built with FastAPI for comprehensive energy meter device management and monitoring.
 
-    This server provides a REST API for managing devices, retrieving real-time and historical data,
-    handling secure user authentication, and protecting sensitive operations through token validation
-    and request rate limiting.
+    This server provides a secure REST API for managing energy meter devices, retrieving real-time and historical data,
+    handling user authentication, and protecting sensitive operations through token validation and request security.
+
+    Architecture:
+        - Built on FastAPI with asynchronous request handling for high performance
+        - Uses JWT-based authentication with session management
+        - Implements security features including IP-based blocking and password policies
+        - Integrates with SQLite for device configuration and InfluxDB for time-series data
+        - Supports CORS for web frontend integration
 
     Core Responsibilities:
-        - Manage a set of energy meters and their nodes via the DeviceManager.
-        - Serve historical log data through integration with a TimeDB (InfluxDB) client.
-        - Authenticate users using a one-time credential file and JWT-based sessions.
-        - Secure endpoints using IP-based blocking after repeated failed attempts.
-        - Expose RESTful endpoints for device state, log access, and critical operations (e.g., password change, log deletion).
+        - Device Management: Add, edit, delete, and monitor energy meter devices
+        - Real-time Data: Serve current device states and node values
+        - Historical Data: Query and manage time-series logs from InfluxDB
+        - Authentication: Secure user login/logout with JWT tokens
+        - Security: Rate limiting, IP blocking, and password policy enforcement
+        - Image Management: Handle device images with fallback to default images
 
     Components:
-        - `device_manager` (DeviceManager): Interface for device registration, validation, and data retrieval.
-        - `timedb` (TimeDBClient): Used to query, filter, and delete time-series logs.
-        - `safety` (HTTPSafety): Handles security logic including token validation, password rules, and failed request tracking.
-        - `server` (FastAPI): FastAPI application that registers and serves HTTP endpoints.
-        - Runs as a background task on instantiation using asyncio's event loop and Uvicorn.
+        - device_manager (DeviceManager): Manages device lifecycle, validation, and real-time data
+        - db (SQLiteDBClient): Handles device configuration persistence
+        - timedb (TimeDBClient): Manages time-series data queries and operations
+        - safety (HTTPSafety): Implements security policies and token validation
+        - server (FastAPI): Core web application with registered endpoints
 
-    Endpoints:
-        - `POST /login`: Authenticates a user and returns a JWT token.
-        - `POST /logout`: Invalidates the session token.
-        - `POST /create_login`: Creates the initial credential config with hashed password and signing key.
-        - `POST /change_password`: Securely updates the stored password (requires current credentials and token).
-        - `GET /get_device_state`: Returns the state metadata of a specified device.
-        - `GET /get_all_device_state`: Lists all currently active device states.
-        - `GET /get_nodes_state`: Lists node values of a given device, with optional filtering.
-        - `GET /get_logs`: Retrieves historical logs from a specific node.
-        - `DELETE /delete_logs`: Deletes logs for a specific node on a device.
-        - `DELETE /delete_all_logs`: Wipes all logs associated with a device.
+    API Endpoints:
+
+        Authentication:
+            - POST /auto_login: Automatic login for seamless user experience
+            - POST /login: User authentication with credentials
+            - POST /logout: Session termination and token invalidation
+            - POST /create_login: Initial user account creation
+            - POST /change_password: Secure password update
+
+        Device Management:
+            - POST /add_device: Register new energy meter devices
+            - POST /edit_device: Update existing device configurations
+            - DELETE /delete_device: Remove devices and associated data
+            - GET /get_device_state: Retrieve specific device status and metadata
+            - GET /get_all_device_state: List all active devices with current states
+            - GET /get_default_image: Serve default device image for UI
+
+        Node Operations:
+            - GET /get_nodes_state: Fetch current values from device nodes
+            - GET /get_nodes_config: Retrieve node configuration details
+            - GET /get_logs_from_node: Query historical data for specific nodes
+            - DELETE /delete_logs_from_node: Remove logs for individual nodes
+            - DELETE /delete_all_logs: Bulk delete all logs for a device
 
     Security Features:
-        - JWT-based authentication with in-memory token tracking.
-        - IP-based request blocking for brute-force protection.
-        - Password policy enforcement (minimum length, non-whitespace).
-        - Token/session validation for all sensitive routes.
-        - Detailed logging via LoggerManager for auditability and debugging.
+        - JWT-based authentication with secure token generation and validation
+        - IP-based request blocking for brute-force attack protection
+        - Password policy enforcement (minimum length, complexity requirements)
+        - Session management with automatic token expiration
+        - Request rate limiting and suspicious activity detection
+        - Comprehensive audit logging for security monitoring
+
+    Configuration:
+        - CORS enabled for frontend integration (localhost:5173)
+        - Uvicorn server with configurable host and port
+        - Asynchronous operation using asyncio event loop
+        - Structured logging via LoggerManager for debugging and monitoring
+
+    Usage:
+        The server is designed for edge deployment scenarios where a single administrator
+        manages local energy meter infrastructure. It provides both programmatic API access
+        and supports web-based frontends for device monitoring and configuration.
 
     Notes:
-        - Only one user is supported (admin-level) to simplify local/edge deployments.
-        - The server is intended to be deployed as a local configuration and monitoring endpoint.
-        - Authentication is mandatory for any operation that alters or deletes data.
+        - Single-user authentication model optimized for edge/local deployments
+        - Automatic server startup via asyncio background task
+        - Graceful error handling with appropriate HTTP status codes
+        - Image processing capabilities for device visualization
     """
 
     def __init__(self, host: str, port: int, device_manager: DeviceManager, db: SQLiteDBClient, timedb: TimeDBClient):
