@@ -14,7 +14,7 @@ from passlib.hash import pbkdf2_sha256
 
 #############LOCAL IMPORTS#############
 
-from web.dependencies import http_deps
+from web.dependencies import services
 from web.safety import InvalidCredentials, HTTPSafety, LoginToken
 from util.debug import LoggerManager
 
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/auto_login")
-async def auto_login(request: Request, safety: HTTPSafety = Depends(http_deps.get_safety)) -> JSONResponse:
+async def auto_login(request: Request, safety: HTTPSafety = Depends(services.get_safety)) -> JSONResponse:
     """
     Validates existing session token and generates a new one to refresh the session.
 
@@ -63,7 +63,7 @@ async def auto_login(request: Request, safety: HTTPSafety = Depends(http_deps.ge
 
 
 @router.post("/login")
-async def login(request: Request, safety: HTTPSafety = Depends(http_deps.get_safety)) -> JSONResponse:
+async def login(request: Request, safety: HTTPSafety = Depends(services.get_safety)) -> JSONResponse:
     """
     Authenticates user with username/password and creates a new session token.
 
@@ -149,7 +149,7 @@ async def login(request: Request, safety: HTTPSafety = Depends(http_deps.get_saf
 
 
 @router.post("/logout")
-async def logout(request: Request, authorization: str = Header(None), safety: HTTPSafety = Depends(http_deps.get_safety)) -> JSONResponse:
+async def logout(request: Request, authorization: str = Header(None), safety: HTTPSafety = Depends(services.get_safety)) -> JSONResponse:
     """
     Invalidates the current session token and logs out the user.
 
@@ -182,7 +182,7 @@ async def logout(request: Request, authorization: str = Header(None), safety: HT
 
 
 @router.post("/create_login")
-async def create_login(request: Request, safety: HTTPSafety = Depends(http_deps.get_safety)) -> JSONResponse:
+async def create_login(request: Request, safety: HTTPSafety = Depends(services.get_safety)) -> JSONResponse:
     """
     Creates initial user account with username and password if none exists.
 
@@ -230,7 +230,7 @@ async def create_login(request: Request, safety: HTTPSafety = Depends(http_deps.
 
 
 @router.post("change_password")
-async def change_password(request: Request, authorization: str = Header(None), safety: HTTPSafety = Depends(http_deps.get_safety)) -> JSONResponse:
+async def change_password(request: Request, authorization: str = Header(None), safety: HTTPSafety = Depends(services.get_safety)) -> JSONResponse:
     """
     Updates user password after validating current credentials and token.
 

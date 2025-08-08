@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 #############LOCAL IMPORTS#############
 
 from web.safety import HTTPSafety
-from web.dependencies import http_deps
+from web.dependencies import services
 from util.debug import LoggerManager
 from controller.manager import DeviceManager
 from db.db import SQLiteDBClient
@@ -27,9 +27,9 @@ router = APIRouter(prefix="/device", tags=["device"])
 async def add_device(
     request: Request,
     authorization: str = Header(None),
-    safety: HTTPSafety = Depends(http_deps.get_safety),
-    device_manager: DeviceManager = Depends(http_deps.get_device_manager),
-    database: SQLiteDBClient = Depends(http_deps.get_db),
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
+    database: SQLiteDBClient = Depends(services.get_db),
 ) -> JSONResponse:
     """
     Creates and registers a new energy meter device with optional image upload.
@@ -116,9 +116,9 @@ async def add_device(
 async def edit_device(
     request: Request,
     authorization: str = Header(None),
-    safety: HTTPSafety = Depends(http_deps.get_safety),
-    device_manager: DeviceManager = Depends(http_deps.get_device_manager),
-    database: SQLiteDBClient = Depends(http_deps.get_db),
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
+    database: SQLiteDBClient = Depends(services.get_db),
 ) -> JSONResponse:
     """
     Updates an existing energy meter device configuration with optional image replacement.
@@ -214,9 +214,9 @@ async def edit_device(
 async def delete_device(
     request: Request,
     authorization: str = Header(None),
-    safety: HTTPSafety = Depends(http_deps.get_safety),
-    device_manager: DeviceManager = Depends(http_deps.get_device_manager),
-    database: SQLiteDBClient = Depends(http_deps.get_db),
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
+    database: SQLiteDBClient = Depends(services.get_db),
 ) -> JSONResponse:
     """
     Permanently removes an energy meter device and all associated data including images.
@@ -282,7 +282,7 @@ async def delete_device(
 
 
 @router.get("/get_device_state")
-async def get_device_state(request: Request, device_manager: DeviceManager = Depends(http_deps.get_device_manager)) -> JSONResponse:
+async def get_device_state(request: Request, device_manager: DeviceManager = Depends(services.get_device_manager)) -> JSONResponse:
     """
     Retrieves current state and metadata for a specific energy meter device including its image.
 
@@ -328,7 +328,7 @@ async def get_device_state(request: Request, device_manager: DeviceManager = Dep
 
 
 @router.get("/get_all_devices_state")
-async def get_all_devices_state(device_manager: DeviceManager = Depends(http_deps.get_device_manager)) -> JSONResponse:
+async def get_all_devices_state(device_manager: DeviceManager = Depends(services.get_device_manager)) -> JSONResponse:
     """
     Retrieves current state and metadata for all registered energy meter devices with their images.
 

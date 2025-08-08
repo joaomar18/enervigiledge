@@ -56,4 +56,4 @@ class HTTPDependencies:
         raise ValueError("Time DB is not yet initialized in HTTP Dependencies")
 
 
-http_deps = HTTPDependencies()
+services = HTTPDependencies()
