@@ -2,7 +2,7 @@
 
 import os
 import json
-from fastapi import Request, Header
+from fastapi import APIRouter, Request, Header
 from fastapi.responses import JSONResponse
 from typing import Dict, Any
 from datetime import datetime, timezone
@@ -19,7 +19,10 @@ from util.debug import LoggerManager
 
 #######################################
 
+router = APIRouter(prefix="/auth", tags=["auth"])
 
+
+@router.post("/auto_login")
 async def auto_login(safety: HTTPSafety, request: Request) -> JSONResponse:
     """
     Validates existing session token and generates a new one to refresh the session.
@@ -59,6 +62,7 @@ async def auto_login(safety: HTTPSafety, request: Request) -> JSONResponse:
         return JSONResponse(status_code=401, content={"error": "Auto-login failed, please reauthenticate."})
 
 
+@router.post("/login")
 async def login(safety: HTTPSafety, request: Request) -> JSONResponse:
     """
     Authenticates user with username/password and creates a new session token.
@@ -81,8 +85,8 @@ async def login(safety: HTTPSafety, request: Request) -> JSONResponse:
 
     try:
 
-        if safety.is_blocked(ip, "/login"):
-            unlocked_date = safety.failed_requests.get(ip, {}).get("/login").blocked_until.isoformat()
+        if safety.is_blocked(ip, request.url.path):
+            unlocked_date = safety.failed_requests.get(ip, {}).get(request.url.path).blocked_until.isoformat()
             return JSONResponse(
                 status_code=429, content={"code": "IP_BLOCKED", "unlocked": unlocked_date, "error": "Too many failed attempts. Try again later."}
             )
@@ -113,7 +117,7 @@ async def login(safety: HTTPSafety, request: Request) -> JSONResponse:
 
         safety.active_tokens[username] = LoginToken(token=token, user=username, ip=ip, auto_login=auto_login, keep_session_until=None)
 
-        safety.clean_failed_requests(ip, "/login")
+        safety.clean_failed_requests(ip, request.url.path)
 
         response = JSONResponse(content={"message": "Login successful", "username": username})
 
@@ -123,27 +127,28 @@ async def login(safety: HTTPSafety, request: Request) -> JSONResponse:
 
     except InvalidCredentials as e:
 
-        safety.increment_failed_requests(ip, "/login")
+        safety.increment_failed_requests(ip, request.url.path)
         logger.warning(f"Failed login from IP {ip} due to invalid credentials: {e}")
-        requests_count = safety.failed_requests.get(ip, {}).get("/login").count
+        requests_count = safety.failed_requests.get(ip, {}).get(request.url.path).count
         remaining_requests: int = safety.MAX_REQUEST_ATTEMPTS - requests_count if requests_count else safety.MAX_REQUEST_ATTEMPTS
         if remaining_requests > 0:
             return JSONResponse(status_code=401, content={"code": "INVALID_CREDENTIALS", "remaining": remaining_requests, "error": str(e)})
         else:
-            unlocked_date = safety.failed_requests.get(ip, {}).get("/login").blocked_until.isoformat()
+            unlocked_date = safety.failed_requests.get(ip, {}).get(request.url.path).blocked_until.isoformat()
             return JSONResponse(
                 status_code=429, content={"code": "IP_BLOCKED", "unlocked": unlocked_date, "error": "Too many failed attempts. Try again later."}
             )
 
     except Exception as e:
 
-        safety.increment_failed_requests(ip, "/login")
+        safety.increment_failed_requests(ip, request.url.path)
         logger.warning(f"Failed login from IP {ip} due to server error: {e}")
-        requests_count = safety.failed_requests.get(ip, {}).get("/login").count
+        requests_count = safety.failed_requests.get(ip, {}).get(request.url.path).count
         remaining_requests: int = safety.MAX_REQUEST_ATTEMPTS - requests_count if requests_count else safety.MAX_REQUEST_ATTEMPTS
         return JSONResponse(status_code=500, content={"code": "UNKNOWN_ERROR", "remaining": remaining_requests, "error": str(e)})
 
 
+@router.post("/logout")
 async def logout(safety: HTTPSafety, request: Request, authorization: str = Header(None)) -> JSONResponse:
     """
     Invalidates the current session token and logs out the user.
@@ -176,6 +181,7 @@ async def logout(safety: HTTPSafety, request: Request, authorization: str = Head
         return JSONResponse(status_code=401, content={"error": str(e)})
 
 
+@router.post("/create_login")
 async def create_login(safety: HTTPSafety, request: Request) -> JSONResponse:
     """
     Creates initial user account with username and password if none exists.
@@ -223,6 +229,7 @@ async def create_login(safety: HTTPSafety, request: Request) -> JSONResponse:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+@router.post("change_password")
 async def change_password(safety: HTTPSafety, request: Request, authorization: str = Header(None)) -> JSONResponse:
     """
     Updates user password after validating current credentials and token.
@@ -244,7 +251,7 @@ async def change_password(safety: HTTPSafety, request: Request, authorization: s
     ip = request.client.host
 
     try:
-        if safety.is_blocked(ip, "/change_password"):
+        if safety.is_blocked(ip, request.url.path):
             return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
         # Validate token and get username from it
@@ -287,10 +294,10 @@ async def change_password(safety: HTTPSafety, request: Request, authorization: s
         with open(safety.USER_CONFIG_PATH, "w") as file:
             json.dump(config, file, indent=4)
 
-        safety.clean_failed_requests(ip, "/change_password")
+        safety.clean_failed_requests(ip, request.url.path)
         return JSONResponse(content={"message": "Password changed successfully."})
 
     except Exception as e:
-        safety.increment_failed_requests(ip, "/change_password")
+        safety.increment_failed_requests(ip, request.url.path)
         logger.warning(f"Failed password change attempt from IP {ip}: {e}")
         return JSONResponse(status_code=400, content={"error": str(e)})

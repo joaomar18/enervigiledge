@@ -1,6 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
-from fastapi import Request, Header
+from fastapi import APIRouter, Request, Header
 from fastapi.responses import JSONResponse
 from typing import Dict, Any
 from datetime import datetime
@@ -16,7 +16,10 @@ from db.timedb import TimeDBClient
 
 #######################################
 
+router = APIRouter(prefix="/nodes", tags=["nodes"])
 
+
+@router.get("/get_nodes_state")
 async def get_nodes_state(device_manager: DeviceManager, request: Request) -> JSONResponse:
     """
     Retrieves current values and states of nodes for a specified device.
@@ -63,6 +66,7 @@ async def get_nodes_state(device_manager: DeviceManager, request: Request) -> JS
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+@router.get("/get_nodes_config")
 async def get_nodes_config(device_manager: DeviceManager, request: Request) -> JSONResponse:
     """
     Retrieves configuration details of nodes for a specified device.
@@ -117,6 +121,7 @@ async def get_nodes_config(device_manager: DeviceManager, request: Request) -> J
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+@router.get("/get_logs_from_node")
 async def get_logs_from_node(device_manager: DeviceManager, timedb: TimeDBClient, request: Request) -> JSONResponse:
     """
     Retrieves historical log data for a specific node within an optional time range.
@@ -174,6 +179,7 @@ async def get_logs_from_node(device_manager: DeviceManager, timedb: TimeDBClient
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+@router.delete("/delete_logs_from_node")
 async def delete_logs_from_node(
     safety: HTTPSafety, device_manager: DeviceManager, timedb: TimeDBClient, request: Request, authorization: str = Header(None)
 ) -> JSONResponse:
@@ -202,7 +208,7 @@ async def delete_logs_from_node(
     data: Dict[str, Any] = {}
 
     try:
-        if safety.is_blocked(ip, "/delete_logs_from_node"):
+        if safety.is_blocked(ip, request.url.path):
             return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
         safety.check_authorization_token(authorization, request)
@@ -226,14 +232,14 @@ async def delete_logs_from_node(
 
         if result:
             message = f"Successfully deleted logs for node '{node_name}' from device '{device.name}' with id {id_raw!r}."
-            safety.clean_failed_requests(ip, "/delete_logs_from_node")
+            safety.clean_failed_requests(ip, request.url.path)
             return JSONResponse(content={"result": message})
         else:
             raise Exception(f"Could not delete logs for node '{node_name}' from device '{device.name}' with id {id_raw!r}.")
 
     except Exception as e:
 
-        safety.increment_failed_requests(ip, "/delete_logs_from_node")
+        safety.increment_failed_requests(ip, request.url.path)
         logger.error(
             f"Failed to delete logs for device '{device.name if device else 'not found'}' with id {data.get('id', 'unknown')}, "
             f"measurement '{data.get('measurement', 'unknown')}': {e}"
@@ -241,6 +247,7 @@ async def delete_logs_from_node(
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+@router.delete("/delete_all_logs")
 async def delete_all_logs(safety: HTTPSafety, timedb: TimeDBClient, request: Request, authorization: str = Header(None)) -> JSONResponse:
     """
     Deletes entire database of historical logs for a device after authentication.
@@ -265,7 +272,7 @@ async def delete_all_logs(safety: HTTPSafety, timedb: TimeDBClient, request: Req
     data: Dict[str, Any] = {}
 
     try:
-        if safety.is_blocked(ip, "/delete_all_logs"):
+        if safety.is_blocked(ip, request.url.path):
             return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
         safety.check_authorization_token(authorization, request)
@@ -282,12 +289,12 @@ async def delete_all_logs(safety: HTTPSafety, timedb: TimeDBClient, request: Req
 
         if result:
             message = f"Successfully deleted all logs from device '{name}' with id {id_raw!r}."
-            safety.clean_failed_requests(ip, "/delete_all_logs")
+            safety.clean_failed_requests(ip, request.url.path)
             return JSONResponse(content={"result": message})
         else:
             raise Exception(f"Could not delete all logs from from device '{name}' with id {id_raw!r}.")
 
     except Exception as e:
-        safety.increment_failed_requests(ip, "/delete_all_logs")
+        safety.increment_failed_requests(ip, request.url.path)
         logger.error(f"Failed to delete all logs for device {data.get('name', 'unknown')} with id {id_raw!r}: {e}")
         return JSONResponse(status_code=400, content={"error": str(e)})

@@ -1,7 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
 import json
-from fastapi import Request, Header
+from fastapi import APIRouter, Request, Header
 from fastapi.responses import JSONResponse
 
 #######################################
@@ -19,7 +19,10 @@ from controller.conversion import convert_dict_to_energy_meter
 
 #######################################
 
+router = APIRouter(prefix="/device", tags=["device"])
 
+
+@router.post("/add_device")
 async def add_device(
     safety: HTTPSafety, device_manager: DeviceManager, database: SQLiteDBClient, request: Request, authorization: str = Header(None)
 ) -> JSONResponse:
@@ -46,7 +49,7 @@ async def add_device(
     ip = request.client.host
 
     try:
-        if safety.is_blocked(ip, "/add_device"):
+        if safety.is_blocked(ip, request.url.path):
             return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
         # Check if token is valid
@@ -93,17 +96,18 @@ async def add_device(
 
             device_manager.add_device(energy_meter)
 
-            safety.clean_failed_requests(ip, "/add_device")
+            safety.clean_failed_requests(ip, request.url.path)
             return JSONResponse(content={"message": "Device added sucessfully."})
         else:
             raise Exception(f"Could not add device with name {device_name} and id {device_id} in the database.")
 
     except Exception as e:
-        safety.increment_failed_requests(ip, "/add_device")
+        safety.increment_failed_requests(ip, request.url.path)
         logger.exception(f"Failed add device attempt from IP {ip}: {e}")
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+@router.post("/edit_device")
 async def edit_device(
     safety: HTTPSafety, device_manager: DeviceManager, database: SQLiteDBClient, request: Request, authorization: str = Header(None)
 ) -> JSONResponse:
@@ -130,7 +134,7 @@ async def edit_device(
     ip = request.client.host
 
     try:
-        if safety.is_blocked(ip, "/edit_device"):
+        if safety.is_blocked(ip, request.url.path):
             return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
         # Check if token is valid
@@ -185,18 +189,19 @@ async def edit_device(
 
             device_manager.add_device(energy_meter)
 
-            safety.clean_failed_requests(ip, "/edit_device")
+            safety.clean_failed_requests(ip, request.url.path)
             return JSONResponse(content={"message": "Device edited sucessfully."})
 
         else:
             raise Exception(f"Could not update device with name {device.name if device else 'not found'} and id {device_id} in the database.")
 
     except Exception as e:
-        safety.increment_failed_requests(ip, "/edit_device")
+        safety.increment_failed_requests(ip, request.url.path)
         logger.exception(f"Failed edit device attempt from IP {ip}: {e}")
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+@router.delete("/delete_device")
 async def delete_device(
     safety: HTTPSafety, device_manager: DeviceManager, database: SQLiteDBClient, request: Request, authorization: str = Header(None)
 ) -> JSONResponse:
@@ -223,7 +228,7 @@ async def delete_device(
     ip = request.client.host
 
     try:
-        if safety.is_blocked(ip, "/delete_device"):
+        if safety.is_blocked(ip, request.url.path):
             return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
         # Check if token is valid
@@ -251,18 +256,19 @@ async def delete_device(
             if not delete_device_image(device_id, "db/device_img/"):
                 raise ValueError(f"Could not delete device image of device id: {device_id}")
 
-            safety.clean_failed_requests(ip, "/delete_device")
+            safety.clean_failed_requests(ip, request.url.path)
             return JSONResponse(content={"message": "Device deleted sucessfully."})
 
         else:
             raise Exception(f"Could not delete device with name {device.name if device else 'not found'} and id {device_id} from the database.")
 
     except Exception as e:
-        safety.increment_failed_requests(ip, "/delete_device")
+        safety.increment_failed_requests(ip, request.url.path)
         logger.warning(f"Failed delete device attempt from IP {ip}: {e}")
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+@router.get("/get_device_state")
 async def get_device_state(device_manager: DeviceManager, request: Request) -> JSONResponse:
     """
     Retrieves current state and metadata for a specific energy meter device including its image.
@@ -308,6 +314,7 @@ async def get_device_state(device_manager: DeviceManager, request: Request) -> J
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+@router.get("/get_all_devices_state")
 async def get_all_devices_state(device_manager: DeviceManager) -> JSONResponse:
     """
     Retrieves current state and metadata for all registered energy meter devices with their images.
@@ -339,6 +346,7 @@ async def get_all_devices_state(device_manager: DeviceManager) -> JSONResponse:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
+@router.get("/get_default_image")
 async def get_default_image() -> JSONResponse:
     """
     Retrieves the default device image used as fallback when no custom image is available.
