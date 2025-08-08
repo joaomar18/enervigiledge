@@ -16,50 +16,88 @@ from db.db import NodeRecord
 
 class Node:
     """
-    Represents a data point in a device, such as a sensor reading or measurement value.
+    Represents a data point in an energy meter device, such as a sensor reading or measurement value.
 
-    Supports various data types (e.g., INT, FLOAT, BOOL, STRING) and features like:
-    - Incremental value handling (for energy counters, etc.)
-    - Alarms based on min/max thresholds
-    - Logging and tracking of min/max/mean values
-    - Detection of direction of value changes (positive/negative trend)
-    - Callback execution on value change
+    The Node class provides comprehensive functionality for handling different types of data points
+    with support for real-time processing, historical tracking, alarms, and various calculation modes.
 
-    Attributes:
-        name (str): Unique name of the node.
-        type (NodeType): Type of the node value (e.g., FLOAT, BOOL).
-        unit (str | None): Measurement unit (e.g., 'V', 'kWh'). Automatically set to None for BOOL/STRING nodes.
-        protocol (Protocol): Protocol of the node (NONE if virtual or calculated node, MODBUS_RTU, OPC_UA...).
-        enabled (bool): Whether the node is enabled for data collection and processing.
-        incremental_node (bool | None): Whether the node represents an incremental counter. None for BOOL/STRING nodes.
-        positive_incremental (bool | None): Whether to increment positively (used with incremental_node). None for non-incremental nodes.
-        calculate_increment (bool | None): Whether to compute increment from the initial value (used with incremental_node). None for non-incremental nodes.
-        publish (bool): Whether to publish this node over MQTT.
-        calculated (bool): If the value is computed rather than read from hardware.
-        custom (bool): If the node is a custom node (custom name and unit).
-        logging (bool): Whether to log historical values.
-        logging_period (int): Time in minutes between log entries.
-        min_alarm (bool): Enables alarm for values below `min_alarm_value`.
-        max_alarm (bool): Enables alarm for values above `max_alarm_value`.
-        min_alarm_value (float | None): Lower threshold for minimum value alarm triggering. Automatically set to None for BOOL/STRING nodes.
-        max_alarm_value (float | None): Upper threshold for maximum value alarm triggering. Automatically set to None for BOOL/STRING nodes.
-        decimal_places (int | None): Number of decimal places to round values to. Automatically set to None for non-FLOAT nodes.
-        on_value_change (Optional[Callable[["Node"], None]]): Optional callback triggered when value updates.
-        last_log_datetime (Optional[datetime]): Timestamp of last logged entry.
-        min_alarm_state (bool): True if a value dropped below the minimum threshold. Resets only on value reset.
-        max_alarm_state (bool): True if a value exceeded the maximum threshold. Resets only on value reset.
+    Key Features:
+        - Multi-type support: INT, FLOAT, BOOL, STRING values
+        - Incremental value handling for energy counters and accumulators
+        - Configurable alarm system with min/max thresholds
+        - Statistical tracking (min, max, mean values)
+        - Direction detection for value change trends
+        - Flexible logging with configurable intervals
+        - Protocol-agnostic design (Modbus RTU, OPC UA, calculated nodes)
+        - Value change callbacks for real-time event handling
 
-        value (Union[float, int, str, bool] | None): Current value of the node.
-        timestamp (Optional[float]): Timestamp of the last value update.
-        elapsed_time (Optional[float]): Time difference (seconds) between last and current update.
-        initial_value (Union[float, int] | None): First observed value (for incremental nodes).
-        positive_direction (bool): True if value increased since last change.
-        negative_direction (bool): True if value decreased since last change.
-        min_value (Union[float, int] | None): Lowest observed value since last reset.
-        max_value (Union[float, int] | None): Highest observed value since last reset.
-        mean_value (Union[float, int] | None): Average value since last reset.
-        mean_sum (float): Cumulative value used to calculate mean.
-        mean_count (int): Number of values used to calculate mean.
+    Configuration Parameters:
+        name (str): Unique identifier for the node
+        type (NodeType): Data type (FLOAT, INT, BOOL, STRING)
+        unit (str | None): Measurement unit (e.g., 'V', 'kWh', 'Hz'). Auto-set to None for BOOL/STRING
+        protocol (Protocol): Communication protocol (MODBUS_RTU, OPC_UA, NONE for virtual nodes)
+        enabled (bool): Whether the node is active for data collection
+        publish (bool): Whether to publish values over MQTT
+        calculated (bool): True if value is computed rather than read from hardware
+        custom (bool): True if node uses custom naming or units
+        decimal_places (int | None): Decimal precision for FLOAT values. Auto-set to None for non-FLOAT
+
+    Incremental Node Features:
+        incremental_node (bool | None): Enables counter/accumulator behavior. None for BOOL/STRING
+        positive_incremental (bool | None): Direction of incremental counting
+        calculate_increment (bool | None): Whether to compute increment from initial value
+        initial_value (Union[float, int] | None): First observed value for increment calculations
+
+    Logging Configuration:
+        logging (bool): Whether to store historical values
+        logging_period (int): Time interval in minutes between log entries
+        last_log_datetime (Optional[datetime]): Timestamp of most recent log entry
+
+    Alarm System:
+        min_alarm (bool): Enables low-value threshold monitoring
+        max_alarm (bool): Enables high-value threshold monitoring
+        min_alarm_value (float | None): Lower threshold trigger. Auto-set to None for BOOL/STRING
+        max_alarm_value (float | None): Upper threshold trigger. Auto-set to None for BOOL/STRING
+        min_alarm_state (bool): Current state of minimum value alarm
+        max_alarm_state (bool): Current state of maximum value alarm
+
+    Runtime State:
+        value (Union[float, int, str, bool] | None): Current node value
+        timestamp (Optional[float]): Unix timestamp of last value update
+        elapsed_time (Optional[float]): Seconds between last and current update
+        positive_direction (bool): True if value increased since last change
+        negative_direction (bool): True if value decreased since last change
+
+    Statistical Tracking:
+        min_value (Union[float, int] | None): Lowest observed value since reset
+        max_value (Union[float, int] | None): Highest observed value since reset
+        mean_value (Union[float, int] | None): Average value since reset
+        mean_sum (float): Cumulative sum for mean calculation
+        mean_count (int): Number of values used in mean calculation
+
+    Event Handling:
+        on_value_change (Optional[Callable]): Callback function triggered on value updates
+
+    Type Restrictions:
+        - BOOL/STRING nodes: Cannot use incremental features, alarms, or units
+        - Incremental nodes: Cannot use alarm features (conflicts with accumulator logic)
+        - FLOAT nodes: Support full feature set including decimal precision
+        - INT nodes: Support most features except decimal precision
+
+    Usage Examples:
+        # Basic sensor reading
+        voltage_node = Node("l1_voltage", NodeType.FLOAT, "V", logging=True)
+
+        # Energy counter with increment calculation
+        energy_node = Node("active_energy", NodeType.FLOAT, "kWh",
+                          incremental_node=True, calculate_increment=True)
+
+        # Boolean status with MQTT publishing
+        status_node = Node("device_online", NodeType.BOOL, None, publish=True)
+
+        # Calculated value with alarms
+        power_node = Node("total_power", NodeType.FLOAT, "kW", calculated=True,
+                         min_alarm=True, min_alarm_value=0.0, max_alarm=True, max_alarm_value=1000.0)
     """
 
     def __init__(
@@ -599,160 +637,37 @@ class Node:
 
 class ModbusRTUNode(Node):
     """
-    Represents a Modbus RTU node (data point) with additional configuration
-    such as logging, alarms, register address and connection status.
+    Node implementation for Modbus RTU protocol communication.
 
-    Inherits from:
-        Node: Base class representing a generic data point.
+    Adds Modbus RTU-specific register addressing and connection tracking to base Node functionality.
 
-    Args:
-        name (str): Unique name identifying the node.
-        type (NodeType): Type of the node (e.g., NodeType.FLOAT, NodeType.STRING).
-        register (int): Modbus register address where the value is located.
-        unit (str): Unit of measurement (e.g., 'V', 'A').
-        enabled (bool): Whether the node is enabled for data collection and processing.
-        publish (bool): Whether to publish the node value via MQTT (default: True).
-        calculated (bool): Whether the value is calculated instead of read directly (default: False).
-        custom (bool): If the node is a custom node (custom name and unit).
-        logging (bool): Whether the node value should be logged (default: False).
-        logging_period (int): Logging interval in minutes (default: 15).
-        min_alarm (bool): Enable alarm if value drops below `min_alarm_value` (default: False).
-        max_alarm (bool): Enable alarm if value rises above `max_alarm_value` (default: False).
-        min_alarm_value (float): Minimum threshold for triggering minimum value alarm (default: 0.0).
-        max_alarm_value (float): Maximum threshold for triggering maximum value alarm (default: 0.0).
-
-    Attributes:
-        connected (bool): Indicates whether the node is currently reachable/responding.
+    Additional Attributes:
+        register (int): Modbus register address where the data resides
+        connected (bool): Connection status with the Modbus device
     """
 
-    def __init__(
-        self,
-        name: str,
-        type: NodeType,
-        register: int,
-        unit: str,
-        enabled: bool = True,
-        incremental_node: bool | None = False,
-        positive_incremental: bool | None = False,
-        calculate_increment: bool | None = True,
-        publish: bool = True,
-        calculated: bool = False,
-        custom: bool = False,
-        logging: bool = False,
-        logging_period: int = 15,
-        min_alarm: bool = False,
-        max_alarm: bool = False,
-        min_alarm_value: float = 0.0,
-        max_alarm_value: float = 0.0,
-        decimal_places: int | None = 3,
-    ):
-        super().__init__(
-            name=name,
-            type=type,
-            unit=unit,
-            protocol=Protocol.MODBUS_RTU,
-            enabled=enabled,
-            incremental_node=incremental_node,
-            positive_incremental=positive_incremental,
-            calculate_increment=calculate_increment,
-            publish=publish,
-            calculated=calculated,
-            custom=custom,
-            logging=logging,
-            logging_period=logging_period,
-            min_alarm=min_alarm,
-            max_alarm=max_alarm,
-            min_alarm_value=min_alarm_value,
-            max_alarm_value=max_alarm_value,
-            decimal_places=decimal_places,
-        )
-
+    def __init__(self, name: str, type: NodeType, register: int, unit: str, **kwargs):
+        super().__init__(name=name, type=type, unit=unit, protocol=Protocol.MODBUS_RTU, **kwargs)
         self.register = register
         self.connected = False
 
     def set_connection_state(self, state: bool):
-        """
-        Sets the connection status of the node.
-
-        Args:
-            state (bool): True if the node is reachable and responding, False otherwise.
-        """
-
         self.connected = state
 
 
 class OPCUANode(Node):
     """
-    Represents an OPC UA node (data point) with specific metadata and state tracking.
+    Node implementation for OPC UA protocol communication.
 
-    This class extends the generic Node to include the necessary configuration
-    for identifying and reading values from an OPC UA server.
+    Adds OPC UA-specific node ID addressing and connection tracking to base Node functionality.
 
-    Inherits from:
-        Node: Base class representing a generic data point.
-
-    Args:
-        name (str): Unique name identifying the node.
-        type (NodeType): Type of the node (e.g., NodeType.FLOAT).
-        node_id (str): OPC UA Node ID used to access the value on the server (e.g., 'ns=2;s=Voltage_L1').
-        unit (str): Unit of measurement (e.g., 'V', 'A').
-        enabled (bool): Whether the node is enabled for data collection and processing.
-        publish (bool): Whether to publish the node value via MQTT (default: True).
-        calculated (bool): Whether the value is calculated instead of read directly (default: False).
-        custom (bool): If the node is a custom node (custom name and unit).
-        logging (bool): Whether the node value should be logged (default: False).
-        logging_period (int): Logging interval in minutes (default: 15).
-        min_alarm (bool): Enable alarm if value drops below `min_alarm_value` (default: False).
-        max_alarm (bool): Enable alarm if value rises above `max_alarm_value` (default: False).
-        min_alarm_value (float): Minimum threshold for triggering a minimum value alarm (default: 0.0).
-        max_alarm_value (float): Maximum threshold for triggering a maximum value alarm (default: 0.0).
-
-    Attributes:
-        node_id (str): OPC UA Node ID used to query values.
-        connected (bool): Indicates whether the node is currently reachable/responding.
+    Additional Attributes:
+        node_id (str): OPC UA Node ID for server access (e.g., "ns=4;i=7")
+        connected (bool): Connection status with the OPC UA server
     """
 
-    def __init__(
-        self,
-        name: str,
-        type: NodeType,
-        node_id: str,
-        unit: str,
-        enabled: bool = True,
-        incremental_node: bool | None = False,
-        positive_incremental: bool | None = False,
-        calculate_increment: bool | None = True,
-        publish: bool = True,
-        calculated: bool = False,
-        custom: bool = False,
-        logging: bool = False,
-        logging_period: int = 15,
-        min_alarm: bool = False,
-        max_alarm: bool = False,
-        min_alarm_value: float = 0.0,
-        max_alarm_value: float = 0.0,
-        decimal_places: int | None = 3,
-    ):
-        super().__init__(
-            name=name,
-            type=type,
-            unit=unit,
-            protocol=Protocol.OPC_UA,
-            enabled=enabled,
-            incremental_node=incremental_node,
-            positive_incremental=positive_incremental,
-            calculate_increment=calculate_increment,
-            publish=publish,
-            calculated=calculated,
-            custom=custom,
-            logging=logging,
-            logging_period=logging_period,
-            min_alarm=min_alarm,
-            max_alarm=max_alarm,
-            min_alarm_value=min_alarm_value,
-            max_alarm_value=max_alarm_value,
-            decimal_places=decimal_places,
-        )
+    def __init__(self, name: str, type: NodeType, node_id: str, unit: str, **kwargs):
+        super().__init__(name=name, type=type, unit=unit, protocol=Protocol.OPC_UA, **kwargs)
         self.node_id = node_id
         self.connected = False
 
