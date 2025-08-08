@@ -3,4 +3,4 @@ __pycache__/
 user_config.json
 venv
 config.db
-pyproject.toml
+pyproject.tomlvenv/
