@@ -1,30 +1,18 @@
 ###########EXTERNAL IMPORTS############
 
-import os
-import asyncio
-import json
-from fastapi import FastAPI, Request, Header
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Request, Header
 from fastapi.responses import JSONResponse
-from typing import Dict, Set, Optional, Any
-from datetime import datetime, timezone, timedelta
-import jwt
-import secrets
-from passlib.hash import pbkdf2_sha256
+from typing import Dict, Any
+from datetime import datetime
 
 #######################################
 
 #############LOCAL IMPORTS#############
 
-from web.safety import InvalidCredentials, HTTPSafety, LoginToken
+from web.safety import HTTPSafety
 from util.debug import LoggerManager
 from controller.manager import DeviceManager
-from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
-from util.functions import process_and_save_image, get_device_image, delete_device_image
-from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
-from protocol.opcua.opcua_device import OPCUAEnergyMeter
-from controller.conversion import convert_dict_to_energy_meter
 
 #######################################
 

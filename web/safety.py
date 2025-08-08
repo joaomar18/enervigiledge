@@ -4,7 +4,7 @@ import logging
 import json
 from fastapi import Request
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Set, Optional, Any
+from typing import Dict, Optional, Any
 from dataclasses import dataclass
 import jwt
 

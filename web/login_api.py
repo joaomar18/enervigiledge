@@ -1,13 +1,11 @@
 ###########EXTERNAL IMPORTS############
 
 import os
-import asyncio
 import json
-from fastapi import FastAPI, Request, Header
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Request, Header
 from fastapi.responses import JSONResponse
-from typing import Dict, Set, Optional, Any
-from datetime import datetime, timezone, timedelta
+from typing import Dict, Any
+from datetime import datetime, timezone
 import jwt
 import secrets
 from passlib.hash import pbkdf2_sha256

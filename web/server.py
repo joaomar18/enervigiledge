@@ -2,13 +2,9 @@
 
 import asyncio
 import logging
-import json
 from fastapi import FastAPI, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from uvicorn import Config, Server
-from datetime import datetime
-from typing import Dict, Set, Optional, Any
 
 #######################################
 
@@ -18,14 +14,9 @@ from web.safety import HTTPSafety
 import web.login_api as login_api
 import web.device_api as device_api
 import web.nodes_api as nodes_api
-from util.debug import LoggerManager
-from util.functions import process_and_save_image, get_device_image, delete_device_image
 from controller.manager import DeviceManager
 from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
-from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
-from protocol.opcua.opcua_device import OPCUAEnergyMeter
-from controller.conversion import convert_dict_to_energy_meter
 
 #######################################
 
