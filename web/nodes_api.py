@@ -1,6 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
-from fastapi import APIRouter, Request, Header
+from fastapi import APIRouter, Request, Header, Depends
 from fastapi.responses import JSONResponse
 from typing import Dict, Any
 from datetime import datetime
@@ -10,6 +10,7 @@ from datetime import datetime
 #############LOCAL IMPORTS#############
 
 from web.safety import HTTPSafety
+from web.dependencies import http_deps
 from util.debug import LoggerManager
 from controller.manager import DeviceManager
 from db.timedb import TimeDBClient
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/nodes", tags=["nodes"])
 
 
 @router.get("/get_nodes_state")
-async def get_nodes_state(device_manager: DeviceManager, request: Request) -> JSONResponse:
+async def get_nodes_state(request: Request, device_manager: DeviceManager = Depends(http_deps.get_device_manager)) -> JSONResponse:
     """
     Retrieves current values and states of nodes for a specified device.
 
@@ -67,7 +68,7 @@ async def get_nodes_state(device_manager: DeviceManager, request: Request) -> JS
 
 
 @router.get("/get_nodes_config")
-async def get_nodes_config(device_manager: DeviceManager, request: Request) -> JSONResponse:
+async def get_nodes_config(request: Request, device_manager: DeviceManager = Depends(http_deps.get_device_manager)) -> JSONResponse:
     """
     Retrieves configuration details of nodes for a specified device.
 
@@ -122,7 +123,9 @@ async def get_nodes_config(device_manager: DeviceManager, request: Request) -> J
 
 
 @router.get("/get_logs_from_node")
-async def get_logs_from_node(device_manager: DeviceManager, timedb: TimeDBClient, request: Request) -> JSONResponse:
+async def get_logs_from_node(
+    request: Request, device_manager: DeviceManager = Depends(http_deps.get_device_manager), timedb: TimeDBClient = Depends(http_deps.get_timedb)
+) -> JSONResponse:
     """
     Retrieves historical log data for a specific node within an optional time range.
 
@@ -181,7 +184,11 @@ async def get_logs_from_node(device_manager: DeviceManager, timedb: TimeDBClient
 
 @router.delete("/delete_logs_from_node")
 async def delete_logs_from_node(
-    safety: HTTPSafety, device_manager: DeviceManager, timedb: TimeDBClient, request: Request, authorization: str = Header(None)
+    request: Request,
+    authorization: str = Header(None),
+    safety: HTTPSafety = Depends(http_deps.get_safety),
+    device_manager: DeviceManager = Depends(http_deps.get_device_manager),
+    timedb: TimeDBClient = Depends(http_deps.get_timedb),
 ) -> JSONResponse:
     """
     Deletes all historical log data for a specific node after authentication.
@@ -248,7 +255,12 @@ async def delete_logs_from_node(
 
 
 @router.delete("/delete_all_logs")
-async def delete_all_logs(safety: HTTPSafety, timedb: TimeDBClient, request: Request, authorization: str = Header(None)) -> JSONResponse:
+async def delete_all_logs(
+    request: Request,
+    authorization: str = Header(None),
+    safety: HTTPSafety = Depends(http_deps.get_safety),
+    timedb: TimeDBClient = Depends(http_deps.get_timedb),
+) -> JSONResponse:
     """
     Deletes entire database of historical logs for a device after authentication.
 

@@ -11,12 +11,13 @@ from uvicorn import Config, Server
 #############LOCAL IMPORTS#############
 
 from web.safety import HTTPSafety
-import web.auth_api as auth_api
-import web.device_api as device_api
-import web.nodes_api as nodes_api
+from web.dependencies import http_deps
 from controller.manager import DeviceManager
 from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
+import web.auth_api as auth_api
+import web.device_api as device_api
+import web.nodes_api as nodes_api
 
 #######################################
 
@@ -88,6 +89,7 @@ class HTTPServer:
         self.db = db
         self.timedb = timedb
         self.safety = HTTPSafety()
+        http_deps.set_dependencies(self.safety, self.device_manager, self.db, self.timedb)  # Set dependencies for routers endpoints
         self.server = FastAPI()
         self.server.include_router(auth_api.router)  # Authorization router (handles authorization endpoints)
         self.server.include_router(device_api.router)  # Device router (handles device endpoints)
