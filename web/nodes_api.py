@@ -1,0 +1,223 @@
+###########EXTERNAL IMPORTS############
+
+import os
+import asyncio
+import json
+from fastapi import FastAPI, Request, Header
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from typing import Dict, Set, Optional, Any
+from datetime import datetime, timezone, timedelta
+import jwt
+import secrets
+from passlib.hash import pbkdf2_sha256
+
+#######################################
+
+#############LOCAL IMPORTS#############
+
+from web.safety import InvalidCredentials, HTTPSafety, LoginToken
+from util.debug import LoggerManager
+from controller.manager import DeviceManager
+from db.db import SQLiteDBClient
+from db.timedb import TimeDBClient
+from util.functions import process_and_save_image, get_device_image, delete_device_image
+from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
+from protocol.opcua.opcua_device import OPCUAEnergyMeter
+from controller.conversion import convert_dict_to_energy_meter
+
+#######################################
+
+
+async def get_nodes_state(device_manager: DeviceManager, request: Request) -> JSONResponse:
+
+    logger = LoggerManager.get_logger(__name__)
+
+    data: Dict[str, Any] = {}
+
+    try:
+        data = await request.json()
+        id_raw = data.get("id")
+        filter_str = data.get("filter")  # Optional
+
+        if not id_raw:
+            raise ValueError("Missing required query parameters: 'id'")
+
+        device = device_manager.get_device(int(id_raw))
+
+        if not device:
+            raise KeyError(f"Device with id {id_raw!r} does not exist.")
+
+        if filter_str:
+            nodes_state = {node.name: node.get_publish_format() for node in device.nodes if filter_str in node.name}
+        else:
+            nodes_state = {node.name: node.get_publish_format() for node in device.nodes}
+
+        return JSONResponse(content=nodes_state)
+
+    except Exception as e:
+        logger.error(f"Failed to get node states for device with id {id_raw!r}: {e}")
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+async def get_nodes_config(device_manager: DeviceManager, request: Request) -> JSONResponse:
+
+    logger = LoggerManager.get_logger(__name__)
+
+    try:
+
+        id_raw = request.query_params.get("id")
+        filter_str = request.query_params.get("filter")  # Optional
+
+        if not id_raw:
+            raise ValueError("Missing required query parameters: 'id'")
+
+        device = device_manager.get_device(int(id_raw))
+
+        if not device:
+            raise KeyError(f"Device with id {id_raw!r} does not exist.")
+
+        if filter_str:
+            nodes_config = {}
+            for node in device.nodes:
+                if filter_str in node.name:
+                    record = node.get_node_record()
+                    record.device_id = int(id_raw)
+                    nodes_config[node.name] = record.__dict__
+        else:
+            nodes_config = {}
+            for node in device.nodes:
+                record = node.get_node_record()
+                record.device_id = int(id_raw)
+                nodes_config[node.name] = record.__dict__
+
+        return JSONResponse(content=nodes_config)
+
+    except Exception as e:
+        logger.error(f"Failed to get device nodes configuration for device with id {id_raw!r}: {e}")
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+async def get_logs_from_node(device_manager: DeviceManager, timedb: TimeDBClient, request: Request) -> JSONResponse:
+
+    logger = LoggerManager.get_logger(__name__)
+    data: Dict[str, Any] = {}
+
+    try:
+        data = await request.json()
+        
+        id_raw = data.get("id")
+        node_name = data.get("node")
+        start_time_str = data.get("start_time")
+        end_time_str = data.get("end_time")
+
+        if not all([id_raw, node_name]):
+            raise ValueError("Missing one or more required fields: 'id', 'node'")
+
+        # Optional time range parsing
+        start_time = datetime.fromisoformat(start_time_str) if start_time_str else None
+        end_time = datetime.fromisoformat(end_time_str) if end_time_str else None
+
+        device = device_manager.get_device(int(id_raw))
+
+        if not device:
+            raise KeyError(f"Device with id {id_raw!r} does not exist.")
+
+        if not any(node_name == node.name for node in device.nodes):
+            raise KeyError(f"Node with name {node_name} does not exist in device {device.name if device else 'not found'} with id {id_raw!r}")
+
+        response = timedb.get_measurement_data_between(
+            device_name=device.name, device_id=int(id_raw), measurement=node_name, start_time=start_time, end_time=end_time
+        )
+        return JSONResponse(content=response)
+
+    except Exception as e:
+        logger.error(
+            f"Failed to retrieve logs for device '{device.name if device else 'not found'}' with id {id_raw!r}, " f"node '{data.get('node', 'unknown')}': {e}"
+        )
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+async def delete_logs_from_node(
+    safety: HTTPSafety, device_manager: DeviceManager, timedb: TimeDBClient, request: Request, authorization: str = Header(None)
+) -> JSONResponse:
+
+    logger = LoggerManager.get_logger(__name__)
+
+    ip = request.client.host
+    data: Dict[str, Any] = {}
+
+    try:
+        if safety.is_blocked(ip, "/delete_logs_from_node"):
+            return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
+
+        safety.check_authorization_token(authorization, request)
+
+        data = await request.json()
+
+        id_raw = data.get("id")
+        node_name = data.get("node")
+
+        if not all([id_raw, node_name]):
+            raise ValueError("Missing one or more required fields: 'id', 'node'")
+
+        device = device_manager.get_device(int(id_raw))
+        if not device:
+            raise KeyError(f"Device with id {id_raw!r} does not exist.")
+
+        if not any(node_name == node.name for node in device.nodes):
+            raise KeyError(f"Node with name {node_name} does not exist in device {device.name if device else 'not found'} with id {id_raw!r}.")
+
+        result = timedb.delete_measurement_data(device_name=device.name, device_id=int(id_raw), measurement=node_name)
+
+        if result:
+            message = f"Successfully deleted logs for node '{node_name}' from device '{device.name}' with id {id_raw!r}."
+            safety.clean_failed_requests(ip, "/delete_logs_from_node")
+            return JSONResponse(content={"result": message})
+        else:
+            raise Exception(f"Could not delete logs for node '{node_name}' from device '{device.name}' with id {id_raw!r}.")
+
+    except Exception as e:
+
+        safety.increment_failed_requests(ip, "/delete_logs_from_node")
+        logger.error(
+            f"Failed to delete logs for device '{device.name if device else 'not found'}' with id {data.get('id', 'unknown')}, "
+            f"measurement '{data.get('measurement', 'unknown')}': {e}"
+        )
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+async def delete_all_logs(safety: HTTPSafety, timedb: TimeDBClient, request: Request, authorization: str = Header(None)) -> JSONResponse:
+
+    logger = LoggerManager.get_logger(__name__)
+
+    ip = request.client.host
+    data: Dict[str, Any] = {}
+
+    try:
+        if safety.is_blocked(ip, "/delete_all_logs"):
+            return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
+
+        safety.check_authorization_token(authorization, request)
+
+        data = await request.json()
+
+        name = data.get("name")
+        id_raw = data.get("id")
+
+        if not all([name, id_raw]):
+            raise ValueError("Missing one or more required fields: 'name', 'id'.")
+
+        result = timedb.delete_db(device_name=name, device_id=int(id_raw))
+
+        if result:
+            message = f"Successfully deleted all logs from device '{name}' with id {id_raw!r}."
+            safety.clean_failed_requests(ip, "/delete_all_logs")
+            return JSONResponse(content={"result": message})
+        else:
+            raise Exception(f"Could not delete all logs from from device '{name}' with id {id_raw!r}.")
+
+    except Exception as e:
+        safety.increment_failed_requests(ip, "/delete_all_logs")
+        logger.error(f"Failed to delete all logs for device {data.get('name', 'unknown')} with id {id_raw!r}: {e}")
+        return JSONResponse(status_code=400, content={"error": str(e)})
