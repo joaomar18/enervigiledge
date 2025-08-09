@@ -215,7 +215,7 @@ async def delete_logs_from_node(
     data: Dict[str, Any] = {}
 
     try:
-        if safety.is_blocked(ip, request.url.path):
+        if safety.is_blocked(request, request.url.path):
             return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
         safety.check_authorization_token(authorization, request)
@@ -239,14 +239,14 @@ async def delete_logs_from_node(
 
         if result:
             message = f"Successfully deleted logs for node '{node_name}' from device '{device.name}' with id {id_raw!r}."
-            safety.clean_failed_requests(ip, request.url.path)
+            safety.clean_failed_requests(request, request.url.path)
             return JSONResponse(content={"result": message})
         else:
             raise Exception(f"Could not delete logs for node '{node_name}' from device '{device.name}' with id {id_raw!r}.")
 
     except Exception as e:
 
-        safety.increment_failed_requests(ip, request.url.path)
+        safety.increment_failed_requests(request, request.url.path)
         logger.error(
             f"Failed to delete logs for device '{device.name if device else 'not found'}' with id {data.get('id', 'unknown')}, "
             f"measurement '{data.get('measurement', 'unknown')}': {e}"
@@ -281,7 +281,7 @@ async def delete_all_logs(
     data: Dict[str, Any] = {}
 
     try:
-        if safety.is_blocked(ip, request.url.path):
+        if safety.is_blocked(request, request.url.path):
             return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
         safety.check_authorization_token(authorization, request)
@@ -298,12 +298,12 @@ async def delete_all_logs(
 
         if result:
             message = f"Successfully deleted all logs from device '{name}' with id {id_raw!r}."
-            safety.clean_failed_requests(ip, request.url.path)
+            safety.clean_failed_requests(request, request.url.path)
             return JSONResponse(content={"result": message})
         else:
             raise Exception(f"Could not delete all logs from from device '{name}' with id {id_raw!r}.")
 
     except Exception as e:
-        safety.increment_failed_requests(ip, request.url.path)
+        safety.increment_failed_requests(request, request.url.path)
         logger.error(f"Failed to delete all logs for device {data.get('name', 'unknown')} with id {id_raw!r}: {e}")
         return JSONResponse(status_code=400, content={"error": str(e)})

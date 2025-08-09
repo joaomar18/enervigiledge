@@ -54,7 +54,7 @@ async def add_device(
     ip = request.client.host
 
     try:
-        if safety.is_blocked(ip, request.url.path):
+        if safety.is_blocked(request, request.url.path):
             return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
         # Check if token is valid
@@ -101,13 +101,13 @@ async def add_device(
 
             device_manager.add_device(energy_meter)
 
-            safety.clean_failed_requests(ip, request.url.path)
+            safety.clean_failed_requests(request, request.url.path)
             return JSONResponse(content={"message": "Device added sucessfully."})
         else:
             raise Exception(f"Could not add device with name {device_name} and id {device_id} in the database.")
 
     except Exception as e:
-        safety.increment_failed_requests(ip, request.url.path)
+        safety.increment_failed_requests(request, request.url.path)
         logger.exception(f"Failed add device attempt from IP {ip}: {e}")
         return JSONResponse(status_code=400, content={"error": str(e)})
 
@@ -143,7 +143,7 @@ async def edit_device(
     ip = request.client.host
 
     try:
-        if safety.is_blocked(ip, request.url.path):
+        if safety.is_blocked(request, request.url.path):
             return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
         # Check if token is valid
@@ -198,14 +198,14 @@ async def edit_device(
 
             device_manager.add_device(energy_meter)
 
-            safety.clean_failed_requests(ip, request.url.path)
+            safety.clean_failed_requests(request, request.url.path)
             return JSONResponse(content={"message": "Device edited sucessfully."})
 
         else:
             raise Exception(f"Could not update device with name {device.name if device else 'not found'} and id {device_id} in the database.")
 
     except Exception as e:
-        safety.increment_failed_requests(ip, request.url.path)
+        safety.increment_failed_requests(request, request.url.path)
         logger.exception(f"Failed edit device attempt from IP {ip}: {e}")
         return JSONResponse(status_code=400, content={"error": str(e)})
 
@@ -241,7 +241,7 @@ async def delete_device(
     ip = request.client.host
 
     try:
-        if safety.is_blocked(ip, request.url.path):
+        if safety.is_blocked(request, request.url.path):
             return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
         # Check if token is valid
@@ -269,14 +269,14 @@ async def delete_device(
             if not delete_device_image(device_id, "db/device_img/"):
                 raise ValueError(f"Could not delete device image of device id: {device_id}")
 
-            safety.clean_failed_requests(ip, request.url.path)
+            safety.clean_failed_requests(request, request.url.path)
             return JSONResponse(content={"message": "Device deleted sucessfully."})
 
         else:
             raise Exception(f"Could not delete device with name {device.name if device else 'not found'} and id {device_id} from the database.")
 
     except Exception as e:
-        safety.increment_failed_requests(ip, request.url.path)
+        safety.increment_failed_requests(request, request.url.path)
         logger.warning(f"Failed delete device attempt from IP {ip}: {e}")
         return JSONResponse(status_code=400, content={"error": str(e)})
 

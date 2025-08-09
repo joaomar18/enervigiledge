@@ -40,6 +40,17 @@ async def auto_login(request: Request, safety: HTTPSafety = Depends(services.get
     """
 
     try:
+        # Get current token from request
+        current_token = None
+        authorization = request.headers.get("authorization")
+        if authorization and authorization.startswith("Bearer "):
+            current_token = authorization.split(" ")[1]
+        else:
+            current_token = request.cookies.get("token")
+            
+        if not current_token:
+            raise ValueError("No token found")
+            
         username = safety.check_authorization_token(None, request)
 
         # Token is valid, generate a new one to refresh session
@@ -47,11 +58,25 @@ async def auto_login(request: Request, safety: HTTPSafety = Depends(services.get
             config = json.load(file)
 
         jwt_secret = config["jwt_secret"]
-        new_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
+        new_payload = {
+            "user": username, 
+            "iat": datetime.now(timezone.utc).timestamp()
+        }
         new_token = jwt.encode(new_payload, jwt_secret, algorithm="HS256")
 
-        safety.active_tokens[username].token = new_token
-        auto_login = safety.active_tokens[username].auto_login
+        # Get auto_login status from current session and remove old token
+        old_session = safety.active_tokens[current_token]
+        auto_login = old_session.auto_login
+        del safety.active_tokens[current_token]
+        
+        # Store new token with same session info
+        safety.active_tokens[new_token] = LoginToken(
+            token=new_token, 
+            user=username, 
+            ip=old_session.ip, 
+            auto_login=auto_login, 
+            keep_session_until=None
+        )
 
         response = JSONResponse(content={"message": "Auto-login successful", "username": username})
         response.set_cookie(key="token", value=new_token, httponly=True, secure=True, samesite="None", max_age=3600 if not auto_login else 2592000)
@@ -85,8 +110,8 @@ async def login(request: Request, safety: HTTPSafety = Depends(services.get_safe
 
     try:
 
-        if safety.is_blocked(ip, request.url.path):
-            unlocked_date = safety.failed_requests.get(ip, {}).get(request.url.path).blocked_until.isoformat()
+        if safety.is_blocked(request, request.url.path):
+            unlocked_date = safety.failed_requests.get(safety.get_client_identifier(request), {}).get(request.url.path).blocked_until.isoformat()
             return JSONResponse(
                 status_code=429, content={"code": "IP_BLOCKED", "unlocked": unlocked_date, "error": "Too many failed attempts. Try again later."}
             )
@@ -112,12 +137,15 @@ async def login(request: Request, safety: HTTPSafety = Depends(services.get_safe
         if username != stored_username or not pbkdf2_sha256.verify(password, stored_hash):
             raise InvalidCredentials("Invalid credentials.")
 
-        token_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
+        token_payload = {
+            "user": username, 
+            "iat": datetime.now(timezone.utc).timestamp()
+        }
         token = jwt.encode(token_payload, jwt_secret, algorithm="HS256")
 
-        safety.active_tokens[username] = LoginToken(token=token, user=username, ip=ip, auto_login=auto_login, keep_session_until=None)
+        safety.active_tokens[token] = LoginToken(token=token, user=username, ip=ip, auto_login=auto_login, keep_session_until=None)
 
-        safety.clean_failed_requests(ip, request.url.path)
+        safety.clean_failed_requests(request, request.url.path)
 
         response = JSONResponse(content={"message": "Login successful", "username": username})
 
@@ -127,23 +155,25 @@ async def login(request: Request, safety: HTTPSafety = Depends(services.get_safe
 
     except InvalidCredentials as e:
 
-        safety.increment_failed_requests(ip, request.url.path)
+        safety.increment_failed_requests(request, request.url.path)
         logger.warning(f"Failed login from IP {ip} due to invalid credentials: {e}")
-        requests_count = safety.failed_requests.get(ip, {}).get(request.url.path).count
+        client_id = safety.get_client_identifier(request)
+        requests_count = safety.failed_requests.get(client_id, {}).get(request.url.path).count
         remaining_requests: int = safety.MAX_REQUEST_ATTEMPTS - requests_count if requests_count else safety.MAX_REQUEST_ATTEMPTS
         if remaining_requests > 0:
             return JSONResponse(status_code=401, content={"code": "INVALID_CREDENTIALS", "remaining": remaining_requests, "error": str(e)})
         else:
-            unlocked_date = safety.failed_requests.get(ip, {}).get(request.url.path).blocked_until.isoformat()
+            unlocked_date = safety.failed_requests.get(client_id, {}).get(request.url.path).blocked_until.isoformat()
             return JSONResponse(
                 status_code=429, content={"code": "IP_BLOCKED", "unlocked": unlocked_date, "error": "Too many failed attempts. Try again later."}
             )
 
     except Exception as e:
 
-        safety.increment_failed_requests(ip, request.url.path)
+        safety.increment_failed_requests(request, request.url.path)
         logger.warning(f"Failed login from IP {ip} due to server error: {e}")
-        requests_count = safety.failed_requests.get(ip, {}).get(request.url.path).count
+        client_id = safety.get_client_identifier(request)
+        requests_count = safety.failed_requests.get(client_id, {}).get(request.url.path).count
         remaining_requests: int = safety.MAX_REQUEST_ATTEMPTS - requests_count if requests_count else safety.MAX_REQUEST_ATTEMPTS
         return JSONResponse(status_code=500, content={"code": "UNKNOWN_ERROR", "remaining": remaining_requests, "error": str(e)})
 
@@ -168,9 +198,18 @@ async def logout(request: Request, authorization: str = Header(None), safety: HT
     logger = LoggerManager.get_logger(__name__)
 
     try:
+        # Get current token from request
+        current_token = None
+        if authorization and authorization.startswith("Bearer "):
+            current_token = authorization.split(" ")[1]
+        else:
+            current_token = request.cookies.get("token")
+            
+        if not current_token:
+            raise ValueError("No token found")
 
         username = safety.check_authorization_token(authorization, request)
-        del safety.active_tokens[username]
+        del safety.active_tokens[current_token]
 
         response = JSONResponse(content={"message": "Logout sucessfull"})
         response.delete_cookie("token")
@@ -251,7 +290,7 @@ async def change_password(request: Request, authorization: str = Header(None), s
     ip = request.client.host
 
     try:
-        if safety.is_blocked(ip, request.url.path):
+        if safety.is_blocked(request, request.url.path):
             return JSONResponse(status_code=400, content={"error": "Too many failed attempts. Try again later."})
 
         # Validate token and get username from it
@@ -294,10 +333,10 @@ async def change_password(request: Request, authorization: str = Header(None), s
         with open(safety.USER_CONFIG_PATH, "w") as file:
             json.dump(config, file, indent=4)
 
-        safety.clean_failed_requests(ip, request.url.path)
+        safety.clean_failed_requests(request, request.url.path)
         return JSONResponse(content={"message": "Password changed successfully."})
 
     except Exception as e:
-        safety.increment_failed_requests(ip, request.url.path)
+        safety.increment_failed_requests(request, request.url.path)
         logger.warning(f"Failed password change attempt from IP {ip}: {e}")
         return JSONResponse(status_code=400, content={"error": str(e)})

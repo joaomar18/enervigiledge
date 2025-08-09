@@ -87,9 +87,11 @@ class HTTPSafety:
         USER_CONFIG_PATH (str): Path to the user configuration JSON file containing hashed credentials and the JWT secret.
         MAX_REQUEST_ATTEMPTS (int): Maximum number of failed attempts allowed before an IP is blocked for an endpoint.
         BLOCK_TIME (timedelta): Duration an IP remains blocked after exceeding the failed request limit.
-        failed_requests (Dict[str, Dict[str, RequestsSafety]]): Tracks failed attempts per IP and endpoint.
-        active_tokens (Dict[str, LoginToken]): Stores active JWT tokens per username, including session metadata like IP,
-                                               auto-login status, and keep-alive timestamp.
+        failed_requests (Dict[str, Dict[str, RequestsSafety]]): Tracks failed attempts per client identifier and endpoint.
+                                                                Client identifier can be JWT token (for authenticated requests)
+                                                                or IP+User-Agent hash (for unauthenticated requests).
+        active_tokens (Dict[str, LoginToken]): Stores active JWT tokens by token value, including session metadata like IP,
+                                               auto-login status, and keep-alive timestamp. Each token represents a unique session.
     """
 
     USER_CONFIG_PATH = "user_config.json"  # Path to user/password file
@@ -116,6 +118,36 @@ class HTTPSafety:
         """
 
         return bool(password) and len(password.strip()) >= 5
+
+    def get_client_identifier(self, request: Request) -> str:
+        """
+        Get a unique identifier for the client making the request.
+        
+        For authenticated requests, uses the JWT token.
+        For unauthenticated requests, uses a hash of IP + User-Agent.
+        
+        Args:
+            request: FastAPI request object
+            
+        Returns:
+            str: Unique client identifier
+        """
+        # Try to get JWT token first
+        token = None
+        authorization = request.headers.get("authorization")
+        if authorization and authorization.startswith("Bearer "):
+            token = authorization.split(" ")[1]
+        else:
+            token = request.cookies.get("token")
+            
+        if token and token in self.active_tokens:
+            return token
+        
+        # Fall back to IP + User-Agent fingerprint for unauthenticated requests
+        ip = request.client.host
+        user_agent = request.headers.get("user-agent", "")
+        fingerprint = f"{ip}:{hash(user_agent)}"
+        return fingerprint
 
     def check_authorization_token(self, authorization: Optional[str], request: Optional[Request]) -> str:
         """
@@ -160,29 +192,32 @@ class HTTPSafety:
         payload: Dict[str, Any] = jwt.decode(token, jwt_secret, algorithms=["HS256"])
         username = payload.get("user")
 
-        if self.active_tokens.get(username).token != token or self.active_tokens.get(username).user != username:
+        # Check if token exists in active tokens and matches the user
+        stored_token = self.active_tokens.get(token)
+        if not stored_token or stored_token.token != token or stored_token.user != username:
             raise ValueError("Token is invalid or session expired")
 
         return username
 
-    def is_blocked(self, ip: str, endpoint: str) -> bool:
+    def is_blocked(self, request: Request, endpoint: str) -> bool:
         """
-        Checks whether the given IP address is currently blocked for a specific endpoint
-        due to too many failed login attempts.
+        Checks whether the given client is currently blocked for a specific endpoint
+        due to too many failed attempts.
 
-        If the block duration has expired or the last attempt was too long ago, the IP
-        entry is removed, and the IP is considered unblocked.
+        If the block duration has expired or the last attempt was too long ago, the client
+        entry is removed, and the client is considered unblocked.
 
         Args:
-            ip (str): The IP address to check.
-            endpoint (str): The name of the endpoint being accessed.
+            request: FastAPI request object to identify the client
+            endpoint: The name of the endpoint being accessed.
 
         Returns:
-            bool: True if the IP is currently blocked for the given endpoint, False otherwise.
+            bool: True if the client is currently blocked for the given endpoint, False otherwise.
         """
-
-        ip_attempts = self.failed_requests.get(ip, {})
-        attempt: Optional[RequestsSafety] = ip_attempts.get(endpoint)
+        
+        client_id = self.get_client_identifier(request)
+        client_attempts = self.failed_requests.get(client_id, {})
+        attempt: Optional[RequestsSafety] = client_attempts.get(endpoint)
 
         if not attempt:
             return False
@@ -193,47 +228,50 @@ class HTTPSafety:
             return True
 
         if attempt.last_attempt_time and now - attempt.last_attempt_time > HTTPSafety.BLOCK_TIME:
-            self.clean_failed_requests(ip, endpoint)
+            self.clean_failed_requests(request, endpoint)
 
         return False
 
-    def clean_failed_requests(self, ip: str, endpoint: str) -> None:
+    def clean_failed_requests(self, request: Request, endpoint: str) -> None:
         """
-        Removes tracking information related to a specific IP and endpoint combination.
+        Removes tracking information related to a specific client and endpoint combination.
 
-        This method deletes the stored `RequestsSafety` object associated with the provided IP and endpoint.
-        If the IP has no other endpoints being tracked afterward, it also removes the IP entry entirely.
+        This method deletes the stored `RequestsSafety` object associated with the provided client and endpoint.
+        If the client has no other endpoints being tracked afterward, it also removes the client entry entirely.
 
         Args:
-            ip (str): The IP address whose record should be cleared.
+            request: FastAPI request object to identify the client
             endpoint (str): The endpoint path for which the tracking data should be removed.
         """
+        
+        client_id = self.get_client_identifier(request)
 
-        if ip in self.failed_requests and endpoint in self.failed_requests[ip]:
-            del self.failed_requests[ip][endpoint]
+        if client_id in self.failed_requests and endpoint in self.failed_requests[client_id]:
+            del self.failed_requests[client_id][endpoint]
 
-        if ip in self.failed_requests and not self.failed_requests[ip]:
-            del self.failed_requests[ip]
+        if client_id in self.failed_requests and not self.failed_requests[client_id]:
+            del self.failed_requests[client_id]
 
-    def increment_failed_requests(self, ip: str, endpoint: str) -> None:
+    def increment_failed_requests(self, request: Request, endpoint: str) -> None:
         """
-        Increments the failed request counter for a given IP and endpoint.
+        Increments the failed request counter for a given client and endpoint.
 
         If the previous block has expired, the counter is reset. When the failed count
-        reaches the maximum allowed attempts, the IP is temporarily blocked from accessing
+        reaches the maximum allowed attempts, the client is temporarily blocked from accessing
         the specified endpoint.
 
         Args:
-            ip (str): The client's IP address.
+            request: FastAPI request object to identify the client
             endpoint (str): The name of the endpoint being accessed.
         """
 
         logger = LoggerManager.get_logger(__name__)
         now = datetime.now(timezone.utc)
+        
+        client_id = self.get_client_identifier(request)
+        client_record: Dict[str, RequestsSafety] = self.failed_requests.setdefault(client_id, {})
 
-        ip_record: Dict[str, RequestsSafety] = self.failed_requests.setdefault(ip, {})
-
-        record: RequestsSafety = ip_record.get(endpoint, RequestsSafety(endpoint, 0, None, None))
+        record: RequestsSafety = client_record.get(endpoint, RequestsSafety(endpoint, 0, None, None))
 
         # Reset record if block expired
         if record.blocked_until and now >= record.blocked_until:
@@ -244,6 +282,6 @@ class HTTPSafety:
 
         if record.count >= HTTPSafety.MAX_REQUEST_ATTEMPTS:
             record.blocked_until = now + HTTPSafety.BLOCK_TIME
-            logger.warning(f"IP {ip} blocked from {endpoint} for {HTTPSafety.BLOCK_TIME}.")
+            logger.warning(f"Client {client_id} blocked from {endpoint} for {HTTPSafety.BLOCK_TIME}.")
 
-        ip_record[endpoint] = record
+        client_record[endpoint] = record
