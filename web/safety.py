@@ -1,18 +1,23 @@
 ###########EXTERNAL IMPORTS############
 
+import os
 import logging
 import json
 from fastapi import Request
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Tuple
 from dataclasses import dataclass
 import jwt
+import secrets
+from passlib.hash import pbkdf2_sha256
 
 #######################################
 
 #############LOCAL IMPORTS#############
 
 from util.debug import LoggerManager
+from web.exceptions import *
+import web.validation as validation
 
 #######################################
 
@@ -102,6 +107,102 @@ class HTTPSafety:
         self.failed_requests: Dict[str, Dict[str, RequestsSafety]] = {}
         self.active_tokens: Dict[str, LoginToken] = {}
 
+    async def create_user_configuration(self, request: Request) -> None:
+        """
+        Creates initial user configuration file with username and password.
+
+        Args:
+            request: Request with JSON payload containing username and password
+
+        Returns:
+            None
+
+        Raises:
+            UserConfigurationExists: User configuration file already exists
+            ValueError: Missing username/password in request payload
+            InvalidCredentials: Password doesn't meet validation requirements
+        """
+        
+        if os.path.exists(HTTPSafety.USER_CONFIG_PATH):
+            raise UserConfigurationExists("User configuration file already exists")
+        
+        payload: Dict[str, Any] = await request.json()  # request payload
+
+        username: str = payload.get("username")
+        password: str = payload.get("password")
+
+        if not username or not password:
+            raise ValueError(f"Username and password required. Got username: {username} and password: {password}")
+        
+        
+        if not validation.validate_password(password):
+            raise InvalidCredentials("Password must be at least 5 characters and not just whitespace.")
+        
+        hashed_password = pbkdf2_sha256.hash(password)
+        jwt_secret = secrets.token_hex(32)
+
+        config = {"username": username, "password_hash": hashed_password, "jwt_secret": jwt_secret}
+
+        with open(HTTPSafety.USER_CONFIG_PATH, "w") as file:
+            json.dump(config, file, indent=4)
+
+
+    async def change_user_password(self, request: Request) -> None:
+        """
+        Updates user password after validating current credentials.
+
+        Args:
+            request: Request with JSON payload containing username, old_password, new_password, confirm_new_password
+
+        Returns:
+            None
+
+        Raises:
+            ValueError: Missing required fields, password confirmation mismatch, invalid username, or incorrect old password
+            InvalidCredentials: New password doesn't meet validation requirements
+            FileNotFoundError: User config file missing
+        """
+
+        payload: Dict[str, str] = await request.json()
+        username = payload.get("username")
+        old_password = payload.get("old_password")
+        new_password = payload.get("new_password")
+        confirm_new_password = payload.get("confirm_new_password")
+
+        if not all([username, old_password, new_password, confirm_new_password]):
+            raise ValueError("All fields are required")
+
+        if new_password != confirm_new_password:
+            raise ValueError("New password confirmation does not match")
+
+        if not validation.validate_password(new_password):
+            raise InvalidCredentials("Password must be at least 5 characters and not just whitespace.")
+
+        # Checks if configuration file exists
+        if not os.path.exists(HTTPSafety.USER_CONFIG_PATH):
+            raise FileNotFoundError("User configuration file does not exist.")
+
+        # Obtain user configuration
+        with open(HTTPSafety.USER_CONFIG_PATH, "r") as file:
+            config: Dict[str, Any] = json.load(file)
+
+        stored_username = config.get("username")
+        stored_hash = config.get("password_hash")
+
+        if username != stored_username:
+            raise ValueError("Invalid username")
+
+        if not pbkdf2_sha256.verify(old_password, stored_hash):
+            raise ValueError("Old password is incorrect")
+
+        # Generate new hash and update config
+        new_hash = pbkdf2_sha256.hash(new_password)
+        config["password_hash"] = new_hash
+
+        with open(HTTPSafety.USER_CONFIG_PATH, "w") as file:
+            json.dump(config, file, indent=4)
+
+
     def get_client_identifier(self, request: Request) -> str:
         """
         Get a unique identifier for the client making the request.
@@ -132,75 +233,162 @@ class HTTPSafety:
         fingerprint = f"{ip}:{hash(user_agent)}"
         return fingerprint
 
-    def check_authorization_token(self, authorization: Optional[str], request: Optional[Request]) -> str:
+    async def create_jwt_token(self, request: Request) -> Tuple[str, str]:
         """
-        Validates and verifies a JWT token for user authentication.
-
-        This method performs token extraction and verification in the following order:
-            1. Attempts to extract the token from the 'Authorization' header using the Bearer scheme.
-            2. If the header is missing or invalid, attempts to retrieve the token from request cookies.
-            3. Loads the JWT secret key from the local user configuration file.
-            4. Decodes and verifies the JWT token using the secret key.
-            5. Ensures that the token matches the one stored in memory for the authenticated user.
-            6. Confirms that the session's username matches the one encoded in the token.
-
-        If all checks pass, the method returns the authenticated username.
+        Creates JWT token after validating user credentials from request payload.
 
         Args:
-            authorization (Optional[str]): The value of the 'Authorization' header (format: "Bearer <token>").
-            request (Optional[Request]): The incoming FastAPI request object, used to access cookies if needed.
+            request: Request with JSON payload containing username, password, auto_login
 
         Returns:
-            str: The username embedded in the validated JWT token.
+            Tuple[str, str]: (username, jwt_token)
 
         Raises:
-            ValueError: If no token is found, the token is invalid or expired,
-                        or the session does not match the stored user and token.
+            ValueError: Missing username/password
+            FileNotFoundError: User config file missing
+            InvalidCredentials: Invalid username/password
         """
 
-        token = None
+        payload: Dict[str, Any] = await request.json()  # request payload
 
-        if authorization and authorization.startswith("Bearer "):
-            token = authorization.split(" ")[1]
+        username: str = payload.get("username")
+        password: str = payload.get("password")
+        auto_login: bool = payload.get("auto_login", False)
+
+        # Check if username and password exist
+        if not username or not password:
+            raise ValueError(f"Username and password required. Got username: {username} and password: {password}")
+
+        # Checks if configuration file exists
+        if not os.path.exists(HTTPSafety.USER_CONFIG_PATH):
+            raise FileNotFoundError("User configuration file does not exist.")
+
+        # Obtain user configuration
+        with open(HTTPSafety.USER_CONFIG_PATH, "r") as file:
+            config: Dict[str, Any] = json.load(file)
+
+        # Verify credentials
+        if username != config.get("username") or not pbkdf2_sha256.verify(password, config.get("password_hash")) or not validation.validate_password(password):
+            raise InvalidCredentials("Invalid credentials")
+
+        # Create token and return it
+        token_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
+        token = jwt.encode(token_payload, config["jwt_secret"], algorithm="HS256")
+        self.active_tokens[token] = LoginToken(token=token, user=username, ip=request.client.host, auto_login=auto_login, keep_session_until=None)
+        return (username, token)
+
+    async def update_jwt_token(self, request: Request) -> Tuple[str, str]:
+        """
+        Refreshes JWT token while preserving session settings.
+
+        Args:
+            request: Request with current token in header or cookies
+
+        Returns:
+            Tuple[str, str]: (username, new_jwt_token)
+
+        Raises:
+            TokenNotInRequest: No token found (from check_authorization_token)
+            TokenInRequestInvalid: Invalid token or session (from check_authorization_token)
+            FileNotFoundError: User config file missing
+            ValueError: Invalid username in token
+        """
+
+        username, token, jwt_secret = self.check_authorization_token(request)
+        if not username:
+            raise ValueError(f"Username stored in security token is not valid. Got username: {username}")
+
+        new_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
+        new_token = jwt.encode(new_payload, jwt_secret, algorithm="HS256")
+
+        # Get auto_login status from current session and update token
+        current_auto_login = self.active_tokens[token].auto_login
+        del self.active_tokens[token]
+        self.active_tokens[new_token] = LoginToken(
+            token=new_token, user=username, ip=request.client.host, auto_login=current_auto_login, keep_session_until=None
+        )
+        return (username, new_token)
+    
+    async def delete_jwt_token(self, request: Request) -> None:
+        """
+        Invalidates JWT token and removes it from active sessions.
+
+        Raises:
+            TokenNotInRequest: No token found in request
+            TokenInRequestInvalid: Invalid token format or expired
+            ValueError: Username in token is invalid
+        """
+
+        username, token, jwt_secret = self.check_authorization_token(request)
+        if not username:
+            raise ValueError(f"Username stored in security token is not valid. Got username: {username}")
+        
+        del self.active_tokens[token]
+
+    def check_authorization_token(self, request: Optional[Request]) -> Tuple[str, str, str]:
+        """
+        Validates JWT token and returns authentication details.
+
+        Args:
+            request: Request containing token in Authorization header or cookies
+
+        Returns:
+            Tuple[str, str, str]: (username, jwt_token, jwt_secret)
+
+        Raises:
+            TokenNotInRequest: No token found or token expired
+            TokenInRequestInvalid: Invalid token or session mismatch
+            FileNotFoundError: User config file missing
+        """
+
+        token: str | None = None
+        authorization = request.headers.get("authorization")
+
+        if authorization:
+            if authorization.startswith("Bearer "):
+                token = authorization.split(" ")[1]
         else:
             token = request.cookies.get("token")
 
         if not token:
-            raise ValueError("No valid token found")
+            raise TokenNotInRequest("No security token found")
 
+        # Checks if configuration file exists
+        if not os.path.exists(HTTPSafety.USER_CONFIG_PATH):
+            raise FileNotFoundError("User configuration file does not exist.")
+
+        # Obtain user configuration
         with open(HTTPSafety.USER_CONFIG_PATH, "r") as file:
             config: Dict[str, Any] = json.load(file)
 
-        jwt_secret = config.get("jwt_secret")
-        payload: Dict[str, Any] = jwt.decode(token, jwt_secret, algorithms=["HS256"])
-        username = payload.get("user")
+        payload: Dict[str, Any] = jwt.decode(token, config["jwt_secret"], algorithms=["HS256"])
+        username = payload["user"]
 
-        # Check if token exists in active tokens and matches the user
+        # Check if token exists in active tokens and matches the token in the request
         stored_token = self.active_tokens.get(token)
-        if not stored_token or stored_token.token != token or stored_token.user != username:
-            raise ValueError("Token is invalid or session expired")
 
-        return username
+        if not stored_token or stored_token.token != token:
+            raise TokenNotInRequest("Security token expired or not present in the active tokens")
 
-    def is_blocked(self, request: Request, endpoint: str) -> bool:
+        if stored_token.user != username or stored_token.ip != request.client.host:
+            raise TokenInRequestInvalid("Token is invalid or session expired")
+
+        return (username, token, str(config["jwt_secret"]))
+
+    def is_blocked(self, request: Request) -> bool:
         """
-        Checks whether the given client is currently blocked for a specific endpoint
-        due to too many failed attempts.
-
-        If the block duration has expired or the last attempt was too long ago, the client
-        entry is removed, and the client is considered unblocked.
+        Checks if client is currently blocked for an endpoint due to failed attempts.
 
         Args:
-            request: FastAPI request object to identify the client
-            endpoint: The name of the endpoint being accessed.
+            request: Request to identify the client
 
         Returns:
-            bool: True if the client is currently blocked for the given endpoint, False otherwise.
+            bool: True if client is blocked, False otherwise
         """
 
         client_id = self.get_client_identifier(request)
         client_attempts = self.failed_requests.get(client_id, {})
-        attempt: Optional[RequestsSafety] = client_attempts.get(endpoint)
+        attempt: Optional[RequestsSafety] = client_attempts.get(request.url.path)
 
         if not attempt:
             return False
@@ -211,20 +399,30 @@ class HTTPSafety:
             return True
 
         if attempt.last_attempt_time and now - attempt.last_attempt_time > HTTPSafety.BLOCK_TIME:
-            self.clean_failed_requests(request, endpoint)
+            self.clean_failed_requests(request, request.url.path)
 
         return False
 
+    def get_unlocked_date(self, request: Request) -> str:
+        """Returns ISO date when client will be unblocked for current endpoint."""
+
+        return self.failed_requests.get(self.get_client_identifier(request), {}).get(request.url.path).blocked_until.isoformat()
+
+    def get_remaining_requests(self, request: Request) -> str:
+        """Returns number of remaining requests before client gets blocked."""
+
+        client_id = self.get_client_identifier(request)
+        requests_count = self.failed_requests.get(client_id, {}).get(request.url.path).count
+        remaining_requests: int = HTTPSafety.MAX_REQUEST_ATTEMPTS - requests_count if requests_count else HTTPSafety.MAX_REQUEST_ATTEMPTS
+        return remaining_requests
+
     def clean_failed_requests(self, request: Request, endpoint: str) -> None:
         """
-        Removes tracking information related to a specific client and endpoint combination.
-
-        This method deletes the stored `RequestsSafety` object associated with the provided client and endpoint.
-        If the client has no other endpoints being tracked afterward, it also removes the client entry entirely.
+        Removes failed request tracking for a client and endpoint.
 
         Args:
-            request: FastAPI request object to identify the client
-            endpoint (str): The endpoint path for which the tracking data should be removed.
+            request: Request to identify the client
+            endpoint: Endpoint path to clear tracking for
         """
 
         client_id = self.get_client_identifier(request)
@@ -237,15 +435,11 @@ class HTTPSafety:
 
     def increment_failed_requests(self, request: Request, endpoint: str) -> None:
         """
-        Increments the failed request counter for a given client and endpoint.
-
-        If the previous block has expired, the counter is reset. When the failed count
-        reaches the maximum allowed attempts, the client is temporarily blocked from accessing
-        the specified endpoint.
+        Increments failed request counter and blocks client if limit exceeded.
 
         Args:
-            request: FastAPI request object to identify the client
-            endpoint (str): The name of the endpoint being accessed.
+            request: Request to identify the client
+            endpoint: Endpoint path for tracking
         """
 
         logger = LoggerManager.get_logger(__name__)
