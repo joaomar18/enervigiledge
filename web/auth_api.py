@@ -8,7 +8,6 @@ from fastapi.responses import JSONResponse
 #############LOCAL IMPORTS#############
 
 from web.dependencies import services
-from web.exceptions import *
 from web.api_decorator import auth_endpoint, AuthConfigs
 from web.safety import HTTPSafety
 

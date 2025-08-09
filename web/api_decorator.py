@@ -10,13 +10,14 @@ from fastapi.responses import JSONResponse
 
 #############LOCAL IMPORTS#############
 
+from web.exceptions import TokenNotInRequest, TokenInRequestInvalid, UserConfigurationExists, InvalidCredentials
 from web.safety import HTTPSafety
 from util.debug import LoggerManager
 
 #######################################
 
-DEFAULT_INCREMENT_EXCEPTIONS = ['TokenInRequestInvalid', 'FileNotFoundError']  # Default exceptions that should increment failed requests
-DEFAULT_NO_INCREMENT_EXCEPTIONS = ['TokenNotInRequest']  # Default exceptions that should not increment failed requests
+DEFAULT_INCREMENT_EXCEPTIONS = [TokenInRequestInvalid, FileNotFoundError]  # Default exceptions that should increment failed requests
+DEFAULT_NO_INCREMENT_EXCEPTIONS = [TokenNotInRequest]  # Default exceptions that should not increment failed requests
 
 
 @dataclass
@@ -31,8 +32,8 @@ class APIMethodConfig:
     """
 
     requires_auth: bool = True
-    increment_exceptions: List[str] = field(default_factory=list)  # Exception types that increment failed requests
-    no_increment_exceptions: List[str] = field(default_factory=list)  # Exception types that don't increment
+    increment_exceptions: List[Exception] = field(default_factory=list)  # Exception types that increment failed requests
+    no_increment_exceptions: List[Exception] = field(default_factory=list)  # Exception types that don't increment
 
 
 def auth_endpoint(config: APIMethodConfig):
@@ -40,8 +41,8 @@ def auth_endpoint(config: APIMethodConfig):
     Decorator for authentication endpoints with proper exception handling.
 
     Args:
-        increment_exceptions: Exception names that should increment failed requests
-        no_increment_exceptions: Exception names that should NOT increment failed requests
+        increment_exceptions: Exception classes that should increment failed requests
+        no_increment_exceptions: Exception classes that should NOT increment failed requests
         requires_auth: Whether endpoint requires existing authentication
 
     Returns:
@@ -82,11 +83,11 @@ def auth_endpoint(config: APIMethodConfig):
                 )  # Merge default no-increment exceptions with config-specific ones
 
                 # Handle non-incrementing exceptions
-                if exception_name in all_no_increment_exceptions:
+                if any(isinstance(e, exc) for exc in all_no_increment_exceptions):
                     return JSONResponse(status_code=401, content={"error": str(e)})
 
                 # Handle incrementing exceptions
-                if exception_name in all_increment_exceptions:
+                if any(isinstance(e, exc) for exc in all_increment_exceptions):
                     logger.warning(f"Failed {request.url.path} API due to exception {exception_name} from IP: {request.client.host} due to error: {str(e)}")
                     safety.increment_failed_requests(request, request.url.path)
 
@@ -112,9 +113,9 @@ class AuthConfigs:
     """Simple presets for common auth endpoint patterns."""
 
     # Standard login endpoint
-    LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=['ValueError', 'InvalidCredentials'])
-    AUTO_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=['ValueError'])
-    LOGOUT = APIMethodConfig(increment_exceptions=['ValueError'])
-    CREATE_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=['ValueError', 'UserConfigurationExists', 'InvalidCredentials'])
-    CHANGE_PASSWORD = APIMethodConfig(increment_exceptions=['ValueError', 'InvalidCredentials'])
-    PROTECTED = APIMethodConfig(increment_exceptions=['ValueError'])
+    LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[ValueError, InvalidCredentials])
+    AUTO_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[ValueError])
+    LOGOUT = APIMethodConfig(increment_exceptions=[ValueError])
+    CREATE_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[ValueError, UserConfigurationExists, InvalidCredentials])
+    CHANGE_PASSWORD = APIMethodConfig(increment_exceptions=[ValueError, InvalidCredentials])
+    PROTECTED = APIMethodConfig(increment_exceptions=[ValueError])

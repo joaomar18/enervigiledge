@@ -1,8 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
-from fastapi import APIRouter, Request, Header, Depends
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import JSONResponse
-from typing import Dict, Any
 from datetime import datetime
 
 #######################################
@@ -12,7 +11,6 @@ from datetime import datetime
 from web.safety import HTTPSafety
 from web.dependencies import services
 from web.api_decorator import auth_endpoint, AuthConfigs
-from util.debug import LoggerManager
 from controller.manager import DeviceManager
 from db.timedb import TimeDBClient
 
@@ -28,9 +26,8 @@ async def get_nodes_state(
 ) -> JSONResponse:
     """Retrieves current state of device nodes with optional filtering."""
 
-    data = await request.json()
-    id_raw = data.get("id")
-    filter_str = data.get("filter")  # Optional
+    id_raw = request.query_params.get("id")
+    filter_str = request.query_params.get("filter")  # Optional
 
     if not id_raw:
         raise ValueError("Missing required query parameters: 'id'")
@@ -93,12 +90,10 @@ async def get_logs_from_node(
 ) -> JSONResponse:
     """Retrieves historical logs from a specific device node within time range."""
 
-    data = await request.json()
-
-    id_raw = data.get("id")
-    node_name = data.get("node")
-    start_time_str = data.get("start_time")
-    end_time_str = data.get("end_time")
+    id_raw = request.query_params.get("id")
+    node_name = request.query_params.get("node")
+    start_time_str = request.query_params.get("start_time")
+    end_time_str = request.query_params.get("end_time")
 
     if not all([id_raw, node_name]):
         raise ValueError("Missing one or more required fields: 'id', 'node'")

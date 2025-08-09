@@ -16,21 +16,12 @@ from passlib.hash import pbkdf2_sha256
 #############LOCAL IMPORTS#############
 
 from util.debug import LoggerManager
-from web.exceptions import *
+from web.exceptions import TokenNotInRequest, TokenInRequestInvalid, UserConfigurationExists, InvalidCredentials
 import web.validation as validation
 
 #######################################
 
-
-###############EXCEPTIONS##############
-
 LoggerManager.get_logger(__name__).setLevel(logging.DEBUG)
-
-
-class InvalidCredentials(Exception):
-    """Raised when credentials (username and password) are invalid (not recognized)."""
-
-    pass
 
 
 @dataclass
@@ -122,10 +113,10 @@ class HTTPSafety:
             ValueError: Missing username/password in request payload
             InvalidCredentials: Password doesn't meet validation requirements
         """
-        
+
         if os.path.exists(HTTPSafety.USER_CONFIG_PATH):
             raise UserConfigurationExists("User configuration file already exists")
-        
+
         payload: Dict[str, Any] = await request.json()  # request payload
 
         username: str = payload.get("username")
@@ -133,11 +124,10 @@ class HTTPSafety:
 
         if not username or not password:
             raise ValueError(f"Username and password required. Got username: {username} and password: {password}")
-        
-        
+
         if not validation.validate_password(password):
             raise InvalidCredentials("Password must be at least 5 characters and not just whitespace.")
-        
+
         hashed_password = pbkdf2_sha256.hash(password)
         jwt_secret = secrets.token_hex(32)
 
@@ -145,7 +135,6 @@ class HTTPSafety:
 
         with open(HTTPSafety.USER_CONFIG_PATH, "w") as file:
             json.dump(config, file, indent=4)
-
 
     async def change_user_password(self, request: Request) -> None:
         """
@@ -201,7 +190,6 @@ class HTTPSafety:
 
         with open(HTTPSafety.USER_CONFIG_PATH, "w") as file:
             json.dump(config, file, indent=4)
-
 
     def get_client_identifier(self, request: Request) -> str:
         """
@@ -308,7 +296,7 @@ class HTTPSafety:
             token=new_token, user=username, ip=request.client.host, auto_login=current_auto_login, keep_session_until=None
         )
         return (username, new_token)
-    
+
     async def delete_jwt_token(self, request: Request) -> None:
         """
         Invalidates JWT token and removes it from active sessions.
@@ -322,7 +310,7 @@ class HTTPSafety:
         username, token, jwt_secret = self.check_authorization_token(request)
         if not username:
             raise ValueError(f"Username stored in security token is not valid. Got username: {username}")
-        
+
         del self.active_tokens[token]
 
     def check_authorization_token(self, request: Optional[Request]) -> Tuple[str, str, str]:

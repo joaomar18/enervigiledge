@@ -21,3 +21,9 @@ class TokenInRequestInvalid(Exception):
 
 class UserConfigurationExists(Exception):
     """Raised when user configuration is trying to be created but the file already exists"""
+
+
+class InvalidCredentials(Exception):
+    """Raised when credentials (username and password) are invalid (not recognized)."""
+
+    pass
