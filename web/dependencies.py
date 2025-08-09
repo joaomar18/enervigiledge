@@ -1,34 +1,6 @@
-"""
-Dependency injection module for FastAPI HTTP server components.
-
-This module provides a centralized dependency injection container for managing
-service layer components used throughout the FastAPI application. It implements
-the dependency injection pattern to ensure clean separation of concerns and
-facilitate testing.
-
-Classes:
-    HTTPDependencies: Main dependency injection container for HTTP server services
-
-Module Variables:
-    services: Global HTTPDependencies instance for application-wide dependency access
-
-Usage:
-    # In server initialization
-    from web.dependencies import services
-    services.set_dependencies(safety, device_manager, db, timedb)
-
-    # In FastAPI route handlers
-    from fastapi import Depends
-
-    @router.post("/endpoint")
-    async def handler(safety: HTTPSafety = Depends(services.get_safety)):
-        ...
-"""
-
 ###########EXTERNAL IMPORTS############
 
-from dataclasses import dataclass, asdict
-from typing import Dict, Any, Optional
+from typing import Optional
 
 #######################################
 
