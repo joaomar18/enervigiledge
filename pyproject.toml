@@ -18,8 +18,20 @@ dependencies = [
     "pyjwt",
     "passlib",
     "pillow",
-    "cryptography"
+    "cryptography",
+    "colorama"
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx"
 ]
 
 [project.scripts]
 enervigiledge = "main:async_main"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

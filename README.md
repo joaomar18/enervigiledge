@@ -28,6 +28,20 @@ MQTT_PASSWORD_KEY=...
 
 Adjust web server and database options in the source files if necessary.
 
+## Testing
+
+Execute the test suite with:
+
+```bash
+pytest
+```
+
+or
+
+```bash
+python -m pytest
+```
+
 ## Contributing
 
 Contributions are welcome!
