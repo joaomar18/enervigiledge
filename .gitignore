@@ -3,4 +3,6 @@ __pycache__/
 user_config.json
 venv
 config.db
+config.db-shm
+config.db-wal
 pyproject.tomlvenv/
