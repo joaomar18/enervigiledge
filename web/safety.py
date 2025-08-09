@@ -102,33 +102,16 @@ class HTTPSafety:
         self.failed_requests: Dict[str, Dict[str, RequestsSafety]] = {}
         self.active_tokens: Dict[str, LoginToken] = {}
 
-    def validate_password(self, password: str) -> bool:
-        """
-        Validates whether a password meets basic security requirements.
-
-        Criteria:
-            - Must be at least 5 characters long.
-            - Cannot consist of only whitespace.
-
-        Args:
-            password (str): The password to validate.
-
-        Returns:
-            bool: True if the password is valid, False otherwise.
-        """
-
-        return bool(password) and len(password.strip()) >= 5
-
     def get_client_identifier(self, request: Request) -> str:
         """
         Get a unique identifier for the client making the request.
-        
+
         For authenticated requests, uses the JWT token.
         For unauthenticated requests, uses a hash of IP + User-Agent.
-        
+
         Args:
             request: FastAPI request object
-            
+
         Returns:
             str: Unique client identifier
         """
@@ -139,10 +122,10 @@ class HTTPSafety:
             token = authorization.split(" ")[1]
         else:
             token = request.cookies.get("token")
-            
+
         if token and token in self.active_tokens:
             return token
-        
+
         # Fall back to IP + User-Agent fingerprint for unauthenticated requests
         ip = request.client.host
         user_agent = request.headers.get("user-agent", "")
@@ -214,7 +197,7 @@ class HTTPSafety:
         Returns:
             bool: True if the client is currently blocked for the given endpoint, False otherwise.
         """
-        
+
         client_id = self.get_client_identifier(request)
         client_attempts = self.failed_requests.get(client_id, {})
         attempt: Optional[RequestsSafety] = client_attempts.get(endpoint)
@@ -243,7 +226,7 @@ class HTTPSafety:
             request: FastAPI request object to identify the client
             endpoint (str): The endpoint path for which the tracking data should be removed.
         """
-        
+
         client_id = self.get_client_identifier(request)
 
         if client_id in self.failed_requests and endpoint in self.failed_requests[client_id]:
@@ -267,7 +250,7 @@ class HTTPSafety:
 
         logger = LoggerManager.get_logger(__name__)
         now = datetime.now(timezone.utc)
-        
+
         client_id = self.get_client_identifier(request)
         client_record: Dict[str, RequestsSafety] = self.failed_requests.setdefault(client_id, {})
 

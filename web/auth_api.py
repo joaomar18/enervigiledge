@@ -15,6 +15,7 @@ from passlib.hash import pbkdf2_sha256
 #############LOCAL IMPORTS#############
 
 from web.dependencies import services
+import web.validation as validation
 from web.safety import InvalidCredentials, HTTPSafety, LoginToken
 from util.debug import LoggerManager
 
@@ -250,7 +251,7 @@ async def create_login(request: Request, safety: HTTPSafety = Depends(services.g
         if not username or not password:
             raise ValueError("Username and password required")
 
-        if not safety.validate_password(password):
+        if not validation.validate_password(password):
             raise ValueError("Password must be at least 5 characters and not just whitespace.")
 
         hashed_password = pbkdf2_sha256.hash(password)
@@ -311,7 +312,7 @@ async def change_password(request: Request, authorization: str = Header(None), s
         if old_password != confirm_old_password:
             raise ValueError("Old password confirmation does not match")
 
-        if not safety.validate_password(new_password):
+        if not validation.validate_password(new_password):
             raise ValueError("Password must be at least 5 characters and not just whitespace.")
 
         with open(safety.USER_CONFIG_PATH, "r") as file:
