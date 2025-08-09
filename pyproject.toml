@@ -1,5 +1,25 @@
 [tool.black]
 line-length = 160        
 skip-string-normalization = true
-skip-magic-trailing-comma = true
 target-version = ['py311']
+
+[project]
+name = "enervigiledge"
+version = "0.1.0"
+description = "Open-source application to monitor and log data from energy devices using multiple protocols."
+authors = [
+    { name = "Enervigiledge Contributors" }
+]
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "python-dotenv",
+    "aiomqtt",
+    "pyjwt",
+    "passlib",
+    "pillow",
+    "cryptography"
+]
+
+[project.scripts]
+enervigiledge = "main:async_main"
