@@ -14,8 +14,6 @@ from controller.registry import ProtocolRegistry
 from controller.device import Device
 from controller.node import Node, NodeType
 from controller.meter import EnergyMeterOptions
-from protocol.modbus_rtu.rtu_device import ModbusRTUNode, ModbusRTUEnergyMeter, ModbusRTUOptions
-from protocol.opcua.opcua_device import OPCUANode, OPCUAEnergyMeter, OPCUAOptions
 from util.debug import LoggerManager
 
 #######################################
