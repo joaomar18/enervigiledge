@@ -9,7 +9,8 @@ from typing import Dict, Optional, Any, Tuple
 from dataclasses import dataclass
 import jwt
 import secrets
-from passlib.hash import pbkdf2_sha256
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 
 #######################################
 
@@ -88,6 +89,7 @@ class HTTPSafety:
                                                                 or IP+User-Agent hash (for unauthenticated requests).
         active_tokens (Dict[str, LoginToken]): Stores active JWT tokens by token value, including session metadata like IP,
                                                auto-login status, and keep-alive timestamp. Each token represents a unique session.
+        ph (PasswordHasher): Argon2 password hasher instance for secure password hashing and verification.
     """
 
     USER_CONFIG_PATH = "user_config.json"  # Path to user/password file
@@ -97,6 +99,7 @@ class HTTPSafety:
     def __init__(self):
         self.failed_requests: Dict[str, Dict[str, RequestsSafety]] = {}
         self.active_tokens: Dict[str, LoginToken] = {}
+        self.ph = PasswordHasher()
 
     async def create_user_configuration(self, request: Request) -> None:
         """
@@ -128,7 +131,7 @@ class HTTPSafety:
         if not validation.validate_password(password):
             raise InvalidCredentials("Password must be at least 5 characters and not just whitespace.")
 
-        hashed_password = pbkdf2_sha256.hash(password)
+        hashed_password = self.ph.hash(password)
         jwt_secret = secrets.token_hex(32)
 
         config = {"username": username, "password_hash": hashed_password, "jwt_secret": jwt_secret}
@@ -181,11 +184,13 @@ class HTTPSafety:
         if username != stored_username:
             raise ValueError("Invalid username")
 
-        if not pbkdf2_sha256.verify(old_password, stored_hash):
+        try:
+            self.ph.verify(stored_hash, old_password)
+        except VerifyMismatchError:
             raise ValueError("Old password is incorrect")
 
         # Generate new hash and update config
-        new_hash = pbkdf2_sha256.hash(new_password)
+        new_hash = self.ph.hash(new_password)
         config["password_hash"] = new_hash
 
         with open(HTTPSafety.USER_CONFIG_PATH, "w") as file:
@@ -256,7 +261,12 @@ class HTTPSafety:
             config: Dict[str, Any] = json.load(file)
 
         # Verify credentials
-        if username != config.get("username") or not pbkdf2_sha256.verify(password, config.get("password_hash")) or not validation.validate_password(password):
+        if username != config.get("username") or not validation.validate_password(password):
+            raise InvalidCredentials("Invalid credentials")
+
+        try:
+            self.ph.verify(config.get("password_hash"), password)
+        except VerifyMismatchError:
             raise InvalidCredentials("Invalid credentials")
 
         # Create token and return it
