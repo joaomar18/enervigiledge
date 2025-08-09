@@ -104,25 +104,12 @@ class ProtocolRegistry:
 
 def _modbus_rtu_node_factory(record: NodeRecord) -> Node:
     """Create a :class:`ModbusRTUNode` from a :class:`NodeRecord`."""
-
     cfg = record.config
-    node_type = NodeType(cfg["type"])
     return ModbusRTUNode(
         name=record.name,
-        type=node_type,
+        type=NodeType(cfg["type"]),
         register=cfg["register"],
-        unit=cfg.get("unit"),
-        publish=cfg.get("publish", True),
-        calculated=cfg.get("calculated", False),
-        logging=cfg.get("logging", False),
-        logging_period=cfg.get("logging_period", 15),
-        min_alarm=cfg.get("min_alarm", False),
-        max_alarm=cfg.get("max_alarm", False),
-        min_alarm_value=cfg.get("min_alarm_value"),
-        max_alarm_value=cfg.get("max_alarm_value"),
-        incremental_node=cfg.get("incremental_node"),
-        positive_incremental=cfg.get("positive_incremental"),
-        calculate_increment=cfg.get("calculate_increment"),
+        **{k: v for k, v in cfg.items() if k not in ["type", "register"]}
     )
 
 
@@ -133,25 +120,12 @@ ProtocolRegistry.register_protocol(Protocol.MODBUS_RTU, ModbusRTUEnergyMeter, Mo
 
 def _opcua_node_factory(record: NodeRecord) -> Node:
     """Create an :class:`OPCUANode` from a :class:`NodeRecord`."""
-
     cfg = record.config
-    node_type = NodeType(cfg["type"])
     return OPCUANode(
         name=record.name,
-        type=node_type,
+        type=NodeType(cfg["type"]),
         node_id=cfg["node_id"],
-        unit=cfg.get("unit"),
-        publish=cfg.get("publish", True),
-        calculated=cfg.get("calculated", False),
-        logging=cfg.get("logging", False),
-        logging_period=cfg.get("logging_period", 15),
-        min_alarm=cfg.get("min_alarm", False),
-        max_alarm=cfg.get("max_alarm", False),
-        min_alarm_value=cfg.get("min_alarm_value"),
-        max_alarm_value=cfg.get("max_alarm_value"),
-        incremental_node=cfg.get("incremental_node"),
-        positive_incremental=cfg.get("positive_incremental"),
-        calculate_increment=cfg.get("calculate_increment"),
+        **{k: v for k, v in cfg.items() if k not in ["type", "node_id"]}
     )
 
 
