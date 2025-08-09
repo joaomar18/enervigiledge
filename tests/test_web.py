@@ -3,8 +3,7 @@
 import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from passlib.hash import pbkdf2_sha256
-import pytest
+from argon2 import PasswordHasher
 
 #######################################
 
@@ -43,7 +42,7 @@ def create_app(safety, device_manager):
 
 
 def test_login_flow(tmp_path):
-    config = {"username": "user", "password_hash": pbkdf2_sha256.hash("secret"), "jwt_secret": "secretkey"}
+    config = {"username": "user", "password_hash": PasswordHasher().hash("secret"), "jwt_secret": "secretkey"}
     config_path = tmp_path / "user_config.json"
     config_path.write_text(json.dumps(config))
     HTTPSafety.USER_CONFIG_PATH = str(config_path)
@@ -57,7 +56,7 @@ def test_login_flow(tmp_path):
 
 def test_get_all_devices_state(monkeypatch, tmp_path):
     # Setup authentication
-    config = {"username": "user", "password_hash": pbkdf2_sha256.hash("secret"), "jwt_secret": "secretkey"}
+    config = {"username": "user", "password_hash": PasswordHasher().hash("secret"), "jwt_secret": "secretkey"}
     config_path = tmp_path / "user_config.json"
     config_path.write_text(json.dumps(config))
     HTTPSafety.USER_CONFIG_PATH = str(config_path)

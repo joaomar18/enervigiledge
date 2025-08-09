@@ -3,7 +3,6 @@
 import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from passlib.hash import pbkdf2_sha256
 
 #######################################
 
@@ -14,6 +13,7 @@ from web.dependencies import services
 from web.safety import HTTPSafety
 from controller.node import Node
 from controller.types import NodeType
+from argon2 import PasswordHasher
 
 #######################################
 
@@ -50,7 +50,7 @@ def create_app(safety, device_manager, timedb):
 
 
 def test_nodes_endpoints_use_query_params(tmp_path):
-    config = {"username": "user", "password_hash": pbkdf2_sha256.hash("secret"), "jwt_secret": "secretkey"}
+    config = {"username": "user", "password_hash": PasswordHasher().hash("secret"), "jwt_secret": "secretkey"}
     config_path = tmp_path / "user_config.json"
     config_path.write_text(json.dumps(config))
     HTTPSafety.USER_CONFIG_PATH = str(config_path)

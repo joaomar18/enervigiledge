@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import jwt
 import secrets
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
+from argon2.exceptions import VerifyMismatchError, InvalidHashError
 
 #######################################
 
@@ -186,7 +186,7 @@ class HTTPSafety:
 
         try:
             self.ph.verify(stored_hash, old_password)
-        except VerifyMismatchError:
+        except (VerifyMismatchError, InvalidHashError):
             raise ValueError("Old password is incorrect")
 
         # Generate new hash and update config
@@ -266,7 +266,7 @@ class HTTPSafety:
 
         try:
             self.ph.verify(config.get("password_hash"), password)
-        except VerifyMismatchError:
+        except (VerifyMismatchError, InvalidHashError):
             raise InvalidCredentials("Invalid credentials")
 
         # Create token and return it
