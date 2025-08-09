@@ -1,7 +1,8 @@
 ###########EXTERNAL IMPORTS############
 
 import json
-from fastapi import APIRouter, Request, Header, Depends
+from typing import Dict, Tuple
+from fastapi import APIRouter, Request, Header, UploadFile, Depends
 from fastapi.responses import JSONResponse
 
 #######################################
@@ -19,6 +20,49 @@ from protocol.opcua.opcua_device import OPCUAEnergyMeter
 from controller.conversion import convert_dict_to_energy_meter
 
 #######################################
+
+##########     P A R S E     M E T H O D S     ##########
+
+
+async def _parse_device_request(request: Request) -> Tuple[Dict | None, Dict | None, UploadFile | None]:
+    """Extract device data, nodes, and optional image from the request.
+
+    Supports both JSON payloads and multipart form submissions with an image.
+
+    Args:
+        request: Incoming FastAPI request containing device information.
+
+    Returns:
+        Tuple containing ``device_data``, ``device_nodes``, and ``device_image``.
+
+    Raises:
+        ValueError: If required fields are missing in multipart form data.
+    """
+
+    content_type = request.headers.get("content-type", "")
+
+    if content_type.startswith("multipart/form-data"):
+        form = await request.form()
+
+        device_data_str = form.get("deviceData")
+        device_nodes_str = form.get("deviceNodes")
+        device_image = form.get("deviceImage")
+
+        if not device_data_str or not device_nodes_str:
+            raise ValueError("Device data and device nodes are required")
+
+        device_data = json.loads(device_data_str)
+        device_nodes = json.loads(device_nodes_str)
+    else:
+        payload = await request.json()
+        device_data = payload.get("deviceData")
+        device_nodes = payload.get("deviceNodes")
+        device_image = None
+
+    return device_data, device_nodes, device_image
+
+
+#########################################################
 
 router = APIRouter(prefix="/device", tags=["device"])
 
@@ -60,29 +104,7 @@ async def add_device(
         # Check if token is valid
         safety.check_authorization_token(authorization, request)
 
-        content_type = request.headers.get("content-type", "")
-
-        # Image included
-        if content_type.startswith("multipart/form-data"):
-            form = await request.form()
-
-            device_data_str = form.get("deviceData")
-            device_nodes_str = form.get("deviceNodes")
-            device_image = form.get("deviceImage")
-
-            if not device_data_str or not device_nodes_str:
-                raise ValueError("Device data and device nodes are required")
-
-            device_data = json.loads(device_data_str)
-            device_nodes = json.loads(device_nodes_str)
-
-        # Image not included
-        else:
-            payload = await request.json()
-            device_data = payload.get("deviceData")
-            device_nodes = payload.get("deviceNodes")
-            device_image = None
-
+        device_data, device_nodes, device_image = await _parse_device_request(request)
         device_name = device_data.get("name") if device_data else None
 
         if not all([device_data, device_nodes]):
@@ -149,32 +171,7 @@ async def edit_device(
         # Check if token is valid
         safety.check_authorization_token(authorization, request)
 
-        content_type = request.headers.get("content-type", "")
-
-        # Image included
-        if content_type.startswith("multipart/form-data"):
-            form = await request.form()
-
-            device_data_str = form.get("deviceData")
-            device_nodes_str = form.get("deviceNodes")
-            device_image = form.get("deviceImage")  # This will be the file
-
-            if not device_data_str or not device_nodes_str:
-                raise ValueError("Device data and device nodes are required")
-
-            device_data = json.loads(device_data_str)
-            device_nodes = json.loads(device_nodes_str)
-
-            if device_image and hasattr(device_image, 'filename'):
-                logger.info(f"Received image file: {device_image.filename}")
-
-        # Image not included
-        else:
-            payload = await request.json()
-            device_data = payload.get("deviceData")
-            device_nodes = payload.get("deviceNodes")
-            device_image = None
-
+        device_data, device_nodes, device_image = await _parse_device_request(request)
         device_id = device_data.get("id") if device_data else None
 
         if not all([device_data, device_nodes]):
