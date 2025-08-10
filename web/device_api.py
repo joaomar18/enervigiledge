@@ -84,7 +84,9 @@ async def add_device(
         raise ValueError("All fields are required")
 
     # Tries to initialize a new energy meter with the given configuration. Throws exception if an error is found in the configuration
-    energy_meter: ModbusRTUEnergyMeter | OPCUAEnergyMeter = convert_dict_to_energy_meter(device_data, device_nodes)
+    energy_meter: ModbusRTUEnergyMeter | OPCUAEnergyMeter = convert_dict_to_energy_meter(
+        device_data, device_nodes, device_manager.publish_queue, device_manager.measurements_queue
+    )
     energy_meter_record = energy_meter.get_meter_record()
 
     device_id = database.insert_energy_meter(energy_meter_record)
@@ -117,7 +119,9 @@ async def edit_device(
         raise ValueError("All fields are required")
 
     # Tries to initialize a new energy meter with the given configuration. Throws exception if an error is found in the configuration
-    energy_meter: ModbusRTUEnergyMeter | OPCUAEnergyMeter = convert_dict_to_energy_meter(device_data, device_nodes)
+    energy_meter: ModbusRTUEnergyMeter | OPCUAEnergyMeter = convert_dict_to_energy_meter(
+        device_data, device_nodes, device_manager.publish_queue, device_manager.measurements_queue
+    )
 
     device = device_manager.get_device(device_id)
     if not device:

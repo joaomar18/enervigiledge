@@ -95,12 +95,19 @@ class DeviceManager:
 
     def add_device(self, device: Device):
         """
-        Registers a new device.
+        Registers a new device and ensures it uses the manager's communication queues.
+
+        Sets the device's publish_queue and measurements_queue to the manager's queues
+        if they differ, then adds the device to the managed devices set.
 
         Args:
             device (Device): The device instance to add.
         """
 
+        if device.publish_queue != self.publish_queue:
+            device.publish_queue = self.publish_queue
+        if device.measurements_queue != self.measurements_queue:
+            device.measurements_queue = self.measurements_queue
         self.devices.add(device)
 
     def delete_device(self, device: Device) -> None:

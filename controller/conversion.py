@@ -9,11 +9,13 @@ import asyncio
 
 from controller.meter import EnergyMeterOptions, EnergyMeterType
 from controller.types import Protocol
+from controller.registry import ProtocolRegistry
 from protocol.modbus_rtu.rtu_device import ModbusRTUOptions
 from protocol.opcua.opcua_device import OPCUAOptions
 from controller.node import NodeType, Node, ModbusRTUNode, OPCUANode
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
 from protocol.opcua.opcua_device import OPCUAEnergyMeter
+from db.db import NodeRecord
 
 #######################################
 
@@ -75,7 +77,7 @@ def convert_dict_to_comm_options(dict_communication_options: Dict[str, any], pro
     Converts a dictionary representation of communication options into protocol-specific options objects.
 
     This function extracts communication configuration fields from a dictionary and creates
-    a properly typed options object based on the specified protocol.
+    a properly typed options object based on the specified protocol using the ProtocolRegistry.
 
     Args:
         dict_communication_options (Dict[str, any]): Dictionary containing communication option fields.
@@ -92,6 +94,19 @@ def convert_dict_to_comm_options(dict_communication_options: Dict[str, any], pro
 
     if not dict_communication_options:
         raise ValueError("Input dictionary cannot be None or empty")
+
+    # Get protocol plugin from registry
+    plugin = ProtocolRegistry.get_protocol_plugin(protocol)
+    if not plugin:
+        raise ValueError(f"Protocol {protocol} is not supported")
+
+    # Get the options class from the plugin
+    options_class = plugin.options_class
+
+    # Create the options object using the class constructor
+    # Note: This assumes the options classes have constructors that accept keyword arguments
+    # matching the dictionary keys. You may need to add specific logic for each protocol
+    # if the constructors require different parameter mapping.
 
     if protocol is Protocol.MODBUS_RTU:
         required_fields = ['slave_id', 'port', 'baudrate', 'stopbits', 'parity', 'bytesize', 'read_period', 'timeout', 'retries']
@@ -115,7 +130,7 @@ def convert_dict_to_comm_options(dict_communication_options: Dict[str, any], pro
         except (TypeError, ValueError) as e:
             raise TypeError(f"Invalid field type in Modbus RTU options: {e}")
 
-        return ModbusRTUOptions(
+        return options_class(
             slave_id=slave_id,
             port=port,
             baudrate=baudrate,
@@ -153,7 +168,7 @@ def convert_dict_to_comm_options(dict_communication_options: Dict[str, any], pro
         except (TypeError, ValueError) as e:
             raise TypeError(f"Invalid field type in OPC UA options: {e}")
 
-        return OPCUAOptions(url=url, username=username, password=password, read_period=read_period, timeout=timeout)
+        return options_class(url=url, username=username, password=password, read_period=read_period, timeout=timeout)
 
     else:
         raise ValueError(f"Protocol {protocol} is not supported")
@@ -276,66 +291,9 @@ def convert_dict_to_node(dict_node: Dict[str, any]) -> Node:
     calculate_increment = bool(node_dict_config['calculate_increment']) if node_dict_config['calculate_increment'] is not None else None
     decimal_places = int(node_dict_config['decimal_places']) if node_dict_config['decimal_places'] is not None else None
 
-    # Create node based on protocol
-    if protocol is Protocol.MODBUS_RTU:
-        # Check for Modbus RTU specific required field
-        if 'register' not in node_dict_config:
-            raise KeyError("Missing required field for Modbus RTU node: register")
-
-        register = int(node_dict_config['register'])
-
-        return ModbusRTUNode(
-            name=name,
-            type=node_type,
-            register=register,
-            unit=unit,
-            enabled=enabled,
-            incremental_node=incremental_node,
-            positive_incremental=positive_incremental,
-            calculate_increment=calculate_increment,
-            publish=publish,
-            calculated=calculated,
-            custom=custom,
-            logging=logging,
-            logging_period=logging_period,
-            min_alarm=min_alarm,
-            max_alarm=max_alarm,
-            min_alarm_value=min_alarm_value,
-            max_alarm_value=max_alarm_value,
-            decimal_places=decimal_places,
-        )
-
-    elif protocol is Protocol.OPC_UA:
-        # Check for OPC UA specific required field
-        if 'node_id' not in node_dict_config:
-            raise KeyError("Missing required field for OPC UA node: node_id")
-
-        node_id = str(node_dict_config['node_id'])
-
-        return OPCUANode(
-            name=name,
-            type=node_type,
-            node_id=node_id,
-            unit=unit,
-            enabled=enabled,
-            incremental_node=incremental_node,
-            positive_incremental=positive_incremental,
-            calculate_increment=calculate_increment,
-            publish=publish,
-            calculated=calculated,
-            custom=custom,
-            logging=logging,
-            logging_period=logging_period,
-            min_alarm=min_alarm,
-            max_alarm=max_alarm,
-            min_alarm_value=min_alarm_value,
-            max_alarm_value=max_alarm_value,
-            decimal_places=decimal_places,
-        )
-
-    elif protocol is Protocol.NONE:
+    # Create node based on protocol using registry
+    if protocol is Protocol.NONE:
         # For calculated nodes or virtual nodes, create a base Node instance
-
         return Node(
             name=name,
             type=node_type,
@@ -356,9 +314,17 @@ def convert_dict_to_node(dict_node: Dict[str, any]) -> Node:
             max_alarm_value=max_alarm_value,
             decimal_places=decimal_places,
         )
-
     else:
-        raise ValueError(f"Protocol {protocol} is not supported for node creation")
+        # Use registry to get the node factory
+        plugin = ProtocolRegistry.get_protocol_plugin(protocol)
+        if not plugin:
+            raise ValueError(f"Protocol {protocol} is not supported for node creation")
+
+        # Create a NodeRecord to pass to the factory
+        node_record = NodeRecord(device_id=None, name=name, protocol=protocol.value, config=node_dict_config)  # Will be set later when adding to device
+
+        # Use the factory from the registry
+        return plugin.node_factory(node_record)
 
 
 def convert_dict_to_energy_nodes(list_nodes: List[Dict[str, any]]) -> Set[Node]:
@@ -403,19 +369,21 @@ def convert_dict_to_energy_nodes(list_nodes: List[Dict[str, any]]) -> Set[Node]:
     return nodes
 
 
-def convert_dict_to_energy_meter(dict_energy_meter: Dict[str, any], dict_nodes: Dict[str, any]) -> ModbusRTUEnergyMeter | OPCUAEnergyMeter:
+def convert_dict_to_energy_meter(
+    dict_energy_meter: Dict[str, any], dict_nodes: Dict[str, any], publish_queue: asyncio.Queue, measurements_queue: asyncio.Queue
+) -> ModbusRTUEnergyMeter | OPCUAEnergyMeter:
     """
     Converts dictionary configurations into a fully initialized protocol-specific EnergyMeter instance.
 
     Creates a complete energy meter object by parsing configuration dictionaries, validating
     data types, converting to appropriate enums, and instantiating the correct protocol-specific
-    class with all dependencies properly configured.
+    class using the ProtocolRegistry with all dependencies properly configured.
 
     Process Flow:
     1. Validates required fields and extracts basic configuration
     2. Converts string values to proper enum types (Protocol, EnergyMeterType)
     3. Uses helper functions to convert meter options, communication options, and nodes
-    4. Instantiates the appropriate energy meter class based on protocol
+    4. Uses ProtocolRegistry to get the appropriate meter class and instantiate it
 
     Args:
         dict_energy_meter (Dict[str, any]): Energy meter configuration dictionary.
@@ -428,19 +396,17 @@ def convert_dict_to_energy_meter(dict_energy_meter: Dict[str, any], dict_nodes: 
             Optional fields:
                 - id (int): Unique identifier (None for new meters)
         dict_nodes (List[Dict[str, any]]): List of node configuration dictionaries.
+        publish_queue (asyncio.Queue): Queue for publishing meter data and events.
+        measurements_queue (asyncio.Queue): Queue for storing measurement data.
 
     Returns:
         ModbusRTUEnergyMeter | OPCUAEnergyMeter: Fully configured protocol-specific energy meter
-        instance with validated configuration, temporary queues, and converted node set.
+        instance with validated configuration, provided queues, and converted node set.
 
     Raises:
         KeyError: If required configuration fields are missing.
         TypeError: If field types cannot be converted to expected types.
         ValueError: If input is invalid, protocol unsupported, or enum conversion fails.
-
-    Note:
-        Creates temporary asyncio.Queue instances for publish_queue and measurements_queue.
-        These should be replaced with actual application queues after instantiation.
     """
 
     if not dict_energy_meter:
@@ -483,32 +449,21 @@ def convert_dict_to_energy_meter(dict_energy_meter: Dict[str, any], dict_nodes: 
     # Convert nodes
     nodes = convert_dict_to_energy_nodes(dict_nodes)
 
-    # Create energy meter based on protocol
-    if protocol is Protocol.MODBUS_RTU:
-
-        return ModbusRTUEnergyMeter(
-            id=meter_id,
-            name=name,
-            publish_queue=asyncio.Queue(),  # These will need to be provided by the caller
-            measurements_queue=asyncio.Queue(),  # These will need to be provided by the caller
-            meter_type=meter_type,
-            meter_options=meter_options,
-            connection_options=communication_options,
-            nodes=nodes,
-        )
-
-    elif protocol is Protocol.OPC_UA:
-
-        return OPCUAEnergyMeter(
-            id=meter_id,
-            name=name,
-            publish_queue=asyncio.Queue(),  # These will need to be provided by the caller
-            measurements_queue=asyncio.Queue(),  # These will need to be provided by the caller
-            meter_type=meter_type,
-            meter_options=meter_options,
-            connection_options=communication_options,
-            nodes=nodes,
-        )
-
-    else:
+    # Create energy meter based on protocol using registry
+    plugin = ProtocolRegistry.get_protocol_plugin(protocol)
+    if not plugin:
         raise ValueError(f"Protocol {protocol} is not supported for energy meter creation")
+
+    # Use the meter class from the registry
+    meter_class = plugin.meter_class
+
+    return meter_class(
+        id=meter_id,
+        name=name,
+        publish_queue=publish_queue,
+        measurements_queue=measurements_queue,
+        meter_type=meter_type,
+        meter_options=meter_options,
+        connection_options=communication_options,
+        nodes=nodes,
+    )
