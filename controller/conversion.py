@@ -1,7 +1,9 @@
 ###########EXTERNAL IMPORTS############
 
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Any
 import asyncio
+import dataclasses
+from dataclasses import fields
 
 #######################################
 
@@ -12,7 +14,7 @@ from controller.types import Protocol
 from controller.registry import ProtocolRegistry
 from protocol.modbus_rtu.rtu_device import ModbusRTUOptions
 from protocol.opcua.opcua_device import OPCUAOptions
-from controller.node import NodeType, Node, ModbusRTUNode, OPCUANode
+from controller.node import NodeType, Node
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
 from protocol.opcua.opcua_device import OPCUAEnergyMeter
 from db.db import NodeRecord
@@ -76,8 +78,8 @@ def convert_dict_to_comm_options(dict_communication_options: Dict[str, any], pro
     """
     Converts a dictionary representation of communication options into protocol-specific options objects.
 
-    This function extracts communication configuration fields from a dictionary and creates
-    a properly typed options object based on the specified protocol using the ProtocolRegistry.
+    This function uses dataclass field introspection to dynamically validate required fields
+    and create the appropriate options object based on the protocol using the ProtocolRegistry.
 
     Args:
         dict_communication_options (Dict[str, any]): Dictionary containing communication option fields.
@@ -103,77 +105,66 @@ def convert_dict_to_comm_options(dict_communication_options: Dict[str, any], pro
     # Get the options class from the plugin
     options_class = plugin.options_class
 
-    # Create the options object using the class constructor
-    # Note: This assumes the options classes have constructors that accept keyword arguments
-    # matching the dictionary keys. You may need to add specific logic for each protocol
-    # if the constructors require different parameter mapping.
+    # Get required fields from the dataclass
+    dataclass_fields = fields(options_class)
+    required_fields = []
+    optional_fields = []
+    
+    for field in dataclass_fields:
 
-    if protocol is Protocol.MODBUS_RTU:
-        required_fields = ['slave_id', 'port', 'baudrate', 'stopbits', 'parity', 'bytesize', 'read_period', 'timeout', 'retries']
+        # Checks if field in communication options doesn't have a default value (required field)
+        if field.default == field.default_factory == dataclasses.MISSING: 
+            required_fields.append(field.name)
 
-        # Check for missing fields
-        missing_fields = [field for field in required_fields if field not in dict_communication_options]
-        if missing_fields:
-            raise KeyError(f"Missing required fields for Modbus RTU: {', '.join(missing_fields)}")
+        # Checks if field in communication options has a default value (optional field)
+        else:
+            optional_fields.append(field.name)
 
-        # Extract and validate field types
-        try:
-            slave_id = int(dict_communication_options['slave_id'])
-            port = str(dict_communication_options['port'])
-            baudrate = int(dict_communication_options['baudrate'])
-            stopbits = int(dict_communication_options['stopbits'])
-            parity = str(dict_communication_options['parity'])
-            bytesize = int(dict_communication_options['bytesize'])
-            read_period = int(dict_communication_options['read_period'])
-            timeout = int(dict_communication_options['timeout'])
-            retries = int(dict_communication_options['retries'])
-        except (TypeError, ValueError) as e:
-            raise TypeError(f"Invalid field type in Modbus RTU options: {e}")
+    # Check for missing required fields
+    missing_fields = [field for field in required_fields if field not in dict_communication_options]
+    if missing_fields:
+        raise KeyError(f"Missing required fields for {protocol}: {', '.join(missing_fields)}")
 
-        return options_class(
-            slave_id=slave_id,
-            port=port,
-            baudrate=baudrate,
-            stopbits=stopbits,
-            parity=parity,
-            bytesize=bytesize,
-            read_period=read_period,
-            timeout=timeout,
-            retries=retries,
-        )
+    # Prepare kwargs for the constructor
+    kwargs: Dict[str, Any] = {}
+    
+    try:
+        # Process all fields
+        for field in dataclass_fields:
+            field_name = field.name
+            field_type = field.type
+            
+            if field_name in dict_communication_options:
+                value = dict_communication_options[field_name]
+                
+                # Type conversion based on field type annotation
+                if field_type == int or field_type == 'int':
+                    kwargs[field_name] = int(value)
+                elif field_type == str or field_type == 'str':
+                    kwargs[field_name] = str(value) if value is not None else None
+                elif field_type == float or field_type == 'float':
+                    kwargs[field_name] = float(value)
+                elif field_type == bool or field_type == 'bool':
+                    kwargs[field_name] = bool(value)
+                else:
+                    # For Optional types or complex types, use as-is or convert to string
+                    if value is not None:
+                        kwargs[field_name] = str(value) if hasattr(value, '__str__') else value
+                    else:
+                        kwargs[field_name] = None
+            elif field_name in optional_fields:
+                # Use default value for optional fields if not provided
+                if field.default != dataclasses.MISSING:
+                    kwargs[field_name] = field.default
+                elif field.default_factory != dataclasses.MISSING:
+                    kwargs[field_name] = field.default_factory()
+                else:
+                    kwargs[field_name] = None
+                    
+    except (TypeError, ValueError) as e:
+        raise TypeError(f"Invalid field type in {protocol.value} options: {e}")
 
-    elif protocol is Protocol.OPC_UA:
-        required_fields = ['url', 'read_period', 'timeout']
-        optional_fields = ['username', 'password']
-
-        # Check for missing required fields
-        missing_fields = [field for field in required_fields if field not in dict_communication_options]
-        if missing_fields:
-            raise KeyError(f"Missing required fields for OPC UA: {', '.join(missing_fields)}")
-
-        # Extract and validate field types
-        try:
-            url = str(dict_communication_options['url'])
-            username = dict_communication_options.get('username')
-            password = dict_communication_options.get('password')
-            read_period = int(dict_communication_options.get('read_period', 5))
-            timeout = int(dict_communication_options.get('timeout', 5))
-
-            # Convert username and password to strings if they exist
-            if username is not None:
-                username = str(username)
-            if password is not None:
-                password = str(password)
-
-        except (TypeError, ValueError) as e:
-            raise TypeError(f"Invalid field type in OPC UA options: {e}")
-
-        return options_class(url=url, username=username, password=password, read_period=read_period, timeout=timeout)
-
-    else:
-        raise ValueError(f"Protocol {protocol} is not supported")
-
-
+    return options_class(**kwargs)
 def convert_dict_to_node(dict_node: Dict[str, any]) -> Node:
     """
     Converts a node configuration dictionary into the appropriate protocol-specific Node object.
