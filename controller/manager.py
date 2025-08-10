@@ -42,29 +42,56 @@ class DeviceManager:
         self.publish_queue = publish_queue
         self.measurements_queue = measurements_queue
         self.devices_db = devices_db
-        self.start()
+        self.handler_task: Optional[asyncio.Task] = None
 
-    def start(self) -> None:
+    async def start(self) -> None:
+        """
+        Starts the device handling background task.
+        """
+
+        logger = LoggerManager.get_logger(__name__)
+
+        try:
+
+            if self.handler_task is not None:
+                raise ValueError("Handler task is already instantiated")
+
+            self.init_devices()
+            loop = asyncio.get_event_loop()
+            self.handler_task = loop.create_task(self.handle_devices())
+
+        except Exception as e:
+            logger.exception(f"Failed to start device manager handler task: {e}")
+
+    async def stop(self) -> None:
+        """
+        Stops and cancels the device handling background task.
+        """
+
+        logger = LoggerManager.get_logger(__name__)
+
+        try:
+            if self.handler_task:
+                self.handler_task.cancel()
+                await self.handler_task
+                self.handler_task = None
+
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.exception(f"Failed to stop device manager handler task: {e}")
+
+    def init_devices(self) -> None:
         """
         Loads all devices from the database, initializes them, and starts
         the background task that handles periodic device state publishing.
         """
 
-        logger = LoggerManager.get_logger(__name__)
+        meter_records = self.devices_db.get_all_energy_meters()
 
-        loop = asyncio.get_event_loop()
-
-        try:
-            meter_records = self.devices_db.get_all_energy_meters()
-
-            for record in meter_records:
-                device = self.create_device_from_record(record)
-                self.devices.add(device)
-
-            self.handler_task = loop.create_task(self.handle_devices())
-
-        except Exception as e:
-            logger.exception(f"Failed to start DeviceManager: {e}")
+        for record in meter_records:
+            device = self.create_device_from_record(record)
+            self.devices.add(device)
 
     def add_device(self, device: Device):
         """

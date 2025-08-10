@@ -91,11 +91,10 @@ class EnergyMeterRecord:
 
 class SQLiteDBClient:
     """
-    SQLite client for storing and retrieving energy meter device configurations.
+    SQLite database client for energy meter device and node configuration management.
 
-    Provides basic CRUD operations for energy meters and their associated nodes.
-    Uses WAL mode for better concurrent access and maintains referential integrity
-    through foreign key constraints.
+    Provides CRUD operations for devices and their associated data nodes with WAL mode
+    for concurrent access and foreign key constraints for data integrity.
 
     Attributes:
         db_path (str): Path to the SQLite database file.
@@ -105,15 +104,46 @@ class SQLiteDBClient:
 
     def __init__(self, db_path: str = "config.db"):
         self.db_path = db_path
-        self.conn = sqlite3.connect(self.db_path)
-        self.cursor = self.conn.cursor()
-        # Enable WAL mode
-        self.conn.execute("PRAGMA journal_mode=WAL;")
-        # Enable foreign key constraints
-        self.conn.execute("PRAGMA foreign_keys=ON;")
-        self._create_tables()
+        self.conn: Optional[sqlite3.Connection] = None
+        self.cursor: Optional[sqlite3.Cursor] = None
 
-    def _create_tables(self):
+    async def init_connection(self) -> None:
+        """
+        Initiates the SQLite connection.
+        Should be called during application initialization.
+        """
+
+        logger = LoggerManager.get_logger(__name__)
+
+        try:
+            if self.conn is not None or self.cursor is not None:
+                raise ValueError("DB connection or cursor are already instantiated")
+            self.conn = sqlite3.connect(self.db_path)
+            self.cursor = self.conn.cursor()
+            self.conn.execute("PRAGMA journal_mode=WAL;")  # Enable WAL mode
+            self.conn.execute("PRAGMA foreign_keys=ON;")  # Enable foreign key constraints
+            self.create_tables()
+        except Exception as e:
+            logger.exception(f"Failed to initiate SQLite connecion: {e}")
+
+    async def close_connection(self) -> None:
+        """
+        Closes the SQLite connection.
+        Should be called during application shutdown.
+        """
+
+        logger = LoggerManager.get_logger(__name__)
+
+        try:
+            if self.conn:
+                self.conn.close()
+                self.conn = None
+            if self.cursor:
+                self.cursor = None
+        except Exception as e:
+            logger.exception(f"Failed to close SQLite connection: {e}")
+
+    def create_tables(self) -> None:
         """
         Creates the required SQLite tables for storing energy meter configurations.
 
@@ -362,16 +392,3 @@ class SQLiteDBClient:
             logger.exception(f"Failed to retrieve energy meters: {e}")
 
         return meters
-
-    def close(self):
-        """
-        Closes the SQLite connection.
-        Should be called during application shutdown.
-        """
-
-        logger = LoggerManager.get_logger(__name__)
-
-        try:
-            self.conn.close()
-        except Exception as e:
-            logger.exception(f"Failed to close SQLite connection: {e}")

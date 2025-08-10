@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from typing import Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn import Config, Server
@@ -18,6 +19,7 @@ from db.timedb import TimeDBClient
 import web.auth_api as auth_api
 import web.device_api as device_api
 import web.nodes_api as nodes_api
+from util.debug import LoggerManager
 
 #######################################
 
@@ -95,9 +97,9 @@ class HTTPServer:
         self.server.include_router(device_api.router)  # Device router (handles device endpoints)
         self.server.include_router(nodes_api.router)  # Nodes router (handles nodes endpoints)
         self.server.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-        self.start()
+        self.run_task: Optional[asyncio.Task] = None
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """
         Starts the HTTP server asynchronously using the current event loop.
 
@@ -105,8 +107,34 @@ class HTTPServer:
         It should be called once during initialization or startup of the HTTP server component.
         """
 
-        loop = asyncio.get_event_loop()
-        self.run_task = loop.create_task(self.run_server())
+        logger = LoggerManager.get_logger(__name__)
+
+        try:
+            if self.run_task is not None:
+                raise ValueError("Run task is already instantiated")
+
+            loop = asyncio.get_event_loop()
+            self.run_task = loop.create_task(self.run_server())
+        except Exception as e:
+            logger.exception(f"Failed to start HTTP Server: {str(e)}")
+
+    async def stop(self) -> None:
+        """
+        Stops the HTTP Server by cancelling the run task.
+        """
+
+        logger = LoggerManager.get_logger(__name__)
+
+        try:
+            if self.run_task:
+                self.run_task.cancel()
+                await self.run_task
+                self.run_task = None
+
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.exception(f"Failed to stop HTTP Server: {str(e)}")
 
     async def run_server(self):
         """

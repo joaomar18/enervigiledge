@@ -77,16 +77,44 @@ class MQTTClient:
         self.password = functions.decrypt_password(password_encrypted=os.getenv("MQTT_PASSWORD_ENCRYPTED"), key=os.getenv("MQTT_PASSWORD_KEY"))
 
         self.publish_queue: asyncio.Queue[MQTTMessage] = asyncio.Queue(maxsize=1000)
+        self.publish_task: Optional[asyncio.Task] = None
         self.client: Optional[mqtt.Client] = None
-        self.start()
 
-    def start(self) -> None:
+    async def start(self) -> None:
         """
         Starts background tasks for MQTT handling and publishing.
         """
 
-        loop = asyncio.get_event_loop()
-        self.publish_task = loop.create_task(self.publisher())
+        logger = LoggerManager.get_logger(__name__)
+
+        try:
+            if self.client is not None or self.publish_task is not None:
+                raise ValueError("Client or publish task are already instantiated")
+            loop = asyncio.get_event_loop()
+            self.client = mqtt.Client(hostname=self.address, port=self.port, username=self.username, password=self.password)
+            self.publish_task = loop.create_task(self.publisher())
+        except Exception as e:
+            logger.exception(f"Failed to start MQTT client: {str(e)}")
+
+    async def stop(self) -> None:
+        """
+        Stops the MQTT client by cancelling the publish task.
+        """
+
+        logger = LoggerManager.get_logger(__name__)
+
+        try:
+            if self.publish_task:
+                self.publish_task.cancel()
+                await self.publish_task
+                self.publish_task = None
+
+            if self.client:
+                self.client = None
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.exception(f"Failed to stop MQTT client: {str(e)}")
 
     async def publisher(self) -> None:
         """
@@ -103,7 +131,6 @@ class MQTTClient:
 
         while True:
             try:
-                self.client = mqtt.Client(hostname=self.address, port=self.port, username=self.username, password=self.password)
                 async with self.client as client:
                     logger.info("Connected to the MQTT broker.")
                     self.clear_queue()
@@ -111,6 +138,8 @@ class MQTTClient:
                         message: MQTTMessage = await self.publish_queue.get()
                         await client.publish(topic=message.topic, payload=json.dumps(message.payload), qos=message.qos)
                         logger.debug(f"Published to topic {message.topic}")
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.error(f"MQTT publish task error: {e}")
                 await asyncio.sleep(2)

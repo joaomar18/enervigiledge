@@ -2,7 +2,7 @@
 
 import asyncio
 from influxdb import InfluxDBClient
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 from dataclasses import dataclass
 
@@ -97,7 +97,7 @@ class TimeDBClient:
             fields = {k: v for k, v in item.items() if k not in ("name", "unit", "start_time", "end_time") and v is not None}
 
             tags = {"unit": unit, "start_time": formatted_start, "end_time": formatted_end}
-            
+
             if not fields:
                 return None
 
@@ -106,24 +106,55 @@ class TimeDBClient:
         return formatted
 
     def __init__(self, host: str = "localhost", port: int = 8086, username: str = "root", password: str = "root"):
-        self.client = InfluxDBClient(host=host, port=port, username=username, password=password)
+
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
+        self.client: Optional[InfluxDBClient] = None
         self.write_queue: asyncio.Queue[Measurement] = asyncio.Queue(maxsize=1000)
-        self.start()
+        self.write_task: Optional[asyncio.Task] = None
 
-    def start(self) -> None:
+    async def init_connection(self) -> None:
         """
-        Starts the background task responsible for writing data to the InfluxDB.
-
-        This method schedules the `db_writer()` coroutine as an asyncio task using the current event loop.
-        It is intended to be called once during initialization to begin handling queued write operations.
-
-        Notes:
-            - The task runs indefinitely and pulls data from the `write_queue`.
-            - Errors during write operations are handled and logged internally.
+        Initiates the InfluxDB connection.
+        Should be called during application initialization.
         """
 
-        loop = asyncio.get_event_loop()
-        self.write_task: asyncio.Task = loop.create_task(self.db_writer())
+        logger = LoggerManager.get_logger(__name__)
+
+        try:
+            loop = asyncio.get_event_loop()
+            if self.client is not None or self.write_task is not None:
+                raise ValueError("InfluxDB connection or write task are already instantiated")
+            self.client = InfluxDBClient(host=self.host, port=self.port, username=self.username, password=self.password)
+            self.write_task: asyncio.Task = loop.create_task(self.db_writer())
+        except Exception as e:
+            logger.exception(f"Failed to initiate InfluxDB connecion: {e}")
+
+    async def close_connection(self):
+        """
+        Closes the InfluxDB connection.
+        Should be called during application shutdown.
+        """
+
+        logger = LoggerManager.get_logger(__name__)
+
+        try:
+
+            if self.write_task:
+                self.write_task.cancel()
+                await self.write_task
+                self.write_task = None
+
+            if self.client:
+                self.client.close()
+                self.client = None
+
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.exception(f"Failed to close InfluxDB connection: {e}")
 
     async def db_writer(self):
         """
@@ -307,13 +338,3 @@ class TimeDBClient:
         """
 
         return {"name": db} in self.client.get_list_database()
-
-    def close(self):
-        """
-        Closes the connection to the InfluxDB client.
-
-        This should be called during shutdown to ensure all resources
-        are properly released.
-        """
-
-        self.client.close()
