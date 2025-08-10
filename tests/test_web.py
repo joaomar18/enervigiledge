@@ -65,9 +65,9 @@ def test_get_all_devices_state(monkeypatch, tmp_path):
     device = DummyDevice(1, "dev1")
     app = create_app(safety, DummyDeviceManager([device]))
 
-    from util import functions
+    from util import functions_generic
 
-    monkeypatch.setattr(functions, "get_device_image", lambda device_id, default, directory: {"data": "", "type": "", "filename": ""})
+    monkeypatch.setattr(functions_generic, "get_device_image", lambda device_id, default, directory: {"data": "", "type": "", "filename": ""})
 
     with TestClient(app) as client:
         # First login to get token

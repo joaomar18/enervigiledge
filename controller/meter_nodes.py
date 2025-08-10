@@ -9,7 +9,7 @@ from typing import  Dict, Set, Optional
 from controller.node import NodeType, Node
 from controller.types import EnergyMeterType, EnergyMeterOptions
 from controller.exceptions import *
-import util.functions as functions
+import util.functions_generic as functions_generic
 
 #######################################
 
@@ -95,7 +95,7 @@ class EnergyMeterNodes:
             # Custom nodes are not validated against the predefined sets
             return
 
-        base_name = functions.remove_phase_string(node.name)
+        base_name = functions_generic.remove_phase_string(node.name)
 
         if base_name not in EnergyMeterNodes.VALID_NODES:
             raise NodeUnknownError(f"Invalid node {node.name} with type {node.type}")

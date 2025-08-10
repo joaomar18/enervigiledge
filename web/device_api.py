@@ -14,7 +14,7 @@ from web.dependencies import services
 from controller.manager import DeviceManager
 from db.db import SQLiteDBClient
 from web.api_decorator import auth_endpoint, AuthConfigs
-from util.functions import process_and_save_image, get_device_image, delete_device_image
+from util.functions_images import process_and_save_image, get_device_image, delete_device_image
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
 from protocol.opcua.opcua_device import OPCUAEnergyMeter
 from controller.conversion import convert_dict_to_energy_meter

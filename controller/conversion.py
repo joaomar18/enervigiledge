@@ -1,9 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
-from typing import Dict, List, Set, Any
+from typing import Dict, List, Set, Any, Type
 import asyncio
-import dataclasses
-from dataclasses import fields
 
 #######################################
 
@@ -12,160 +10,81 @@ from dataclasses import fields
 from controller.meter import EnergyMeterOptions, EnergyMeterType
 from controller.types import Protocol
 from controller.registry import ProtocolRegistry
-from protocol.modbus_rtu.rtu_device import ModbusRTUOptions
-from protocol.opcua.opcua_device import OPCUAOptions
 from controller.node import NodeType, Node
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
 from protocol.opcua.opcua_device import OPCUAEnergyMeter
 from db.db import NodeRecord
+import util.functions_objects as objects
 
 #######################################
 
 
 def convert_dict_to_meter_options(dict_meter_options: Dict[str, any]) -> EnergyMeterOptions:
     """
-    Converts a dictionary representation of meter options into an EnergyMeterOptions object.
-
-    This function extracts meter configuration fields from a dictionary and creates
-    a properly typed EnergyMeterOptions dataclass instance.
+    Converts a dictionary to EnergyMeterOptions with field validation.
 
     Args:
-        dict_meter_options (Dict[str, any]): Dictionary containing meter option fields.
-            Expected keys:
-                - read_energy_from_meter (bool): Whether to read energy directly from the meter.
-                - read_separate_forward_reverse_energy (bool): Whether to track forward and reverse energy separately.
-                - negative_reactive_power (bool): Whether the meter reads negative (leading) reactive power.
-                - frequency_reading (bool): Whether the meter provides frequency readings.
+        dict_meter_options (Dict[str, any]): Dictionary with meter configuration fields.
 
     Returns:
-        EnergyMeterOptions: A dataclass instance with the extracted configuration.
+        EnergyMeterOptions: Validated dataclass instance.
 
     Raises:
-        KeyError: If any required field is missing from the input dictionary.
-        TypeError: If any field has an incorrect type (not boolean).
-        ValueError: If the input dictionary is None or empty.
+        ValueError: If required fields are missing or input is invalid.
+        TypeError: If field types are incorrect.
     """
 
-    if not dict_meter_options:
-        raise ValueError("Input dictionary cannot be None or empty")
+    result = objects.check_required_keys(dict_meter_options, EnergyMeterOptions)
 
-    # Extract required fields with validation
-    required_fields = ['read_energy_from_meter', 'read_separate_forward_reverse_energy', 'negative_reactive_power', 'frequency_reading']
+    if not result:
+        raise ValueError(f"Missing required fields for energy meter options")
 
-    # Check for missing fields
-    missing_fields = [field for field in required_fields if field not in dict_meter_options]
-    if missing_fields:
-        raise KeyError(f"Missing required fields: {', '.join(missing_fields)}")
+    dataclass_fields, required_fields, optional_fields = result
 
-    # Extract and validate field types
     try:
-        read_energy_from_meter = bool(dict_meter_options['read_energy_from_meter'])
-        read_separate_forward_reverse_energy = bool(dict_meter_options['read_separate_forward_reverse_energy'])
-        negative_reactive_power = bool(dict_meter_options['negative_reactive_power'])
-        frequency_reading = bool(dict_meter_options['frequency_reading'])
+        arguments = objects.create_dict_from_fields(dict_meter_options, dataclass_fields, required_fields, optional_fields)
     except (TypeError, ValueError) as e:
         raise TypeError(f"Invalid field type in meter options: {e}")
 
-    return EnergyMeterOptions(
-        read_energy_from_meter=read_energy_from_meter,
-        read_separate_forward_reverse_energy=read_separate_forward_reverse_energy,
-        negative_reactive_power=negative_reactive_power,
-        frequency_reading=frequency_reading,
-    )
+    return EnergyMeterOptions(**arguments)
 
 
-def convert_dict_to_comm_options(dict_communication_options: Dict[str, any], protocol: Protocol) -> ModbusRTUOptions | OPCUAOptions:
+def convert_dict_to_comm_options(dict_communication_options: Dict[str, Any], protocol: Protocol) -> Type:
     """
-    Converts a dictionary representation of communication options into protocol-specific options objects.
-
-    This function uses dataclass field introspection to dynamically validate required fields
-    and create the appropriate options object based on the protocol using the ProtocolRegistry.
+    Converts a dictionary to protocol-specific communication options using registry introspection.
 
     Args:
-        dict_communication_options (Dict[str, any]): Dictionary containing communication option fields.
-        protocol (Protocol): The communication protocol to use (MODBUS_RTU or OPC_UA).
+        dict_communication_options (Dict[str, Any]): Dictionary containing communication fields.
+        protocol (Protocol): The communication protocol to use.
 
     Returns:
-        ModbusRTUOptions | OPCUAOptions: A dataclass instance with the extracted configuration.
+        object: Protocol-specific options dataclass instance.
 
     Raises:
-        KeyError: If any required field is missing from the input dictionary.
-        TypeError: If any field has an incorrect type.
-        ValueError: If the input dictionary is None or empty, or if the protocol is not supported.
+        ValueError: If protocol is unsupported or required fields are missing.
+        TypeError: If field types are invalid.
     """
-
-    if not dict_communication_options:
-        raise ValueError("Input dictionary cannot be None or empty")
 
     # Get protocol plugin from registry
     plugin = ProtocolRegistry.get_protocol_plugin(protocol)
     if not plugin:
         raise ValueError(f"Protocol {protocol} is not supported")
 
-    # Get the options class from the plugin
-    options_class = plugin.options_class
+    result = objects.check_required_keys(dict_communication_options, plugin.options_class)
+    if not result:
+        raise ValueError(f"Missing required fields for {protocol}")
 
-    # Get required fields from the dataclass
-    dataclass_fields = fields(options_class)
-    required_fields = []
-    optional_fields = []
-    
-    for field in dataclass_fields:
+    dataclass_fields, required_fields, optional_fields = result
 
-        # Checks if field in communication options doesn't have a default value (required field)
-        if field.default == field.default_factory == dataclasses.MISSING: 
-            required_fields.append(field.name)
-
-        # Checks if field in communication options has a default value (optional field)
-        else:
-            optional_fields.append(field.name)
-
-    # Check for missing required fields
-    missing_fields = [field for field in required_fields if field not in dict_communication_options]
-    if missing_fields:
-        raise KeyError(f"Missing required fields for {protocol}: {', '.join(missing_fields)}")
-
-    # Prepare kwargs for the constructor
-    kwargs: Dict[str, Any] = {}
-    
     try:
-        # Process all fields
-        for field in dataclass_fields:
-            field_name = field.name
-            field_type = field.type
-            
-            if field_name in dict_communication_options:
-                value = dict_communication_options[field_name]
-                
-                # Type conversion based on field type annotation
-                if field_type == int or field_type == 'int':
-                    kwargs[field_name] = int(value)
-                elif field_type == str or field_type == 'str':
-                    kwargs[field_name] = str(value) if value is not None else None
-                elif field_type == float or field_type == 'float':
-                    kwargs[field_name] = float(value)
-                elif field_type == bool or field_type == 'bool':
-                    kwargs[field_name] = bool(value)
-                else:
-                    # For Optional types or complex types, use as-is or convert to string
-                    if value is not None:
-                        kwargs[field_name] = str(value) if hasattr(value, '__str__') else value
-                    else:
-                        kwargs[field_name] = None
-            elif field_name in optional_fields:
-                # Use default value for optional fields if not provided
-                if field.default != dataclasses.MISSING:
-                    kwargs[field_name] = field.default
-                elif field.default_factory != dataclasses.MISSING:
-                    kwargs[field_name] = field.default_factory()
-                else:
-                    kwargs[field_name] = None
-                    
+        arguments = objects.create_dict_from_fields(dict_communication_options, dataclass_fields, required_fields, optional_fields)
     except (TypeError, ValueError) as e:
         raise TypeError(f"Invalid field type in {protocol.value} options: {e}")
 
-    return options_class(**kwargs)
-def convert_dict_to_node(dict_node: Dict[str, any]) -> Node:
+    return plugin.options_class(**arguments)
+
+
+def convert_dict_to_node(dict_node: Dict[str, Any]) -> Node:
     """
     Converts a node configuration dictionary into the appropriate protocol-specific Node object.
 

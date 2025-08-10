@@ -18,7 +18,7 @@ from controller.meter_nodes import EnergyMeterNodes
 from mqtt.client import MQTTMessage
 from db.timedb import Measurement
 from db.db import EnergyMeterRecord
-import util.functions as functions
+import util.functions_generic as functions_generic
 from util.debug import LoggerManager
 
 #######################################
@@ -170,7 +170,7 @@ class EnergyMeter(Device):
                 node.last_log_datetime = current_time
                 continue
 
-            elapsed_time = functions.subtract_datetime_mins(current_time, node.last_log_datetime)
+            elapsed_time = functions_generic.subtract_datetime_mins(current_time, node.last_log_datetime)
 
             if elapsed_time >= node.logging_period:
                 log_data = [node.submit_log(current_time)]
