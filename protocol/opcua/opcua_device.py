@@ -99,6 +99,7 @@ class OPCUAEnergyMeter(EnergyMeter):
             measurements_queue=measurements_queue,
             meter_type=meter_type,
             meter_options=meter_options,
+            communication_options=communication_options,
             meter_nodes=nodes if nodes else set(),
         )
 
@@ -290,52 +291,3 @@ class OPCUAEnergyMeter(EnergyMeter):
         except Exception:
             pass
         self.connection_open = False
-
-    def get_device_state(self) -> Dict[str, Any]:
-        """
-        Returns the current state of the opc ua energy meter device, including metadata and configuration.
-
-        Returns:
-            Dict[str, Any]: A dictionary containing the device's:
-                - ID
-                - Name
-                - Protocol
-                - Connection status
-                - Meter options
-                - Communication options
-                - Meter type
-        """
-
-        return {
-            "id": self.id,
-            "name": self.name,
-            "protocol": self.protocol,
-            "connected": self.connected,
-            "options": self.meter_options.get_meter_options(),
-            "communication_options": self.communication_options.get_communication_options(),
-            "type": self.meter_type,
-        }
-
-    def get_meter_record(self) -> EnergyMeterRecord:
-        """
-        Creates a database record representation of the energy meter configuration.
-
-        Returns:
-            EnergyMeterRecord: Record containing meter configuration and all associated nodes.
-        """
-
-        node_records: Set[NodeRecord] = set()
-
-        for node in self.nodes:
-            record = node.get_node_record()
-            node_records.add(record)
-
-        return EnergyMeterRecord(
-            name=self.name,
-            id=self.id,
-            protocol=self.protocol,
-            type=self.meter_type,
-            options=self.meter_options.get_meter_options(),
-            communication_options=self.communication_options.get_communication_options(),
-            nodes=node_records,
-        )

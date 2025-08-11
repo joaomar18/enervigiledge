@@ -4,7 +4,7 @@ from datetime import datetime
 import asyncio
 import math
 import traceback
-from typing import Dict, Any
+from typing import Dict, Any, Type, Set
 from abc import ABC, abstractmethod
 
 #######################################
@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 
 from controller.device import Device
 from controller.node import Node
-from controller.types import Protocol, EnergyMeterType, PowerFactorDirection, EnergyMeterOptions, EnergyMeterRecord
+from controller.types import Protocol, EnergyMeterType, PowerFactorDirection, EnergyMeterOptions, EnergyMeterRecord, NodeRecord
 from controller.meter_nodes import EnergyMeterNodes
 from mqtt.client import MQTTMessage
 from db.timedb import Measurement
@@ -40,6 +40,7 @@ class EnergyMeter(Device):
     Attributes:
         meter_type (EnergyMeterType): Type of the energy meter (single or three phase).
         meter_options (EnergyMeterOptions): Configuration flags controlling how energy and power are interpreted.
+        communication_options (Type): Protocol-specific communication configuration (e.g., ModbusRTUOptions, OPCUAOptions).
         meter_nodes (EnergyMeterNodes): Manager for validating and handling node configurations and relationships.
         calculation_methods (Dict[str, Tuple[Callable, Dict[str, Any]]]): Map of suffixes to calculation methods.
         disconnected_calculation (bool): Flag to make the device make one and only calculation of nodes on disconnection
@@ -73,12 +74,14 @@ class EnergyMeter(Device):
         measurements_queue: asyncio.Queue,
         meter_type: EnergyMeterType,
         meter_options: EnergyMeterOptions,
-        meter_nodes: set[Node],
+        communication_options: Type,
+        meter_nodes: Set[Node],
     ):
 
         super().__init__(id=id, name=name, protocol=protocol, publish_queue=publish_queue, measurements_queue=measurements_queue, nodes=meter_nodes)
         self.meter_type = meter_type
         self.meter_options = meter_options
+        self.communication_options = communication_options
 
         try:
             self.meter_nodes = EnergyMeterNodes(meter_type=self.meter_type, meter_options=self.meter_options, nodes=meter_nodes)
@@ -523,6 +526,7 @@ class EnergyMeter(Device):
                 - Protocol
                 - Connection status
                 - Meter options
+                - Communication options
                 - Meter type
         """
 
@@ -532,10 +536,10 @@ class EnergyMeter(Device):
             "protocol": self.protocol,
             "connected": self.connected,
             "options": self.meter_options.get_meter_options(),
+            "communication_options": self.communication_options.get_communication_options(),
             "type": self.meter_type,
         }
 
-    @abstractmethod
     def get_meter_record(self) -> EnergyMeterRecord:
         """
         Creates a database record representation of the energy meter configuration.
@@ -543,4 +547,19 @@ class EnergyMeter(Device):
         Returns:
             EnergyMeterRecord: Record containing meter configuration and all associated nodes.
         """
-        pass
+
+        node_records: Set[NodeRecord] = set()
+
+        for node in self.meter_nodes:
+            record = node.get_node_record()
+            node_records.add(record)
+
+        return EnergyMeterRecord(
+            name=self.name,
+            id=self.id,
+            protocol=self.protocol,
+            type=self.meter_type,
+            options=self.meter_options.get_meter_options(),
+            communication_options=self.communication_options.get_communication_options(),
+            nodes=node_records,
+        )
