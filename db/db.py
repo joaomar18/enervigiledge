@@ -43,7 +43,7 @@ class SQLiteDBClient:
 
         try:
             if self.conn is not None or self.cursor is not None:
-                raise ValueError("DB connection or cursor are already instantiated")
+                raise RuntimeError("DB connection or cursor are already instantiated")
             self.conn = sqlite3.connect(self.db_path)
             self.cursor = self.conn.cursor()
             self.conn.execute("PRAGMA journal_mode=WAL;")  # Enable WAL mode
@@ -64,8 +64,10 @@ class SQLiteDBClient:
             if self.conn:
                 self.conn.close()
                 self.conn = None
+
             if self.cursor:
                 self.cursor = None
+
         except Exception as e:
             logger.exception(f"Failed to close SQLite connection: {e}")
 

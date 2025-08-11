@@ -111,7 +111,7 @@ class HTTPServer:
 
         try:
             if self.run_task is not None:
-                raise ValueError("Run task is already instantiated")
+                raise RuntimeError("Run task is already instantiated")
 
             loop = asyncio.get_event_loop()
             self.run_task = loop.create_task(self.run_server())

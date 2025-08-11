@@ -126,7 +126,7 @@ class TimeDBClient:
         try:
             loop = asyncio.get_event_loop()
             if self.client is not None or self.write_task is not None:
-                raise ValueError("InfluxDB connection or write task are already instantiated")
+                raise RuntimeError("InfluxDB connection or write task are already instantiated")
             self.client = InfluxDBClient(host=self.host, port=self.port, username=self.username, password=self.password)
             self.write_task: asyncio.Task = loop.create_task(self.db_writer())
         except Exception as e:

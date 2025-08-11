@@ -54,7 +54,7 @@ class DeviceManager:
         try:
 
             if self.handler_task is not None:
-                raise ValueError("Handler task is already instantiated")
+                raise RuntimeError("Handler task is already instantiated")
 
             await self.init_devices()
             loop = asyncio.get_event_loop()

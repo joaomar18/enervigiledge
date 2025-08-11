@@ -89,7 +89,7 @@ class MQTTClient:
 
         try:
             if self.client is not None or self.publish_task is not None:
-                raise ValueError("Client or publish task are already instantiated")
+                raise RuntimeError("Client or publish task are already instantiated")
             loop = asyncio.get_event_loop()
             self.client = mqtt.Client(hostname=self.address, port=self.port, username=self.username, password=self.password)
             self.publish_task = loop.create_task(self.publisher())
