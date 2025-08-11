@@ -8,8 +8,8 @@ from typing import Optional, Dict, Set, Any
 #############LOCAL IMPORTS#############
 
 from mqtt.client import MQTTMessage
-from db.db import EnergyMeterRecord, SQLiteDBClient
-from controller.types import Protocol
+from db.db import SQLiteDBClient
+from controller.types import Protocol, EnergyMeterRecord, NodeConfig
 from controller.registry import ProtocolRegistry
 from controller.device import Device
 from controller.node import Node, NodeType
@@ -180,9 +180,9 @@ class DeviceManager:
             name=record.name,
             publish_queue=self.publish_queue,
             measurements_queue=self.measurements_queue,
-            meter_type=record.device_type,
-            meter_options=EnergyMeterOptions(**record.meter_options),
-            connection_options=plugin.options_class(**record.connection_options),
+            meter_type=record.type,
+            meter_options=EnergyMeterOptions(**record.options),
+            communication_options=plugin.options_class(**record.communication_options),
             nodes=self.create_nodes(record),
         )
 
@@ -211,27 +211,7 @@ class DeviceManager:
             if plugin:
                 created_nodes.add(plugin.node_factory(node_record))
                 continue
-            else:
-                cfg = node_record.config
-                node_type = NodeType(cfg["type"])
-
-                created_nodes.add(
-                    Node(
-                        name=node_record.name,
-                        type=node_type,
-                        unit=cfg.get("unit"),
-                        publish=cfg.get("publish", True),
-                        calculated=cfg.get("calculated", False),
-                        logging=cfg.get("logging", False),
-                        logging_period=cfg.get("logging_period", 15),
-                        min_alarm=cfg.get("min_alarm", False),
-                        max_alarm=cfg.get("max_alarm", False),
-                        min_alarm_value=cfg.get("min_alarm_value"),
-                        max_alarm_value=cfg.get("max_alarm_value"),
-                        incremental_node=cfg.get("incremental_node"),
-                        positive_incremental=cfg.get("positive_incremental"),
-                        calculate_increment=cfg.get("calculate_increment"),
-                    )
-                )
+            
+            created_nodes.add(ProtocolRegistry.base_node_factory(node_record))
 
         return created_nodes

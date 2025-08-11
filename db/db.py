@@ -10,83 +10,9 @@ from dataclasses import dataclass
 ############### LOCAL IMPORTS ###################
 
 from util.debug import LoggerManager
-from controller.types import Protocol, EnergyMeterType
+from controller.types import Protocol, EnergyMeterType, NodeRecord, EnergyMeterRecord
 
 #################################################
-
-
-@dataclass
-class NodeRecord:
-    """
-    Represents a configuration record for a data point (node) associated with an energy meter.
-
-    This class supports nodes from various protocols such as Modbus RTU, OPC UA, or protocol-independent
-    configurations (e.g., calculated or internal logic nodes). It stores all relevant configuration details.
-
-    Attributes:
-        device_id (int): Unique identifier of the parent device in the database.
-        name (str): Unique name identifying the node.
-        protocol (str): Communication protocol associated with the node.
-            Valid values:
-                - "modbus_rtu": Node is read via Modbus RTU.
-                - "opcua": Node is read via OPC UA.
-                - "none": Node has no communication protocol (e.g., calculated or virtual nodes).
-        config (Dict[str, Any]): Node-specific configuration and metadata.
-
-            Common fields:
-                - type (str): Data type of the node (e.g., "float", "int").
-                - unit (str): Unit of measurement (e.g., "V", "A").
-                - enabled (bool): Whether the node is enabled for reading or calculation.
-                - publish (bool): Whether the value should be published via MQTT.
-                - calculated (bool): Whether the value is calculated instead of read.
-                - custom (bool): Whether the value is a custom node (custom name or unit).
-                - logging (bool): Whether the value should be logged.
-                - logging_period (int): Logging interval in minutes.
-                - min_alarm (bool): Whether to enable a minimum threshold alarm.
-                - max_alarm (bool): Whether to enable a maximum threshold alarm.
-                - min_alarm_value (float): Minimum value threshold for alarm triggering.
-                - max_alarm_value (float): Maximum value threshold for alarm triggering.
-
-            Protocol-specific fields:
-                - For "modbus_rtu": register (int): Modbus register address.
-                - For "opcua": node_id (str): OPC UA Node ID used to access the value.
-    """
-
-    device_id: Optional[int]
-    name: str
-    protocol: str
-    config: Dict[str, Any]
-
-    def __eq__(self, other):
-        if not isinstance(other, NodeRecord):
-            return False
-        return (self.device_id, self.name, self.protocol) == (other.device_id, other.name, other.protocol)
-
-    def __hash__(self):
-        return hash((self.device_id, self.name, self.protocol))
-
-
-@dataclass
-class EnergyMeterRecord:
-    """
-    Represents the full configuration of an energy meter for persistence in SQLite.
-
-    Attributes:
-        id (int | None): id of the device, when inserting leave None
-        name (str): Human-readable name of the energy meter (e.g., "OR-WE-516 Energy Meter").
-        protocol (Protocol): Communication protocol used by the meter (e.g., "modbus_rtu", "opcua").
-        device_type (EnergyMeterType): Type of the meter, typically based on electrical configuration (e.g., "three_phase", "single_phase").
-        meter_options (Dict[str, Any]): Configuration options related to what the meter should read or expose (e.g., frequency, energy direction).
-        connection_options (Dict[str, Any]): Protocol-specific connection settings (e.g., slave ID, port, URL, baudrate).
-    """
-
-    name: str
-    protocol: Protocol
-    device_type: EnergyMeterType
-    meter_options: Dict[str, Any]
-    connection_options: Dict[str, Any]
-    nodes: Set[NodeRecord]
-    id: Optional[int] = None
 
 
 class SQLiteDBClient:
@@ -168,7 +94,7 @@ class SQLiteDBClient:
                     protocol TEXT NOT NULL,
                     device_type TEXT NOT NULL,
                     meter_options TEXT NOT NULL,
-                    connection_options TEXT NOT NULL
+                    communication_options TEXT NOT NULL
                 )
             """
             )
@@ -205,10 +131,10 @@ class SQLiteDBClient:
         try:
             self.cursor.execute(
                 """
-                INSERT INTO devices (name, protocol, device_type, meter_options, connection_options)
+                INSERT INTO devices (name, protocol, device_type, meter_options, communication_options)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (record.name, record.protocol, record.device_type, json.dumps(record.meter_options), json.dumps(record.connection_options)),
+                (record.name, record.protocol, record.type, json.dumps(record.options), json.dumps(record.communication_options)),
             )
             device_id = self.cursor.lastrowid
 
@@ -269,10 +195,10 @@ class SQLiteDBClient:
             # Insert the updated device configuration
             self.cursor.execute(
                 """
-                INSERT INTO devices (id, name, protocol, device_type, meter_options, connection_options)
+                INSERT INTO devices (id, name, protocol, device_type, meter_options, communication_options)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (record.id, record.name, record.protocol, record.device_type, json.dumps(record.meter_options), json.dumps(record.connection_options)),
+                (record.id, record.name, record.protocol, record.type, json.dumps(record.options), json.dumps(record.communication_options)),
             )
 
             # Insert all associated nodes
@@ -354,14 +280,14 @@ class SQLiteDBClient:
         try:
             self.cursor.execute(
                 """
-                SELECT id, name, protocol, device_type, meter_options, connection_options
+                SELECT id, name, protocol, device_type, meter_options, communication_options
                 FROM devices
             """
             )
             device_rows = self.cursor.fetchall()
 
             for device_row in device_rows:
-                device_id, name, protocol, device_type, meter_opts_str, conn_opts_str = device_row
+                device_id, name, protocol, device_type, meter_opts_str, comm_opts_str = device_row
 
                 self.cursor.execute(
                     """
@@ -380,9 +306,9 @@ class SQLiteDBClient:
                     id=device_id,
                     name=name,
                     protocol=Protocol(protocol),
-                    device_type=EnergyMeterType(device_type),
-                    meter_options=json.loads(meter_opts_str),
-                    connection_options=json.loads(conn_opts_str),
+                    type=EnergyMeterType(device_type),
+                    options=json.loads(meter_opts_str),
+                    communication_options=json.loads(comm_opts_str),
                     nodes=nodes,
                 )
 

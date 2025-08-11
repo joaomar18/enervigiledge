@@ -11,7 +11,7 @@ import logging
 
 from util.debug import LoggerManager
 from controller.device import Protocol
-from db.db import NodeRecord, EnergyMeterRecord
+from controller.types import NodeRecord, EnergyMeterRecord
 from controller.node import Node, OPCUANode
 from controller.meter import EnergyMeter, EnergyMeterType, EnergyMeterOptions
 
@@ -40,7 +40,7 @@ class OPCUAOptions:
     read_period: int = 5
     timeout: int = 5
 
-    def get_connection_options(self) -> Dict[str, Any]:
+    def get_communication_options(self) -> Dict[str, Any]:
         """
         Returns a dictionary representation of the current OPC-UA options.
 
@@ -69,12 +69,12 @@ class OPCUAEnergyMeter(EnergyMeter):
         measurements_queue (asyncio.Queue): Queue for pushing measurements to be logged.
         meter_type (EnergyMeterType): Specifies the type of meter (EnergyMeterType.SINGLE_PHASE, EnergyMeterType.THREE_PHASE).
         meter_options (EnergyMeterOptions): General configuration options for the meter.
-        connection_options (OPCUAOptions): Connection configuration parameters for the OPC UA client.
+        communication_options (OPCUAOptions): Connection configuration parameters for the OPC UA client.
         nodes (Optional[Set[Node]]): Set of nodes representing individual measurement points.
 
     Attributes:
         client (asyncua.Client): Instance of the OPC UA client used for communication.
-        connection_options (OPCUAOptions): Configuration used to initialize the OPC UA client.
+        communication_options (OPCUAOptions): Configuration used to initialize the OPC UA client.
         nodes (Set[Node]): All nodes associated with this meter.
         opcua_nodes (Set[OPCUANode]): Subset of nodes specific to OPC UA.
         connection_open (bool): Flag indicating whether the OPC UA connection is currently established.
@@ -88,7 +88,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         measurements_queue: asyncio.Queue,
         meter_type: EnergyMeterType,
         meter_options: EnergyMeterOptions,
-        connection_options: OPCUAOptions,
+        communication_options: OPCUAOptions,
         nodes: Optional[Set[Node]] = None,
     ):
         super().__init__(
@@ -102,12 +102,12 @@ class OPCUAEnergyMeter(EnergyMeter):
             meter_nodes=nodes if nodes else set(),
         )
 
-        self.connection_options = connection_options
-        self.client = Client(url=self.connection_options.url, timeout=self.connection_options.timeout)
+        self.communication_options = communication_options
+        self.client = Client(url=self.communication_options.url, timeout=self.communication_options.timeout)
 
-        if self.connection_options.username:
-            self.client.set_user(self.connection_options.username)
-            self.client.set_password(self.connection_options.password)
+        if self.communication_options.username:
+            self.client.set_user(self.communication_options.username)
+            self.client.set_password(self.communication_options.password)
 
         self.nodes = nodes if nodes else set()
         self.opcua_nodes: Set[OPCUANode] = {node for node in self.nodes if isinstance(node, OPCUANode)}
@@ -237,7 +237,7 @@ class OPCUAEnergyMeter(EnergyMeter):
                 logger.exception(f"Receiver error: {e}")
                 await self.close_connection()
 
-            await asyncio.sleep(self.connection_options.read_period)
+            await asyncio.sleep(self.communication_options.read_period)
 
     async def read_float(self, node: OPCUANode):
         """
@@ -312,7 +312,7 @@ class OPCUAEnergyMeter(EnergyMeter):
             "protocol": self.protocol,
             "connected": self.connected,
             "options": self.meter_options.get_meter_options(),
-            "communication_options": self.connection_options.get_connection_options(),
+            "communication_options": self.communication_options.get_communication_options(),
             "type": self.meter_type,
         }
 
@@ -334,8 +334,8 @@ class OPCUAEnergyMeter(EnergyMeter):
             name=self.name,
             id=self.id,
             protocol=self.protocol,
-            device_type=self.meter_type,
-            meter_options=self.meter_options.get_meter_options(),
-            connection_options=self.connection_options.get_connection_options(),
+            type=self.meter_type,
+            options=self.meter_options.get_meter_options(),
+            communication_options=self.communication_options.get_communication_options(),
             nodes=node_records,
         )

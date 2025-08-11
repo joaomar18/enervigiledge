@@ -2,155 +2,75 @@
 
 from datetime import datetime
 import time
-from typing import Optional, Callable, Dict, Union, Any
+from typing import Optional, Dict, Union, Any
 
 #######################################
 
 #############LOCAL IMPORTS#############
 
-from controller.types import Protocol, NodeType
-from db.db import NodeRecord
+from controller.types import Protocol, NodeType, NodeConfig, BaseNodeRecordConfig, NodeRecord
 
 #######################################
 
 
 class Node:
     """
-    Represents a data point in an energy meter device, such as a sensor reading or measurement value.
+    Represents a data point with support for different value types, incremental counting,
+    alarms, statistical tracking, and logging.
 
-    The Node class provides comprehensive functionality for handling different types of data points
-    with support for real-time processing, historical tracking, alarms, and various calculation modes.
+    Supports INT, FLOAT, BOOL, and STRING data types with protocol-agnostic design.
+    Provides incremental behavior for energy counters, configurable alarm thresholds,
+    statistical tracking (min/max/mean), and periodic logging with MQTT publishing.
 
     Key Features:
-        - Multi-type support: INT, FLOAT, BOOL, STRING values
-        - Incremental value handling for energy counters and accumulators
-        - Configurable alarm system with min/max thresholds
-        - Statistical tracking (min, max, mean values)
-        - Direction detection for value change trends
-        - Flexible logging with configurable intervals
-        - Protocol-agnostic design (Modbus RTU, OPC UA, calculated nodes)
-        - Value change callbacks for real-time event handling
-
-    Configuration Parameters:
-        name (str): Unique identifier for the node
-        type (NodeType): Data type (FLOAT, INT, BOOL, STRING)
-        unit (str | None): Measurement unit (e.g., 'V', 'kWh', 'Hz'). Auto-set to None for BOOL/STRING
-        protocol (Protocol): Communication protocol (MODBUS_RTU, OPC_UA, NONE for virtual nodes)
-        enabled (bool): Whether the node is active for data collection
-        publish (bool): Whether to publish values over MQTT
-        calculated (bool): True if value is computed rather than read from hardware
-        custom (bool): True if node uses custom naming or units
-        decimal_places (int | None): Decimal precision for FLOAT values. Auto-set to None for non-FLOAT
-
-    Incremental Node Features:
-        incremental_node (bool | None): Enables counter/accumulator behavior. None for BOOL/STRING
-        positive_incremental (bool | None): Direction of incremental counting
-        calculate_increment (bool | None): Whether to compute increment from initial value
-        initial_value (Union[float, int] | None): First observed value for increment calculations
-
-    Logging Configuration:
-        logging (bool): Whether to store historical values
-        logging_period (int): Time interval in minutes between log entries
-        last_log_datetime (Optional[datetime]): Timestamp of most recent log entry
-
-    Alarm System:
-        min_alarm (bool): Enables low-value threshold monitoring
-        max_alarm (bool): Enables high-value threshold monitoring
-        min_alarm_value (float | None): Lower threshold trigger. Auto-set to None for BOOL/STRING
-        max_alarm_value (float | None): Upper threshold trigger. Auto-set to None for BOOL/STRING
-        min_alarm_state (bool): Current state of minimum value alarm
-        max_alarm_state (bool): Current state of maximum value alarm
-
-    Runtime State:
-        value (Union[float, int, str, bool] | None): Current node value
-        timestamp (Optional[float]): Unix timestamp of last value update
-        elapsed_time (Optional[float]): Seconds between last and current update
-        positive_direction (bool): True if value increased since last change
-        negative_direction (bool): True if value decreased since last change
-
-    Statistical Tracking:
-        min_value (Union[float, int] | None): Lowest observed value since reset
-        max_value (Union[float, int] | None): Highest observed value since reset
-        mean_value (Union[float, int] | None): Average value since reset
-        mean_sum (float): Cumulative sum for mean calculation
-        mean_count (int): Number of values used in mean calculation
-
-    Event Handling:
-        on_value_change (Optional[Callable]): Callback function triggered on value updates
+        - Value change callbacks via on_value_change
+        - Incremental nodes: energy counters with delta or accumulation modes
+        - Alarms: min/max threshold monitoring (numeric types only)
+        - Statistics: automatic min/max/mean tracking for non-incremental numeric nodes
+        - Logging: periodic data capture with configurable intervals
 
     Type Restrictions:
-        - BOOL/STRING nodes: Cannot use incremental features, alarms, or units
-        - Incremental nodes: Cannot use alarm features (conflicts with accumulator logic)
-        - FLOAT nodes: Support full feature set including decimal precision
-        - INT nodes: Support most features except decimal precision
+        - BOOL/STRING: No incremental features, alarms, or units allowed
+        - Incremental nodes: Cannot use alarms (conflicts with accumulator logic)
+        - Only numeric types support alarms and statistical tracking
 
-    Usage Examples:
-        # Basic sensor reading
-        voltage_node = Node("l1_voltage", NodeType.FLOAT, "V", logging=True)
-
-        # Energy counter with increment calculation
-        energy_node = Node("active_energy", NodeType.FLOAT, "kWh",
-                          incremental_node=True, calculate_increment=True)
-
-        # Boolean status with MQTT publishing
-        status_node = Node("device_online", NodeType.BOOL, None, publish=True)
-
-        # Calculated value with alarms
-        power_node = Node("total_power", NodeType.FLOAT, "kW", calculated=True,
-                         min_alarm=True, min_alarm_value=0.0, max_alarm=True, max_alarm_value=1000.0)
+    Args:
+        configuration (NodeConfig): Complete node configuration including type, protocol,
+            alarms, logging, and incremental settings.
     """
 
-    def __init__(
-        self,
-        name: str,
-        type: NodeType,
-        unit: str | None,
-        protocol: Protocol = Protocol.NONE,
-        enabled: bool = True,
-        incremental_node: bool | None = False,
-        positive_incremental: bool | None = False,
-        calculate_increment: bool | None = True,
-        publish: bool = True,
-        calculated: bool = False,
-        custom: bool = False,
-        logging: bool = False,
-        logging_period: int = 15,
-        min_alarm: bool = False,
-        max_alarm: bool = False,
-        min_alarm_value: float | None = 0.0,
-        max_alarm_value: float | None = 0.0,
-        decimal_places: int | None = 3,
-        on_value_change: Optional[Callable[["Node"], None]] = None,
-    ):
+    def __init__(self, configuration: NodeConfig):
+        configuration.validate()
+
         # Configuration
-        self.name = name
-        self.type = type
-        self.unit = unit if (self.type is NodeType.FLOAT or self.type is NodeType.INT) else None
-        self.protocol = protocol
-        self.enabled = enabled
-        self.publish = publish
-        self.calculated = calculated
-        self.custom = custom
-        self.decimal_places = decimal_places if (self.type is NodeType.FLOAT) else None
-        self.on_value_change = on_value_change
+        self.name = configuration.name
+        self.type = configuration.type
+        self.unit = configuration.unit
+        self.protocol = configuration.protocol
+        self.enabled = configuration.enabled
+        self.publish = configuration.publish
+        self.calculated = configuration.calculated
+        self.custom = configuration.custom
+        self.decimal_places = configuration.decimal_places
+        self.on_value_change = configuration.on_value_change
 
         # Logging
-        self.logging = logging
-        self.logging_period = logging_period
+        self.logging = configuration.logging
+        self.logging_period = configuration.logging_period
         self.last_log_datetime: Optional[datetime] = None
 
         # Alarms
-        self.min_alarm = min_alarm
-        self.max_alarm = max_alarm
-        self.min_alarm_value = min_alarm_value if (self.type is NodeType.FLOAT or self.type is NodeType.INT) else None
-        self.max_alarm_value = max_alarm_value if (self.type is NodeType.FLOAT or self.type is NodeType.INT) else None
+        self.min_alarm = configuration.min_alarm
+        self.max_alarm = configuration.max_alarm
+        self.min_alarm_value = configuration.min_alarm_value
+        self.max_alarm_value = configuration.max_alarm_value
         self.min_alarm_state = False
         self.max_alarm_state = False
 
         # Incremental logic
-        self.incremental_node = incremental_node if (self.type is NodeType.FLOAT or self.type is NodeType.INT) else None
-        self.positive_incremental = positive_incremental if (self.incremental_node is not None) else None
-        self.calculate_increment = calculate_increment if (self.incremental_node is not None) else None
+        self.incremental_node = configuration.incremental_node
+        self.positive_incremental = configuration.positive_incremental
+        self.calculate_increment = configuration.calculate_increment
         self.initial_value: Union[float, int] = None
 
         # Value and tracking
@@ -164,56 +84,6 @@ class Node:
         self.mean_value: Union[float, int] = None
         self.mean_sum: float = 0.0
         self.mean_count: int = 0
-
-        # Validate Node
-        self.validate_node()
-
-    def validate_node(self) -> None:
-        """
-        Validates the current Node configuration to ensure it is logically consistent
-        based on its type and enabled features.
-
-        Raises:
-            ValueError: If the configuration includes unsupported or inconsistent combinations such as:
-                - Invalid protocol defined.
-                - Using `incremental_node` with a BOOL or STRING node.
-                - Enabling min or max alarms for BOOL or STRING nodes.
-                - Enabling alarms on incremental nodes.
-                - Setting alarm thresholds when alarms are disabled.
-                - Units should be empty for BOOL or STRING nodes.
-                - Enabling logging with a non-positive logging period.
-        """
-
-        # Protocol validation
-        if self.protocol not in Protocol.valid_protocols():
-            raise ValueError(f"Protocol {self.protocol} is not valid.")
-
-        # Basic type restrictions
-        if self.type in {NodeType.BOOL, NodeType.STRING}:
-            if self.incremental_node:
-                raise ValueError(f"incremental_node is not valid for {self.type.name} nodes.")
-
-            if self.min_alarm or self.max_alarm:
-                raise ValueError(f"Alarms are not supported for {self.type.name} nodes.")
-
-            if self.unit:
-                raise ValueError(f"Non-empty unit is not applicable to {self.type.name} nodes.")
-
-        # Incremental restrictions
-        if self.incremental_node:
-            if self.min_alarm or self.max_alarm:
-                raise ValueError("Alarms are not applicable to incremental nodes.")
-
-        # Alarm threshold without enable flags
-        if self.min_alarm and self.min_alarm_value is None:
-            raise ValueError("min_alarm is enabled but min_alarm_value is None.")
-
-        if self.max_alarm and self.max_alarm_value is None:
-            raise ValueError("max_alarm is enabled but max_alarm_value is None.")
-
-        # Logging period must be valid if logging is enabled
-        if self.logging and (not isinstance(self.logging_period, int) or self.logging_period <= 0):
-            raise ValueError(f"Invalid logging period '{self.logging_period}' for node '{self.name}'. Must be a positive integer.")
 
     def set_unit(self, unit: str) -> None:
         """
@@ -598,40 +468,33 @@ class Node:
         """
         Converts the current node instance into a serializable NodeRecord object.
 
-        This method extracts all relevant configuration fields from the node,
-        including protocol-specific attributes such as register (ModbusRTUNode)
-        or node_id (OPCUANode), and returns a NodeRecord suitable for persistence.
+        Uses BaseNodeRecordConfig for core attributes. Protocol-specific subclasses
+        should override this method to add their own attributes.
 
         Returns:
             NodeRecord: A representation of the current node for database storage.
-                - device_id is set to None and should be assigned externally.
-                - protocol is inferred from the node class type.
-                - config includes all configurable attributes.
         """
 
-        configuration: Dict[str, Any] = {}
-        configuration["enabled"] = self.enabled
-        configuration["type"] = self.type.value
-        configuration["unit"] = self.unit
-        configuration["publish"] = self.publish
-        configuration["calculated"] = self.calculated
-        configuration["custom"] = self.custom
-        configuration["decimal_places"] = self.decimal_places
-        configuration["logging"] = self.logging
-        configuration["logging_period"] = self.logging_period
-        configuration["min_alarm"] = self.min_alarm
-        configuration["max_alarm"] = self.max_alarm
-        configuration["min_alarm_value"] = self.min_alarm_value
-        configuration["max_alarm_value"] = self.max_alarm_value
-        configuration["incremental_node"] = self.incremental_node
-        configuration["positive_incremental"] = self.positive_incremental
-        configuration["calculate_increment"] = self.calculate_increment
+        base_config = BaseNodeRecordConfig(
+            enabled=self.enabled,
+            type=self.type,
+            unit=self.unit,
+            publish=self.publish,
+            calculated=self.calculated,
+            custom=self.custom,
+            decimal_places=self.decimal_places,
+            logging=self.logging,
+            logging_period=self.logging_period,
+            min_alarm=self.min_alarm,
+            max_alarm=self.max_alarm,
+            min_alarm_value=self.min_alarm_value,
+            max_alarm_value=self.max_alarm_value,
+            incremental_node=self.incremental_node,
+            positive_incremental=self.positive_incremental,
+            calculate_increment=self.calculate_increment,
+        )
 
-        if hasattr(self, "register") and self.protocol == Protocol.MODBUS_RTU:
-            configuration["register"] = self.register
-        elif hasattr(self, "node_id") and self.protocol == Protocol.OPC_UA:
-            configuration["node_id"] = self.node_id
-
+        configuration = base_config.get_config()
         return NodeRecord(device_id=None, name=self.name, protocol=self.protocol, config=configuration)
 
 
@@ -647,12 +510,28 @@ class ModbusRTUNode(Node):
     """
 
     def __init__(self, name: str, type: NodeType, register: int, unit: str, **kwargs):
-        super().__init__(name=name, type=type, unit=unit, protocol=Protocol.MODBUS_RTU, **kwargs)
+        config = NodeConfig(name=name, type=type, unit=unit, protocol=Protocol.MODBUS_RTU, **kwargs)
+        super().__init__(configuration=config)
         self.register = register
         self.connected = False
 
     def set_connection_state(self, state: bool):
         self.connected = state
+
+    def get_node_record(self) -> NodeRecord:
+        """
+        Converts the Modbus RTU node instance into a serializable NodeRecord object.
+
+        Extends the base implementation to include Modbus-specific register attribute.
+
+        Returns:
+            NodeRecord: A representation of the current node for database storage.
+        """
+
+        node_record = super().get_node_record()
+        node_record.config["register"] = self.register
+
+        return node_record
 
 
 class OPCUANode(Node):
@@ -667,9 +546,25 @@ class OPCUANode(Node):
     """
 
     def __init__(self, name: str, type: NodeType, node_id: str, unit: str, **kwargs):
-        super().__init__(name=name, type=type, unit=unit, protocol=Protocol.OPC_UA, **kwargs)
+        config = NodeConfig(name=name, type=type, unit=unit, protocol=Protocol.OPC_UA, **kwargs)
+        super().__init__(configuration=config)
         self.node_id = node_id
         self.connected = False
 
     def set_connection_state(self, state: bool):
         self.connected = state
+
+    def get_node_record(self) -> NodeRecord:
+        """
+        Converts the OPC UA node instance into a serializable NodeRecord object.
+
+        Extends the base implementation to include OPC UA-specific node_id attribute.
+
+        Returns:
+            NodeRecord: A representation of the current node for database storage.
+        """
+
+        node_record = super().get_node_record()
+        node_record.config["node_id"] = self.node_id
+
+        return node_record

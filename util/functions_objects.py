@@ -7,23 +7,25 @@ import dataclasses
 
 #############LOCAL IMPORTS#############
 
-
 #######################################
 
 
-def check_required_keys(input_dict: Dict[str, Any], type_class: Type) -> Tuple[Tuple[dataclasses.Field, ...], List[str], List[str]] | None:
+def check_required_keys(
+    input_dict: Dict[str, Any], type_class: Type, ignore_keys: Tuple[str] = ()
+) -> Tuple[Tuple[dataclasses.Field, ...], List[str], List[str]] | None:
     """
-    Validates dictionary fields against a dataclass and returns field metadata.
+    Validates dictionary against dataclass required fields and returns field metadata.
 
-    Uses dataclass field introspection to determine required fields (those without
-    default values) and returns analysis of the dataclass structure and validation.
+    Uses dataclass introspection to identify required fields (no default values) and
+    validates that all are present in the input dictionary, excluding ignored keys.
 
     Args:
         input_dict (Dict[str, Any]): Dictionary to validate.
-        type_class (Type): Dataclass type to check against.
+        type_class (Type): Dataclass type to validate against.
+        ignore_keys (Tuple[str]): Field names to exclude from validation.
 
     Returns:
-        Optional[Tuple]: Tuple of (fields, required_fields, optional_fields) or None if validation fails.
+        Optional[Tuple]: (fields, required_fields, optional_fields) or None if validation fails.
     """
 
     if not input_dict:
@@ -45,7 +47,7 @@ def check_required_keys(input_dict: Dict[str, Any], type_class: Type) -> Tuple[T
             optional_fields.append(field.name)
 
     # Check for missing required fields
-    missing_fields = [field for field in required_fields if field not in input_dict]
+    missing_fields = [field for field in required_fields if field not in input_dict and field not in ignore_keys]
     if missing_fields:
         return None
 

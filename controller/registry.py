@@ -9,8 +9,7 @@ from typing import Callable, Dict, Optional, Type
 
 from controller.device import Device
 from controller.node import NodeType, Node, ModbusRTUNode, OPCUANode
-from controller.types import Protocol
-from db.db import NodeRecord
+from controller.types import Protocol, NodeRecord, NodeConfig
 from protocol.modbus_rtu.rtu_device import ModbusRTUOptions, ModbusRTUEnergyMeter
 from protocol.opcua.opcua_device import OPCUAOptions, OPCUAEnergyMeter
 
@@ -59,6 +58,7 @@ class ProtocolRegistry:
     """
 
     _registry: Dict[Protocol, ProtocolPlugin] = {}
+    base_node_factory: NodeFactory = None
 
     def __init__(self):
         raise TypeError("ProtocolRegistry is a static class and cannot be instantiated")
@@ -99,6 +99,20 @@ class ProtocolRegistry:
         return ProtocolRegistry._registry.get(protocol)
 
 
+##########     B A S E     N O D E     R E G I S T R A T I O N     ##########
+
+
+def _base_node_factory(record: NodeRecord) -> Node:
+    """Create a :class:`Node` from a :class:`NodeRecord`."""
+    cfg = record.config
+    config = NodeConfig(
+        name=record.name, type=NodeType(cfg["type"]), unit=cfg["unit"], protocol=Protocol.NONE, **{k: v for k, v in cfg.items() if k not in ["type", "unit"]}
+    )
+    return Node(config)
+
+
+ProtocolRegistry.base_node_factory = _base_node_factory
+
 ##########     M O D B U S     R T U     R E G I S T R A T I O N     ##########
 
 
@@ -108,8 +122,9 @@ def _modbus_rtu_node_factory(record: NodeRecord) -> Node:
     return ModbusRTUNode(
         name=record.name,
         type=NodeType(cfg["type"]),
+        unit=cfg["unit"],
         register=cfg["register"],
-        **{k: v for k, v in cfg.items() if k not in ["type", "register"]}
+        **{k: v for k, v in cfg.items() if k not in ["type", "unit", "register"]},
     )
 
 
@@ -124,8 +139,9 @@ def _opcua_node_factory(record: NodeRecord) -> Node:
     return OPCUANode(
         name=record.name,
         type=NodeType(cfg["type"]),
+        unit=cfg["unit"],
         node_id=cfg["node_id"],
-        **{k: v for k, v in cfg.items() if k not in ["type", "node_id"]}
+        **{k: v for k, v in cfg.items() if k not in ["type", "unit", "node_id"]},
     )
 
 

@@ -15,7 +15,7 @@ from dataclasses import dataclass, asdict
 
 from util.debug import LoggerManager
 from controller.device import Protocol
-from db.db import NodeRecord, EnergyMeterRecord
+from controller.types import NodeRecord, EnergyMeterRecord
 from controller.node import Node, ModbusRTUNode
 from controller.meter import EnergyMeter, EnergyMeterType, EnergyMeterOptions
 
@@ -51,7 +51,7 @@ class ModbusRTUOptions:
     timeout: int = 5
     retries: int = 3
 
-    def get_connection_options(self) -> Dict[str, Any]:
+    def get_communication_options(self) -> Dict[str, Any]:
         """
         Returns a dictionary representation of the current modbus rtu options.
 
@@ -81,13 +81,13 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         measurements_queue (asyncio.Queue): Queue for pushing measurements to be logged.
         meter_type (EnergyMeterType): Specifies the type of meter (EnergyMeterType.SINGLE_PHASE, EnergyMeterType.THREE_PHASE).
         meter_options (EnergyMeterOptions): General configuration options for the meter.
-        connection_options (ModbusRTUOptions): Serial communication parameters specific to Modbus RTU.
+        communication_options (ModbusRTUOptions): Serial communication parameters specific to Modbus RTU.
         nodes (set[Node]): Set of nodes representing individual measurement points.
 
     Attributes:
         nodes (set[Node]): All nodes associated with this meter.
         modbus_rtu_nodes (set[ModbusRTUNode]): Subset of nodes specific to Modbus RTU.
-        connection_options (ModbusRTUOptions): Connection configuration used to initialize the client.
+        communication_options (ModbusRTUOptions): Connection configuration used to initialize the client.
         client (ModbusRTUClient): Instance of the Modbus RTU client used for communication.
         connection_open (bool): Flag indicating whether the RTU connection is currently open.
     """
@@ -100,7 +100,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         measurements_queue: asyncio.Queue,
         meter_type: EnergyMeterType,
         meter_options: EnergyMeterOptions,
-        connection_options: ModbusRTUOptions,
+        communication_options: ModbusRTUOptions,
         nodes: Optional[Set[Node]] = None,
     ):
         super().__init__(
@@ -114,16 +114,16 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             meter_nodes=nodes if nodes else set(),
         )
 
-        self.connection_options = connection_options
+        self.communication_options = communication_options
 
         self.client = ModbusRTUClient(
-            port=self.connection_options.port,
-            baudrate=self.connection_options.baudrate,
-            stopbits=self.connection_options.stopbits,
-            parity=self.connection_options.parity,
-            bytesize=self.connection_options.bytesize,
-            timeout=float(self.connection_options.timeout),
-            retries=self.connection_options.retries,
+            port=self.communication_options.port,
+            baudrate=self.communication_options.baudrate,
+            stopbits=self.communication_options.stopbits,
+            parity=self.communication_options.parity,
+            bytesize=self.communication_options.bytesize,
+            timeout=float(self.communication_options.timeout),
+            retries=self.communication_options.retries,
         )
 
         self.nodes = nodes if nodes else set()
@@ -248,7 +248,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                 logger.exception(f"{e}")
                 self.close_connection()
 
-            await asyncio.sleep(self.connection_options.read_period)
+            await asyncio.sleep(self.communication_options.read_period)
 
     def read_float(self, node: ModbusRTUNode):
         """
@@ -267,7 +267,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         """
 
         try:
-            response = self.client.read_holding_registers(address=node.register, count=2, slave=self.connection_options.slave_id, no_response_expected=False)
+            response = self.client.read_holding_registers(address=node.register, count=2, slave=self.communication_options.slave_id, no_response_expected=False)
 
             if not response or not hasattr(response, "registers") or len(response.registers) < 2:
                 raise ModbusException("Incomplete response")
@@ -321,7 +321,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             "protocol": self.protocol,
             "connected": self.connected,
             "options": self.meter_options.get_meter_options(),
-            "communication_options": self.connection_options.get_connection_options(),
+            "communication_options": self.communication_options.get_communication_options(),
             "type": self.meter_type,
         }
 
@@ -343,8 +343,8 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             name=self.name,
             id=self.id,
             protocol=self.protocol,
-            device_type=self.meter_type,
-            meter_options=self.meter_options.get_meter_options(),
-            connection_options=self.connection_options.get_connection_options(),
+            type=self.meter_type,
+            options=self.meter_options.get_meter_options(),
+            communication_options=self.communication_options.get_communication_options(),
             nodes=node_records,
         )

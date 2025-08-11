@@ -13,11 +13,10 @@ from abc import ABC, abstractmethod
 
 from controller.device import Device
 from controller.node import Node
-from controller.types import Protocol, EnergyMeterType, PowerFactorDirection, EnergyMeterOptions
+from controller.types import Protocol, EnergyMeterType, PowerFactorDirection, EnergyMeterOptions, EnergyMeterRecord
 from controller.meter_nodes import EnergyMeterNodes
 from mqtt.client import MQTTMessage
 from db.timedb import Measurement
-from db.db import EnergyMeterRecord
 import util.functions_generic as functions_generic
 from util.debug import LoggerManager
 
