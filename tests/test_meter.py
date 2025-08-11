@@ -10,7 +10,7 @@ import pytest
 
 from controller.node import Node
 from controller.meter import EnergyMeter
-from controller.types import NodeType, Protocol, EnergyMeterType
+from controller.types import NodeType, Protocol, EnergyMeterType, NodeConfig
 from db.db import EnergyMeterRecord, NodeRecord
 
 #######################################
@@ -45,10 +45,10 @@ class DummyMeter(EnergyMeter):
 
 @pytest.mark.asyncio
 async def test_publish_nodes_filters_and_formats():
-    node1 = Node("voltage", NodeType.FLOAT, "V", publish=True)
+    node1 = Node(NodeConfig("voltage", NodeType.FLOAT, "V", publish=True))
     node1.set_value(10)
-    node2 = Node("current", NodeType.FLOAT, "A", publish=True)
-    node3 = Node("frequency", NodeType.FLOAT, "Hz", publish=False)
+    node2 = Node(NodeConfig("current", NodeType.FLOAT, "A", publish=True))
+    node3 = Node(NodeConfig("frequency", NodeType.FLOAT, "Hz", publish=False))
     node3.set_value(50)
 
     meter = DummyMeter({node1, node2, node3})

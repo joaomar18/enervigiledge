@@ -12,7 +12,7 @@ from web import nodes_api, auth_api
 from web.dependencies import services
 from web.safety import HTTPSafety
 from controller.node import Node
-from controller.types import NodeType
+from controller.types import NodeType, NodeConfig
 from argon2 import PasswordHasher
 
 #######################################
@@ -56,7 +56,7 @@ def test_nodes_endpoints_use_query_params(tmp_path):
     HTTPSafety.USER_CONFIG_PATH = str(config_path)
 
     safety = HTTPSafety()
-    node = Node("voltage", NodeType.FLOAT, "V")
+    node = Node(NodeConfig("voltage", NodeType.FLOAT, "V"))
     node.set_value(10)
     device = DummyDevice(1, "dev1", [node])
     device_manager = DummyDeviceManager([device])
