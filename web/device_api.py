@@ -96,7 +96,7 @@ async def add_device(
         if device_image:
             process_and_save_image(device_image, device_id, 200, "db/device_img/")
 
-        device_manager.add_device(energy_meter)
+        await device_manager.add_device(energy_meter)
         return JSONResponse(content={"message": "Device added sucessfully."})
 
     raise ValueError(f"Could not add device with name {device_name} and id {device_id} in the database.")
@@ -127,8 +127,7 @@ async def edit_device(
     if not device:
         raise ValueError(f"Device not found with id {device_id}")
 
-    device.stop()
-    device_manager.delete_device(device)
+    await device_manager.delete_device(device)
 
     if database.update_energy_meter(energy_meter.get_meter_record()):
 
@@ -136,7 +135,7 @@ async def edit_device(
         if device_image:
             process_and_save_image(device_image, device_id, 200, "db/device_img/")
 
-        device_manager.add_device(energy_meter)
+        await device_manager.add_device(energy_meter)
         return JSONResponse(content={"message": "Device edited sucessfully."})
 
     raise ValueError(f"Could not update device with name {device.name if device else 'not found'} and id {device_id} in the database.")
@@ -167,8 +166,7 @@ async def delete_device(
     if device.name != device_name:
         raise ValueError(f"Device name does not match request device_name {device_name} for id {device_id}")
 
-    device.stop()
-    device_manager.delete_device(device)
+    await device_manager.delete_device(device)
     if database.delete_energy_meter(device.get_meter_record()):
 
         if not delete_device_image(device_id, "db/device_img/"):

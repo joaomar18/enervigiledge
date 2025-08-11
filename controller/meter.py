@@ -5,7 +5,7 @@ import asyncio
 import math
 import traceback
 from typing import Dict, Any, Type, Set
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
 #######################################
 
@@ -103,31 +103,19 @@ class EnergyMeter(Device):
         self.disconnected_calculation = False
 
     @abstractmethod
-    def start(self) -> None:
+    async def start(self) -> None:
         """
-        Starts the energy meter device operations.
-
-        This method should be implemented by subclasses to initialize and start
-        the communication protocol, begin data acquisition, and set up any
-        necessary background tasks for the specific meter type.
-
-        Raises:
-            NotImplementedError: If the subclass does not implement this method.
+        Starts the energy meter device operations and communication protocol.
         """
+
         pass
 
     @abstractmethod
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """
-        Stops the energy meter device operations.
-
-        This method should be implemented by subclasses to gracefully shutdown
-        the communication protocol, stop data acquisition, and clean up any
-        resources or background tasks associated with the specific meter type.
-
-        Raises:
-            NotImplementedError: If the subclass does not implement this method.
+        Stops the energy meter device operations and cleans up resources.
         """
+
         pass
 
     async def process_nodes(self) -> None:
@@ -550,7 +538,7 @@ class EnergyMeter(Device):
 
         node_records: Set[NodeRecord] = set()
 
-        for node in self.meter_nodes:
+        for node in self.nodes:
             record = node.get_node_record()
             node_records.add(record)
 

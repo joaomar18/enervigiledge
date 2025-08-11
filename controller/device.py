@@ -26,12 +26,14 @@ class Device(ABC):
         measurements_queue (asyncio.Queue): Queue for logging measurements.
         nodes (Set[Node]): Set of nodes (data points) for the device.
         connected (bool): Indicates whether the device is currently connected.
+        network_connected (bool): Indicates wether the device network is responding
     """
 
     def __init__(self, id: int, name: str, protocol: Protocol, publish_queue: asyncio.Queue, measurements_queue: asyncio.Queue, nodes: Set[Node]):
         self.id = id
         self.name = name
         self.connected = False
+        self.network_connected = False
         self.publish_queue = publish_queue
         self.measurements_queue = measurements_queue
         self.nodes = nodes
@@ -41,42 +43,36 @@ class Device(ABC):
         self.protocol = protocol
 
     @abstractmethod
-    def start(self) -> None:
+    async def start(self) -> None:
         """
-        Starts the energy meter device operations.
-
-        This method should be implemented by subclasses to initialize and start
-        the communication protocol, begin data acquisition, and set up any
-        necessary background tasks for the specific device type.
-
-        Raises:
-            NotImplementedError: If the subclass does not implement this method.
+        Starts the energy meter device operations and communication protocol.
         """
+
         pass
 
     @abstractmethod
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """
-        Stops the energy meter device operations.
-
-        This method should be implemented by subclasses to gracefully shutdown
-        the communication protocol, stop data acquisition, and clean up any
-        resources or background tasks associated with the specific device type.
-
-        Raises:
-            NotImplementedError: If the subclass does not implement this method.
+        Stops the energy meter device operations and cleans up resources.
         """
+
         pass
 
     def set_connection_state(self, state: bool):
         """
-        Updates the connection state of the device.
-
-        Args:
-            state (bool): True if the node is connected, False otherwise.
+        Updates the device connection state.
         """
 
         self.connected = state
+
+    def set_network_state(self, state: bool):
+        """
+        Updates the device network connectivity state.
+        """
+
+        self.network_connected = state
+        if not state:
+            self.connected = state
 
     def get_device_state(self) -> Dict[str, Any]:
         """

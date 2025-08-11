@@ -73,11 +73,10 @@ class OPCUAEnergyMeter(EnergyMeter):
         nodes (Optional[Set[Node]]): Set of nodes representing individual measurement points.
 
     Attributes:
-        client (asyncua.Client): Instance of the OPC UA client used for communication.
+        client (Optional[asyncua.Client]): Instance of the OPC UA client used for communication.
         communication_options (OPCUAOptions): Configuration used to initialize the OPC UA client.
         nodes (Set[Node]): All nodes associated with this meter.
         opcua_nodes (Set[OPCUANode]): Subset of nodes specific to OPC UA.
-        connection_open (bool): Flag indicating whether the OPC UA connection is currently established.
     """
 
     def __init__(
@@ -104,15 +103,10 @@ class OPCUAEnergyMeter(EnergyMeter):
         )
 
         self.communication_options = communication_options
-        self.client = Client(url=self.communication_options.url, timeout=self.communication_options.timeout)
-
-        if self.communication_options.username:
-            self.client.set_user(self.communication_options.username)
-            self.client.set_password(self.communication_options.password)
+        self.client: Optional[Client] = None
 
         self.nodes = nodes if nodes else set()
         self.opcua_nodes: Set[OPCUANode] = {node for node in self.nodes if isinstance(node, OPCUANode)}
-        self.connection_open = False
 
         self.run_connection_task = False
         self.run_receiver_task = False
@@ -120,18 +114,18 @@ class OPCUAEnergyMeter(EnergyMeter):
         self.connection_task: asyncio.Task | None = None
         self.receiver_task: asyncio.Task | None = None
 
-        self.start()
-
-    def start(self) -> None:
+    async def start(self) -> None:
         """
-        Starts the background tasks for the OPC UA energy meter.
-
-        This method initializes two asynchronous tasks using the event loop:
-            - `connection_task`: Handles connection establishment and reconnection logic.
-            - `receiver_task`: Periodically reads values from all configured OPC UA nodes.
-
-        These tasks run concurrently to ensure continuous communication and data acquisition.
+        Starts the OPC UA energy meter background tasks for connection management and data acquisition.
         """
+
+        if self.client is not None:
+            raise RuntimeError(f"OPC UA Client for device {self.name} is already running")
+
+        self.client = Client(url=self.communication_options.url, timeout=self.communication_options.timeout)
+        if self.communication_options.username:
+            self.client.set_user(self.communication_options.username)
+            self.client.set_password(self.communication_options.password)
 
         loop = asyncio.get_event_loop()
         self.run_connection_task = True
@@ -139,24 +133,19 @@ class OPCUAEnergyMeter(EnergyMeter):
         self.connection_task = loop.create_task(self.manage_connection())
         self.receiver_task = loop.create_task(self.receiver())
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """
-        Stops the background tasks for the energy meter.
-
-        This method gracefully shuts down the device by:
-            - Setting control flags to stop the connection manager and receiver loops
-            - Clearing the task references to allow garbage collection
-            - Should be called during device shutdown or when stopping monitoring
-
-        Note:
-            The actual tasks may take a short time to complete their current cycle
-            before fully stopping due to the async nature of the loops.
+        Stops the OPC UA energy meter tasks and closes the connection.
         """
+
+        if self.client is None:
+            raise RuntimeError(f"OPC UA Client for device {self.name} is already not running")
 
         self.run_connection_task = False
         self.run_receiver_task = False
         self.connection_task = None
         self.receiver_task = None
+        await self.close_connection()
 
     async def manage_connection(self):
         """
@@ -180,19 +169,18 @@ class OPCUAEnergyMeter(EnergyMeter):
             try:
                 logger.info(f"Trying to connect OPC UA client {self.name} with id {self.id}...")
                 await self.client.connect()
-                self.connection_open = True
-                self.set_connection_state(True)
+                self.set_network_state(True)
                 logger.info(f"Client {self.name} with id {self.id} connected")
 
-                while self.connection_open:
+                while self.network_connected:
                     await asyncio.sleep(3)
                     await self.client.check_connection()
 
             except Exception as e:
-                if self.connection_open:
+                if self.network_connected:
                     logger.warning(f"Client {self.name} with id {self.id} disconnected")
                 logger.warning(f"Connection error on client {self.name} with id {self.id}: {e}")
-                await self.close_connection()
+                self.set_network_state(False)
                 await asyncio.sleep(3)
 
     async def receiver(self):
@@ -216,7 +204,7 @@ class OPCUAEnergyMeter(EnergyMeter):
 
         while self.run_receiver_task:
             try:
-                if self.connection_open:
+                if self.network_connected:
                     tasks = [asyncio.create_task(self.read_float(node)) for node in self.opcua_nodes if node.enabled]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -232,11 +220,16 @@ class OPCUAEnergyMeter(EnergyMeter):
                     if failed_nodes:
                         logger.warning(f"Failed to read {len(failed_nodes)} nodes from {self.name}: {', '.join(failed_nodes)}")
 
+                    if any(node.connected for node in self.opcua_nodes):
+                        self.set_connection_state(True)
+                    else:
+                        self.set_connection_state(False)
+
                     await self.process_nodes()
 
             except Exception as e:
-                logger.exception(f"Receiver error: {e}")
-                await self.close_connection()
+                logger.exception(f"{e}")
+                self.set_connection_state(False)
 
             await asyncio.sleep(self.communication_options.read_period)
 
@@ -272,22 +265,13 @@ class OPCUAEnergyMeter(EnergyMeter):
 
     async def close_connection(self):
         """
-        Closes the OPC UA client connection and updates the internal connection state.
-
-        This method performs the following actions:
-            - Marks the device as disconnected.
-            - Closes the OPC UA client connection if it is currently open.
-            - Sets the `connection_open` flag to False.
-
-        Notes:
-            - Any exceptions raised during the disconnect process are silently ignored.
-            - The connection will be re-established by the `manage_connection` task.
+        Closes the OPC UA client connection and updates connection state.
         """
 
-        self.set_connection_state(False)
         try:
-            if self.connection_open:
+            if self.network_connected:
                 await self.client.disconnect()
         except Exception:
             pass
-        self.connection_open = False
+        self.set_network_state(False)
+        self.client = None

@@ -56,7 +56,7 @@ class DeviceManager:
             if self.handler_task is not None:
                 raise ValueError("Handler task is already instantiated")
 
-            self.init_devices()
+            await self.init_devices()
             loop = asyncio.get_event_loop()
             self.handler_task = loop.create_task(self.handle_devices())
 
@@ -81,7 +81,7 @@ class DeviceManager:
         except Exception as e:
             logger.exception(f"Failed to stop device manager handler task: {e}")
 
-    def init_devices(self) -> None:
+    async def init_devices(self) -> None:
         """
         Loads all devices from the database, initializes them, and starts
         the background task that handles periodic device state publishing.
@@ -91,14 +91,11 @@ class DeviceManager:
 
         for record in meter_records:
             device = self.create_device_from_record(record)
-            self.devices.add(device)
+            await self.add_device(device)
 
-    def add_device(self, device: Device):
+    async def add_device(self, device: Device):
         """
-        Registers a new device and ensures it uses the manager's communication queues.
-
-        Sets the device's publish_queue and measurements_queue to the manager's queues
-        if they differ, then adds the device to the managed devices set.
+        Registers a new device, configures its queues, and starts it asynchronously.
 
         Args:
             device (Device): The device instance to add.
@@ -108,16 +105,19 @@ class DeviceManager:
             device.publish_queue = self.publish_queue
         if device.measurements_queue != self.measurements_queue:
             device.measurements_queue = self.measurements_queue
+
+        await device.start()
         self.devices.add(device)
 
-    def delete_device(self, device: Device) -> None:
+    async def delete_device(self, device: Device) -> None:
         """
-        Removes a device from the manager if it exists.
+        Stops and removes a device from the manager asynchronously.
 
         Args:
             device (Device): The device instance to remove.
         """
 
+        await device.stop()
         self.devices.discard(device)
 
     def get_device(self, device_id: int) -> Optional[Device]:
@@ -211,7 +211,7 @@ class DeviceManager:
             if plugin:
                 created_nodes.add(plugin.node_factory(node_record))
                 continue
-            
+
             created_nodes.add(ProtocolRegistry.base_node_factory(node_record))
 
         return created_nodes

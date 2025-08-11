@@ -88,8 +88,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         nodes (set[Node]): All nodes associated with this meter.
         modbus_rtu_nodes (set[ModbusRTUNode]): Subset of nodes specific to Modbus RTU.
         communication_options (ModbusRTUOptions): Connection configuration used to initialize the client.
-        client (ModbusRTUClient): Instance of the Modbus RTU client used for communication.
-        connection_open (bool): Flag indicating whether the RTU connection is currently open.
+        client (Optional[ModbusRTUClient]): Instance of the Modbus RTU client used for communication.
     """
 
     def __init__(
@@ -117,6 +116,25 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
         self.communication_options = communication_options
 
+        self.client: Optional[ModbusRTUClient] = None
+
+        self.nodes = nodes if nodes else set()
+        self.modbus_rtu_nodes: Set[ModbusRTUNode] = {node for node in self.nodes if isinstance(node, ModbusRTUNode)}
+
+        self.run_connection_task = False
+        self.run_receiver_task = False
+
+        self.connection_task: asyncio.Task | None = None
+        self.receiver_task: asyncio.Task | None = None
+
+    async def start(self) -> None:
+        """
+        Starts the Modbus RTU energy meter background tasks for connection management and data polling.
+        """
+
+        if self.client is not None:
+            raise RuntimeError(f"Modbus RTU Client for device {self.name} is already running")
+
         self.client = ModbusRTUClient(
             port=self.communication_options.port,
             baudrate=self.communication_options.baudrate,
@@ -126,54 +144,25 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             timeout=float(self.communication_options.timeout),
             retries=self.communication_options.retries,
         )
-
-        self.nodes = nodes if nodes else set()
-        self.modbus_rtu_nodes: Set[ModbusRTUNode] = {node for node in self.nodes if isinstance(node, ModbusRTUNode)}
-
-        self.connection_open = False
-
-        self.run_connection_task = False
-        self.run_receiver_task = False
-
-        self.connection_task: asyncio.Task | None = None
-        self.receiver_task: asyncio.Task | None = None
-        self.start()
-
-    def start(self) -> None:
-        """
-        Starts the background tasks for the energy meter.
-
-        Tasks created:
-            - `connection_task`: Manages the Modbus RTU connection state.
-            - `receiver_task`: Continuously polls data from the Modbus RTU client.
-
-        These tasks are run concurrently using the asyncio event loop.
-        """
-
         loop = asyncio.get_event_loop()
         self.run_connection_task = True
         self.run_receiver_task = True
         self.connection_task = loop.create_task(self.manage_connection())
         self.receiver_task = loop.create_task(self.receiver())
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """
-        Stops the background tasks for the energy meter.
-
-        This method gracefully shuts down the device by:
-            - Setting control flags to stop the connection manager and receiver loops
-            - Clearing the task references to allow garbage collection
-            - Should be called during device shutdown or when stopping monitoring
-
-        Note:
-            The actual tasks may take a short time to complete their current cycle
-            before fully stopping due to the async nature of the loops.
+        Stops the Modbus RTU energy meter tasks and closes the connection.
         """
+
+        if self.client is None:
+            raise RuntimeError(f"Modbus RTU Client for device {self.name} is already not running")
 
         self.run_connection_task = False
         self.run_receiver_task = False
         self.connection_task = None
         self.receiver_task = None
+        await self.close_connection()
 
     async def manage_connection(self):
         """
@@ -186,26 +175,23 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         while self.run_connection_task:
             try:
                 logger.info(f"Trying to connect to client {self.name} with id {self.id}...")
-                self.connection_open = self.client.connect()
+                self.network_connected = self.client.connect()
 
-                if not self.connection_open:
+                if not self.network_connected:
                     logger.warning(f"Failed to connect to client {self.name} with id {self.id}")
                     await asyncio.sleep(3)
                     continue
 
                 logger.info(f"Client {self.name} with id {self.id} connected")
 
-                while self.connection_open:
+                while self.network_connected:
                     await asyncio.sleep(3)
 
                 logger.warning(f"Client {self.name} with id {self.id} disconnected")
 
             except Exception as e:
                 logger.error(f"Unexpected error during connection management: {e}")
-
-                if self.connection_open:
-                    self.close_connection()
-
+                self.set_network_state(False)
                 await asyncio.sleep(3)
 
     async def receiver(self):
@@ -218,7 +204,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
         while self.run_receiver_task:
             try:
-                if self.connection_open:
+                if self.network_connected:
                     tasks = [asyncio.to_thread(self.read_float, node) for node in self.modbus_rtu_nodes if node.enabled]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
                     failed_nodes = []
@@ -243,11 +229,11 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
             except ModbusException as e:
                 logger.error(f"{e}")
-                self.close_connection()
+                self.set_network_state(False)
 
             except Exception as e:
                 logger.exception(f"{e}")
-                self.close_connection()
+                self.set_network_state(False)
 
             await asyncio.sleep(self.communication_options.read_period)
 
@@ -287,16 +273,14 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             node.set_connection_state(False)
             raise Exception(f"Unexpected error reading node {node.name} from device {self.name} with id {self.id}") from e
 
-    def close_connection(self):
+    async def close_connection(self) -> None:
         """
-        Closes the Modbus RTU client connection and updates internal state.
-
-        This method:
-            - Marks the device as disconnected.
-            - Closes the Modbus RTU client.
-            - Sets the `connection_open` flag to False.
+        Closes the Modbus RTU client connection and updates connection state.
         """
 
-        self.set_connection_state(False)
-        self.client.close()
-        self.connection_open = False
+        try:
+            self.client.close()
+        except Exception as e:
+            pass
+        self.set_network_state(False)
+        self.client = None
