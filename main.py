@@ -1,4 +1,4 @@
-###########EXERTNAL IMPORTS############
+###########EXTERNAL IMPORTS############
 
 import asyncio
 
