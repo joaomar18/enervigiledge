@@ -18,7 +18,7 @@ from controller.meter_nodes import EnergyMeterNodes
 import controller.meter_calculation as calculation
 from mqtt.client import MQTTMessage
 from db.timedb import Measurement
-import util.functions_generic as functions_generic
+import util.functions.generic as functions_generic
 from util.debug import LoggerManager
 
 #######################################

@@ -10,7 +10,7 @@ from datetime import datetime
 
 from web.safety import HTTPSafety
 from web.dependencies import services
-from web.api_decorator import auth_endpoint, AuthConfigs
+from web.api.decorator import auth_endpoint, AuthConfigs
 from controller.manager import DeviceManager
 from db.timedb import TimeDBClient
 

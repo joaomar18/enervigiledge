@@ -10,7 +10,7 @@ from controller.node import Node
 from controller.types import EnergyMeterType, EnergyMeterOptions
 from controller.exceptions import *
 import controller.meter_validation as validation
-import util.functions_generic as generic
+import util.functions.generic as generic
 
 #######################################
 

@@ -9,7 +9,8 @@ from argon2 import PasswordHasher
 
 #############LOCAL IMPORTS#############
 
-from web import auth_api, device_api
+from web.api import device
+from web.api import auth
 from web.dependencies import services
 from web.safety import HTTPSafety
 from controller.types import Protocol
@@ -36,8 +37,8 @@ class DummyDeviceManager:
 def create_app(safety, device_manager):
     app = FastAPI()
     services.set_dependencies(safety, device_manager, object(), object())
-    app.include_router(auth_api.router)
-    app.include_router(device_api.router)
+    app.include_router(auth.router)
+    app.include_router(device.router)
     return app
 
 
@@ -65,9 +66,9 @@ def test_get_all_devices_state(monkeypatch, tmp_path):
     device = DummyDevice(1, "dev1")
     app = create_app(safety, DummyDeviceManager([device]))
 
-    from util import functions_images
+    from util.functions import images
 
-    monkeypatch.setattr(functions_images, "get_device_image", lambda device_id, default, directory: {"data": "", "type": "", "filename": ""})
+    monkeypatch.setattr(images, "get_device_image", lambda device_id, default, directory: {"data": "", "type": "", "filename": ""})
 
     with TestClient(app) as client:
         # First login to get token

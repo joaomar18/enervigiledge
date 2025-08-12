@@ -9,7 +9,7 @@ from typing import Dict, Set, Optional
 from controller.types import NodeType, EnergyMeterOptions, EnergyMeterType
 from controller.exceptions import UnitError, NodeUnknownError, NodeMissingError, LoggingPeriodError
 from controller.node import Node
-import util.functions_generic as functions_generic
+import util.functions.generic as functions_generic
 
 #######################################
 

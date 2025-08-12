@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 
 #############LOCAL IMPORTS#############
 
-from web import nodes_api, auth_api
+from web.api import nodes
+from web.api import auth
 from web.dependencies import services
 from web.safety import HTTPSafety
 from controller.node import Node
@@ -44,8 +45,8 @@ class DummyTimeDB:
 def create_app(safety, device_manager, timedb):
     app = FastAPI()
     services.set_dependencies(safety, device_manager, object(), timedb)
-    app.include_router(auth_api.router)
-    app.include_router(nodes_api.router)
+    app.include_router(auth.router)
+    app.include_router(nodes.router)
     return app
 
 

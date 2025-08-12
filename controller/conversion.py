@@ -13,7 +13,7 @@ from controller.registry import ProtocolRegistry
 from controller.node import Node
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
 from protocol.opcua.opcua_device import OPCUAEnergyMeter
-import util.functions_objects as objects
+import util.functions.objects as objects
 
 #######################################
 
