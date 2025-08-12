@@ -10,10 +10,9 @@ import logging
 ############### LOCAL IMPORTS ###############
 
 from util.debug import LoggerManager
-from controller.device import Protocol
-from controller.types import NodeRecord, EnergyMeterRecord
 from controller.node import Node, OPCUANode
-from controller.meter import EnergyMeter, EnergyMeterType, EnergyMeterOptions
+from controller.types import Protocol, EnergyMeterType, EnergyMeterOptions
+from controller.meter.meter import EnergyMeter
 
 LoggerManager.get_logger(__name__).setLevel(logging.ERROR)
 

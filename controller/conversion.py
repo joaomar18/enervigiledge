@@ -7,8 +7,7 @@ import asyncio
 
 #############LOCAL IMPORTS#############
 
-from controller.meter import EnergyMeterOptions, EnergyMeterType
-from controller.types import Protocol, BaseNodeRecordConfig, NodeRecord, EnergyMeterRecord, EnergyMeterType
+from controller.types import Protocol, BaseNodeRecordConfig, NodeRecord, EnergyMeterRecord, EnergyMeterType, EnergyMeterOptions
 from controller.registry import ProtocolRegistry
 from controller.node import Node
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter

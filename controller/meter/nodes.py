@@ -9,7 +9,7 @@ from typing import Dict, Set, Optional
 from controller.node import Node
 from controller.types import EnergyMeterType, EnergyMeterOptions
 from controller.exceptions import *
-import controller.meter_validation as validation
+import controller.meter.validation as validation
 import util.functions.generic as generic
 
 #######################################

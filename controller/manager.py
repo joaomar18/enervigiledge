@@ -9,11 +9,10 @@ from typing import Optional, Dict, Set, Any
 
 from mqtt.client import MQTTMessage
 from db.db import SQLiteDBClient
-from controller.types import Protocol, EnergyMeterRecord, NodeConfig
+from controller.types import Protocol, EnergyMeterRecord, EnergyMeterOptions
 from controller.registry import ProtocolRegistry
 from controller.device import Device
-from controller.node import Node, NodeType
-from controller.meter import EnergyMeterOptions
+from controller.node import Node
 from util.debug import LoggerManager
 
 #######################################

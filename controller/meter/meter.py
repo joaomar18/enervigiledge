@@ -14,8 +14,8 @@ from abc import abstractmethod
 from controller.device import Device
 from controller.node import Node
 from controller.types import Protocol, EnergyMeterType, EnergyMeterOptions, EnergyMeterRecord, NodeRecord
-from controller.meter_nodes import EnergyMeterNodes
-import controller.meter_calculation as calculation
+from controller.meter.nodes import EnergyMeterNodes
+import controller.meter.calculation as calculation
 from mqtt.client import MQTTMessage
 from db.timedb import Measurement
 import util.functions.generic as functions_generic

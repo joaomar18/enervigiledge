@@ -9,9 +9,9 @@ import pytest
 #############LOCAL IMPORTS#############
 
 from controller.node import Node
-from controller.meter import EnergyMeter
+from controller.meter.meter import EnergyMeter
 from controller.types import NodeType, Protocol, EnergyMeterType, NodeConfig
-from db.db import EnergyMeterRecord, NodeRecord
+from db.db import EnergyMeterRecord
 
 #######################################
 
@@ -39,7 +39,7 @@ class DummyMeter(EnergyMeter):
             device_type=EnergyMeterType.THREE_PHASE,  # Dummy type
             meter_options={},  # Dummy options
             connection_options={},  # Dummy connection options
-            nodes=set()  # Dummy nodes
+            nodes=set(),  # Dummy nodes
         )
 
 

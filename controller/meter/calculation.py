@@ -9,7 +9,7 @@ import math
 
 from controller.types import EnergyMeterOptions, PowerFactorDirection
 from controller.node import Node
-from controller.meter_nodes import EnergyMeterNodes
+from controller.meter.nodes import EnergyMeterNodes
 
 #######################################
 
