@@ -13,8 +13,9 @@ from abc import abstractmethod
 
 from controller.device import Device
 from controller.node import Node
-from controller.types import Protocol, EnergyMeterType, PowerFactorDirection, EnergyMeterOptions, EnergyMeterRecord, NodeRecord
+from controller.types import Protocol, EnergyMeterType, EnergyMeterOptions, EnergyMeterRecord, NodeRecord
 from controller.meter_nodes import EnergyMeterNodes
+import controller.meter_calculation as calculation
 from mqtt.client import MQTTMessage
 from db.timedb import Measurement
 import util.functions_generic as functions_generic
@@ -251,231 +252,31 @@ class EnergyMeter(Device):
 
     def calculate_energy(self, prefix: str, energy_type: str, node: Node) -> None:
         """
-        Calculates energy value based on the device configuration.
-
-        For total nodes, the value is the sum of the three phase values.
-
-        Args:
-            prefix (str): Phase prefix (e.g., "l1_", "l2_", "l3_", or "total_").
-            energy_type (str): "active" or "reactive".
-            node (Node): The node that will receive the calculated value.
+        Calculates energy values for the specified node using meter configuration.
         """
 
-        if prefix == "total_":
-            total = 0.0
-            for p in ("l1_", "l2_", "l3_"):
-                phase_key = f"{p}{energy_type}_energy"
-                phase_node = self.meter_nodes.nodes.get(phase_key)
-
-                if phase_node is None or phase_node.value is None:
-                    node.set_value(None)
-                    return
-
-                total += EnergyMeterNodes.get_scaled_value(phase_node)
-
-            scaled_total = EnergyMeterNodes.apply_output_scaling(total, node)
-            node.set_value(scaled_total)
-            return
-
-        if self.meter_options.read_separate_forward_reverse_energy:
-            forward_key = f"{prefix}forward_{energy_type}_energy"
-            reverse_key = f"{prefix}reverse_{energy_type}_energy"
-            forward = self.meter_nodes.nodes.get(forward_key)
-            reverse = self.meter_nodes.nodes.get(reverse_key)
-
-            if forward and reverse and forward.value is not None and reverse.value is not None:
-                scaled_forward = EnergyMeterNodes.get_scaled_value(forward)
-                scaled_reverse = EnergyMeterNodes.get_scaled_value(reverse)
-                scaled_value = EnergyMeterNodes.apply_output_scaling(scaled_forward - scaled_reverse, node)
-                node.set_value(scaled_value)
-
-        elif not self.meter_options.read_energy_from_meter:
-            power_key = f"{prefix}{energy_type}_power"
-            power_node = self.meter_nodes.nodes.get(power_key)
-
-            if power_node and power_node.value is not None and power_node.elapsed_time is not None:
-                elapsed_hours = power_node.elapsed_time / 3600.0
-                scaled_power = EnergyMeterNodes.get_scaled_value(power_node)
-                scaled_value = EnergyMeterNodes.apply_output_scaling(scaled_power * elapsed_hours, node)
-                node.set_value(scaled_value)
+        calculation.calculate_energy(prefix, energy_type, node, self.meter_nodes.nodes, self.meter_options)
 
     def calculate_power(self, prefix: str, power_type: str, node: Node):
         """
-        Calculates the specified type of power (active, reactive, or apparent) for a given phase or total.
-
-        Power calculations prioritize using known power values (e.g., active + reactive)
-        over raw voltage/current inputs, which may be less reliable.
-
-        For total nodes, the result is the sum of all corresponding phase power values.
-
-        Args:
-            prefix (str): Phase prefix (e.g., "l1_", "l2_", "l3_", or "total_").
-            power_type (str): One of "active", "reactive", or "apparent".
-            node (Node): The node to assign the calculated value to.
+        Calculates power values for the specified node using meter nodes.
         """
 
-        if prefix == "total_":
-            total = 0.0
-            for p in ("l1_", "l2_", "l3_"):
-                phase_key = f"{p}{power_type}_power"
-                phase_node = self.meter_nodes.nodes.get(phase_key)
-
-                if phase_node is None or phase_node.value is None:
-                    node.set_value(None)
-                    return
-
-                total += EnergyMeterNodes.get_scaled_value(phase_node)
-
-            scaled_total = EnergyMeterNodes.apply_output_scaling(total, node)
-            node.set_value(scaled_total)
-            return
-
-        # Individual phase
-        v = EnergyMeterNodes.get_scaled_value(self.meter_nodes.nodes.get(f"{prefix}voltage"))
-        i = EnergyMeterNodes.get_scaled_value(self.meter_nodes.nodes.get(f"{prefix}current"))
-        pf_node = self.meter_nodes.nodes.get(f"{prefix}power_factor")
-        pf = pf_node.value if pf_node else None
-
-        p = EnergyMeterNodes.get_scaled_value(self.meter_nodes.nodes.get(f"{prefix}active_power"))
-        q = EnergyMeterNodes.get_scaled_value(self.meter_nodes.nodes.get(f"{prefix}reactive_power"))
-        s = EnergyMeterNodes.get_scaled_value(self.meter_nodes.nodes.get(f"{prefix}apparent_power"))
-
-        val = None
-
-        if power_type == "apparent":
-            if p is not None and q is not None:
-                val = math.sqrt(p**2 + q**2)
-            elif v is not None and i is not None:
-                val = v * i
-
-        elif power_type == "reactive":
-            if s is not None and p is not None and s >= p:
-                val = math.sqrt(s**2 - p**2)
-            elif v is not None and i is not None and pf is not None and -1.0 <= pf <= 1.0:
-                val = v * i * math.sin(math.acos(pf))
-
-        elif power_type == "active":
-            if s is not None and q is not None and s >= q:
-                val = math.sqrt(s**2 - q**2)
-            elif v is not None and i is not None and pf is not None:
-                val = v * i * pf
-
-        scaled_value = EnergyMeterNodes.apply_output_scaling(val, node) if val is not None else None
-        node.set_value(scaled_value)
+        calculation.calculate_power(prefix, power_type, node, self.meter_nodes.nodes)
 
     def calculate_pf(self, prefix: str, node: Node) -> None:
         """
-        Calculates the power factor (PF) for a given phase or total.
-
-        Power factor is computed using the formula:
-            PF = cos(atan(Q / P))
-        where:
-            P = active power
-            Q = reactive power
-
-        If P is zero, sets PF to 0.0 to avoid division by zero.
-        If any required input is missing, sets PF to None.
-
-        For total power factor, uses the sum of P and Q across all three phases.
-
-        Args:
-            prefix (str): Phase prefix (e.g., "l1_", "l2_", "l3_", or "total_").
-            node (Node): The node that will receive the calculated PF value.
+        Calculates power factor values for the specified node using meter nodes.
         """
 
-        if prefix == "total_":
-            total_p = 0.0
-            total_q = 0.0
-
-            for p in ("l1_", "l2_", "l3_"):
-                p_node = self.meter_nodes.nodes.get(f"{p}active_power")
-                q_node = self.meter_nodes.nodes.get(f"{p}reactive_power")
-
-                p_val = EnergyMeterNodes.get_scaled_value(p_node) if p_node else None
-                q_val = EnergyMeterNodes.get_scaled_value(q_node) if q_node else None
-
-                if p_val is None or q_val is None:
-                    node.set_value(None)
-                    return
-
-                total_p += p_val
-                total_q += q_val
-
-            if total_p == 0:
-                node.set_value(0.0)
-            else:
-                node.set_value(math.cos(math.atan(total_q / total_p)))
-
-            return
-
-        # Per-phase PF
-        p_node = self.meter_nodes.nodes.get(f"{prefix}active_power")
-        q_node = self.meter_nodes.nodes.get(f"{prefix}reactive_power")
-
-        p = EnergyMeterNodes.get_scaled_value(p_node) if p_node else None
-        q = EnergyMeterNodes.get_scaled_value(q_node) if q_node else None
-
-        if p is None or q is None:
-            node.set_value(None)
-            return
-
-        if p == 0:
-            node.set_value(0.0)
-        else:
-            node.set_value(math.cos(math.atan(q / p)))
+        calculation.calculate_pf(prefix, node, self.meter_nodes.nodes)
 
     def calculate_pf_direction(self, prefix: str, node: Node) -> None:
         """
-        Calculates the direction of the power factor for a given phase.
-
-        The direction can be:
-            - UNITARY: If PF is 1.0.
-            - LAGGING or LEADING: Based on reactive power or reactive energy direction.
-            - UNKNOWN: If direction cannot be determined.
-
-        Logic flow:
-            1. If PF >= 0.99 → UNTIARY and reset energy direction (if applicable).
-            2. If using `negative_reactive_power`, sign of Q determines direction.
-            3. If using `read_separate_forward_reverse_energy`, direction is taken from reactive energy trend.
-            4. Otherwise, defaults to UNKNOWN.
-
-        Args:
-            prefix (str): Phase prefix (e.g., "l1_", "l2_", "l3_").
-            node (Node): The node that will receive the calculated direction.
+        Calculates power factor direction values for the specified node using meter configuration.
         """
 
-        pf_node = self.meter_nodes.nodes.get(f"{prefix}power_factor")
-        pf = pf_node.value if pf_node else None
-        er_node = self.meter_nodes.nodes.get(f"{prefix}reactive_energy")
-
-        if pf is not None and pf == 1.00:
-            node.set_value(PowerFactorDirection.UNITARY.value)
-            if er_node:
-                er_node.reset_direction()
-            return
-
-        if self.meter_options.negative_reactive_power:
-            q_node = self.meter_nodes.nodes.get(f"{prefix}reactive_power")
-
-            if q_node and q_node.value is not None:
-                node.set_value(PowerFactorDirection.LAGGING.value if q_node.value > 0.0 else PowerFactorDirection.LEADING.value)
-            else:
-                node.set_value(PowerFactorDirection.UNKNOWN.value)
-            return
-
-        elif self.meter_options.read_separate_forward_reverse_energy:
-            if er_node:
-                if er_node.positive_direction:
-                    node.set_value(PowerFactorDirection.LAGGING.value)
-                elif er_node.negative_direction:
-                    node.set_value(PowerFactorDirection.LEADING.value)
-                else:
-                    node.set_value(PowerFactorDirection.UNKNOWN.value)
-            else:
-                node.set_value(PowerFactorDirection.UNKNOWN.value)
-            return
-
-        node.set_value(PowerFactorDirection.UNKNOWN.value)
+        calculation.calculate_pf_direction(prefix, node, self.meter_nodes.nodes, self.meter_options)
 
     async def publish_nodes(self):
         """
