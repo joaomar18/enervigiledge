@@ -8,6 +8,7 @@ from typing import Callable, Dict, Optional, Type
 #############LOCAL IMPORTS#############
 
 from controller.device import Device
+from controller.meter.meter import EnergyMeter
 from controller.node import NodeType, Node, ModbusRTUNode, OPCUANode
 from controller.types import Protocol, NodeRecord, NodeConfig
 from protocol.modbus_rtu.rtu_device import ModbusRTUOptions, ModbusRTUEnergyMeter
@@ -22,19 +23,26 @@ NodeFactory = Callable[[NodeRecord], Node]  # A callable that creates a :class:`
 class ProtocolPlugin:
     """Container for protocol specific classes and factories.
 
+    This dataclass encapsulates all the components needed to support a specific
+    communication protocol, providing a unified interface for protocol registration
+    and device instantiation.
+
     Attributes
     ----------
     meter_class:
-        Concrete :class:`~controller.device.Device` subclass implementing the
-        protocol.
+        Concrete :class:`~controller.meter.meter.EnergyMeter` subclass implementing the
+        protocol-specific communication and device management logic.
     options_class:
-        Dataclass representing protocol specific connection options.
+        Dataclass representing protocol-specific connection options and configuration
+        parameters required for establishing communication with devices.
     node_factory:
-        Callable used to create protocol specific :class:`~controller.node.Node`
-        instances from :class:`db.db.NodeRecord` objects.
+        Callable factory function used to create protocol-specific 
+        :class:`~controller.node.Node` instances from :class:`~db.db.NodeRecord` 
+        database objects. The factory handles protocol-specific node initialization
+        and configuration.
     """
 
-    meter_class: Type[Device]
+    meter_class: Type[EnergyMeter]
     options_class: Type
     node_factory: NodeFactory
 

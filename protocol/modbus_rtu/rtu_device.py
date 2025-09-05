@@ -4,7 +4,7 @@ import asyncio
 import struct
 from pymodbus.client import ModbusSerialClient as ModbusRTUClient
 from pymodbus import ModbusException
-from typing import Optional, Set
+from typing import Optional, Set, Callable
 import logging
 from typing import Dict, Set, Optional, Any
 from dataclasses import dataclass, asdict
@@ -82,6 +82,8 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         meter_options (EnergyMeterOptions): General configuration options for the meter.
         communication_options (ModbusRTUOptions): Serial communication parameters specific to Modbus RTU.
         nodes (set[Node]): Set of nodes representing individual measurement points.
+        on_connection_change (Callable[[int, bool], None] | None): Optional callback triggered when the device connection state changes.
+            Expects two parameters: device id (int) and state (bool).
 
     Attributes:
         nodes (set[Node]): All nodes associated with this meter.
@@ -100,6 +102,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         meter_options: EnergyMeterOptions,
         communication_options: ModbusRTUOptions,
         nodes: Optional[Set[Node]] = None,
+        on_connection_change: Callable[[int, bool], None] | None = None,
     ):
         super().__init__(
             id=id,
@@ -111,6 +114,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             meter_options=meter_options,
             communication_options=communication_options,
             meter_nodes=nodes if nodes else set(),
+            on_connection_change=on_connection_change,
         )
 
         self.communication_options = communication_options

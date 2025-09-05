@@ -3,8 +3,7 @@
 import asyncio
 from asyncua import Client
 from dataclasses import dataclass, asdict
-from typing import Optional, Set
-from typing import Dict, Set, Optional, Any
+from typing import Dict, Set, Optional, Any, Callable
 import logging
 
 ############### LOCAL IMPORTS ###############
@@ -70,6 +69,8 @@ class OPCUAEnergyMeter(EnergyMeter):
         meter_options (EnergyMeterOptions): General configuration options for the meter.
         communication_options (OPCUAOptions): Connection configuration parameters for the OPC UA client.
         nodes (Optional[Set[Node]]): Set of nodes representing individual measurement points.
+        on_connection_change (Callable[[int, bool], None] | None): Optional callback triggered when the device connection state changes.
+            Expects two parameters: device id (int) and state (bool).
 
     Attributes:
         client (Optional[asyncua.Client]): Instance of the OPC UA client used for communication.
@@ -88,6 +89,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         meter_options: EnergyMeterOptions,
         communication_options: OPCUAOptions,
         nodes: Optional[Set[Node]] = None,
+        on_connection_change: Callable[[int, bool], None] | None = None,
     ):
         super().__init__(
             id=id,
@@ -99,6 +101,7 @@ class OPCUAEnergyMeter(EnergyMeter):
             meter_options=meter_options,
             communication_options=communication_options,
             meter_nodes=nodes if nodes else set(),
+            on_connection_change=on_connection_change,
         )
 
         self.communication_options = communication_options

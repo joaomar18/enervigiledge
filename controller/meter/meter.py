@@ -2,9 +2,8 @@
 
 from datetime import datetime
 import asyncio
-import math
 import traceback
-from typing import Dict, Any, Type, Set
+from typing import Dict, Any, Type, Set, Callable
 from abc import abstractmethod
 
 #######################################
@@ -37,6 +36,19 @@ class EnergyMeter(Device):
     - Integrates configurable options for reading raw or calculated energy values.
     - Handles logging of measurements and statistical data.
     - Publishes node values over MQTT in a structured format.
+
+    Args:
+        id (int): Unique identifier of the energy meter.
+        name (str): Display name of the meter.
+        protocol (Protocol): Communication protocol used by the device.
+        publish_queue (asyncio.Queue): Queue for outgoing MQTT messages.
+        measurements_queue (asyncio.Queue): Queue for logging measurements.
+        meter_type (EnergyMeterType): Type of the energy meter (single or three phase).
+        meter_options (EnergyMeterOptions): Configuration flags controlling how energy and power are interpreted.
+        communication_options (Type): Protocol-specific communication configuration (e.g., ModbusRTUOptions, OPCUAOptions).
+        meter_nodes (Set[Node]): Set of nodes representing individual measurement points.
+        on_connection_change (Callable[[int, bool], None] | None): Optional callback triggered when the device connection state changes.
+            Expects two parameters: device id (int) and state (bool).
 
     Attributes:
         meter_type (EnergyMeterType): Type of the energy meter (single or three phase).
@@ -77,9 +89,10 @@ class EnergyMeter(Device):
         meter_options: EnergyMeterOptions,
         communication_options: Type,
         meter_nodes: Set[Node],
+        on_connection_change: Callable[[int, bool], None] | None = None,
     ):
 
-        super().__init__(id=id, name=name, protocol=protocol, publish_queue=publish_queue, measurements_queue=measurements_queue, nodes=meter_nodes)
+        super().__init__(id=id, name=name, protocol=protocol, publish_queue=publish_queue, measurements_queue=measurements_queue, nodes=meter_nodes, on_connection_change=on_connection_change)
         self.meter_type = meter_type
         self.meter_options = meter_options
         self.communication_options = communication_options

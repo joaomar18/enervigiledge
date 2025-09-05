@@ -8,10 +8,9 @@ import asyncio
 #############LOCAL IMPORTS#############
 
 from controller.types import Protocol, BaseNodeRecordConfig, NodeRecord, EnergyMeterRecord, EnergyMeterType, EnergyMeterOptions
+from controller.meter.meter import EnergyMeter
 from controller.registry import ProtocolRegistry
 from controller.node import Node
-from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
-from protocol.opcua.opcua_device import OPCUAEnergyMeter
 import util.functions.objects as objects
 
 #######################################
@@ -178,8 +177,8 @@ def convert_dict_to_energy_nodes(list_nodes: List[Dict[str, any]]) -> Set[Node]:
 
 
 def convert_dict_to_energy_meter(
-    dict_energy_meter: Dict[str, any], dict_nodes: Dict[str, any], publish_queue: asyncio.Queue, measurements_queue: asyncio.Queue
-) -> ModbusRTUEnergyMeter | OPCUAEnergyMeter:
+    dict_energy_meter: Dict[str, Any], dict_nodes: Dict[str, Any], publish_queue: asyncio.Queue, measurements_queue: asyncio.Queue
+) -> EnergyMeter:
     """
     Converts dictionary configurations into a fully initialized protocol-specific EnergyMeter instance.
 

@@ -12,6 +12,7 @@ from db.db import SQLiteDBClient
 from controller.types import Protocol, EnergyMeterRecord, EnergyMeterOptions
 from controller.registry import ProtocolRegistry
 from controller.device import Device
+from controller.meter.meter import EnergyMeter
 from controller.node import Node
 from util.debug import LoggerManager
 
@@ -150,7 +151,7 @@ class DeviceManager:
         payload: Dict[int, Dict[str, Any]] = {device.id: device.get_device_state() for device in self.devices}
         await self.publish_queue.put(MQTTMessage(qos=0, topic=topic, payload=payload))
 
-    def create_device_from_record(self, record: EnergyMeterRecord) -> Device:
+    def create_device_from_record(self, record: EnergyMeterRecord) -> EnergyMeter:
         """
         Reconstructs a Device instance (e.g., ModbusRTUEnergyMeter or OPCUAEnergyMeter)
         from a persisted EnergyMeterRecord retrieved from the database.
@@ -183,6 +184,7 @@ class DeviceManager:
             meter_options=EnergyMeterOptions(**record.options),
             communication_options=plugin.options_class(**record.communication_options),
             nodes=self.create_nodes(record),
+            on_connection_change=self.devices_db.update_device_connection_status
         )
 
     def create_nodes(self, record: EnergyMeterRecord) -> Set[Node]:

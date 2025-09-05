@@ -1,7 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
 import asyncio
-from typing import Dict, Set, Any
+from typing import Dict, Set, Any, Callable
 from abc import ABC, abstractmethod
 
 #######################################
@@ -27,6 +27,8 @@ class Device(ABC):
         nodes (Set[Node]): Set of nodes (data points) for the device.
         connected (bool): Indicates whether the device is currently connected.
         network_connected (bool): Indicates whether the device network is responding.
+        on_connection_change (Callable[[int, bool], None] | None): Optional callback triggered when the device connection state changes.
+            Expects two parameters: device id (int) and state (bool).
     """
 
     def __init__(
@@ -37,6 +39,7 @@ class Device(ABC):
         publish_queue: asyncio.Queue,
         measurements_queue: asyncio.Queue,
         nodes: Set[Node],
+        on_connection_change: Callable[[int, bool], None] | None = None,
     ):
         self.id = id
         self.name = name
@@ -45,6 +48,7 @@ class Device(ABC):
         self.publish_queue = publish_queue
         self.measurements_queue = measurements_queue
         self.nodes = nodes
+        self.on_connection_change = on_connection_change
         if protocol not in Protocol.valid_protocols():
             raise ValueError(f"Invalid protocol: {protocol}")
 
@@ -70,6 +74,9 @@ class Device(ABC):
         """
         Updates the device connection state.
         """
+
+        if self.on_connection_change and state != self.connected:
+            self.on_connection_change(self.id, state)
 
         self.connected = state
 
