@@ -95,16 +95,18 @@ class DeviceManager:
 
     async def add_device(self, device: Device):
         """
-        Registers a new device, configures its queues, and starts it asynchronously.
+        Registers and starts a device, configuring its queues and connection callback.
 
         Args:
-            device (Device): The device instance to add.
+            device (Device): The device to add. Sets on_connection_change if not already set.
         """
 
         if device.publish_queue != self.publish_queue:
             device.publish_queue = self.publish_queue
         if device.measurements_queue != self.measurements_queue:
             device.measurements_queue = self.measurements_queue
+        if device.on_connection_change is None:
+            device.on_connection_change = self.devices_db.update_device_connection_status
 
         await device.start()
         self.devices.add(device)
@@ -184,7 +186,7 @@ class DeviceManager:
             meter_options=EnergyMeterOptions(**record.options),
             communication_options=plugin.options_class(**record.communication_options),
             nodes=self.create_nodes(record),
-            on_connection_change=self.devices_db.update_device_connection_status
+            on_connection_change=self.devices_db.update_device_connection_status,
         )
 
     def create_nodes(self, record: EnergyMeterRecord) -> Set[Node]:

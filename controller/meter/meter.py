@@ -46,7 +46,7 @@ class EnergyMeter(Device):
         meter_type (EnergyMeterType): Type of the energy meter (single or three phase).
         meter_options (EnergyMeterOptions): Configuration flags controlling how energy and power are interpreted.
         communication_options (Type): Protocol-specific communication configuration (e.g., ModbusRTUOptions, OPCUAOptions).
-        meter_nodes (Set[Node]): Set of nodes representing individual measurement points.
+        nodes (Set[Node]): Set of nodes representing individual measurement points.
         on_connection_change (Callable[[int, bool], None] | None): Optional callback triggered when the device connection state changes.
             Expects two parameters: device id (int) and state (bool).
 
@@ -82,23 +82,31 @@ class EnergyMeter(Device):
         self,
         id: int,
         name: str,
-        protocol: Protocol,
         publish_queue: asyncio.Queue,
         measurements_queue: asyncio.Queue,
         meter_type: EnergyMeterType,
         meter_options: EnergyMeterOptions,
         communication_options: Type,
-        meter_nodes: Set[Node],
+        nodes: Set[Node],
+        protocol: Protocol = Protocol.NONE,
         on_connection_change: Callable[[int, bool], None] | None = None,
     ):
 
-        super().__init__(id=id, name=name, protocol=protocol, publish_queue=publish_queue, measurements_queue=measurements_queue, nodes=meter_nodes, on_connection_change=on_connection_change)
+        super().__init__(
+            id=id,
+            name=name,
+            protocol=protocol,
+            publish_queue=publish_queue,
+            measurements_queue=measurements_queue,
+            nodes=nodes,
+            on_connection_change=on_connection_change,
+        )
         self.meter_type = meter_type
         self.meter_options = meter_options
         self.communication_options = communication_options
 
         try:
-            self.meter_nodes = EnergyMeterNodes(meter_type=self.meter_type, meter_options=self.meter_options, nodes=meter_nodes)
+            self.meter_nodes = EnergyMeterNodes(meter_type=self.meter_type, meter_options=self.meter_options, nodes=nodes)
             self.meter_nodes.set_energy_nodes_incremental()
             self.meter_nodes.validate_nodes()
         except Exception as e:

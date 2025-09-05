@@ -113,7 +113,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             meter_type=meter_type,
             meter_options=meter_options,
             communication_options=communication_options,
-            meter_nodes=nodes if nodes else set(),
+            nodes=nodes if nodes else set(),
             on_connection_change=on_connection_change,
         )
 
@@ -257,7 +257,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         """
 
         try:
-            response = self.client.read_holding_registers(address=node.register, count=2, slave=self.communication_options.slave_id, no_response_expected=False)
+            response = self.client.read_holding_registers(address=node.register, count=2, device_id=self.communication_options.slave_id, no_response_expected=False)
 
             if not response or not hasattr(response, "registers") or len(response.registers) < 2:
                 raise ModbusException("Incomplete response")
