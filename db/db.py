@@ -73,16 +73,19 @@ class SQLiteDBClient:
 
     def create_tables(self) -> None:
         """
-        Creates the required SQLite tables for storing energy meter configurations.
+        Creates the required SQLite tables for storing energy meter configurations and operational status.
 
         Tables created:
             - devices: Stores energy meter-level configuration including protocol, meter options, and connection options.
             - nodes: Stores individual data points (nodes) associated with each device, including protocol-specific and common configuration.
+            - device_status: Stores operational status information for each device including connection timestamps and status tracking.
 
         Notes:
             - Each node is linked to a device via a foreign key (device_id).
+            - Each device_status entry is linked to a device via a foreign key (device_id).
             - Devices use an auto-incrementing primary key (id).
-            - Nodes are automatically deleted if their parent device is removed (ON DELETE CASCADE).
+            - Nodes and device_status entries are automatically deleted if their parent device is removed (ON DELETE CASCADE).
+            - Device status table tracks first connection time, last connection time, and record timestamps.
         """
 
         logger = LoggerManager.get_logger(__name__)
@@ -113,19 +116,42 @@ class SQLiteDBClient:
                 )
             """
             )
+            self.cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS device_status (
+                    device_id INTEGER PRIMARY KEY,
+                    connection_on_datetime TEXT,
+                    connection_off_datetime TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
+                )
+            """
+            )
+
             self.conn.commit()
         except Exception as e:
             logger.exception(f"Failed to create tables: {e}")
 
     def insert_energy_meter(self, record: EnergyMeterRecord) -> int | None:
         """
-        Inserts a new energy meter (device) into the database along with all associated nodes.
+        Inserts a new energy meter (device) into the database along with all associated nodes and status tracking.
+
+        This method creates a complete energy meter record including device configuration,
+        all associated node configurations, and initializes the device status tracking
+        with default timestamps. Uses database transactions to ensure atomicity.
 
         Args:
             record (EnergyMeterRecord): Structured energy meter data including nodes.
 
         Returns:
             int | None: The ID of the inserted device if successful, None otherwise.
+
+        Note:
+            Creates the following records:
+            - Device record with configuration
+            - All associated node records
+            - Device status record with default timestamps (connection times set to NULL)
         """
 
         logger = LoggerManager.get_logger(__name__)
@@ -150,6 +176,15 @@ class SQLiteDBClient:
                     (device_id, node.name, node.protocol, json.dumps(node.config)),
                 )
 
+            # Create initial device status entry
+            self.cursor.execute(
+                """
+                INSERT INTO device_status (device_id)
+                VALUES (?)
+                """,
+                (device_id,),
+            )
+
             self.conn.commit()
             logger.info(f"Successfully added energy meter '{record.name}' with ID {device_id}")
             return device_id
@@ -165,7 +200,8 @@ class SQLiteDBClient:
 
         This method performs a complete replacement of the energy meter configuration
         by deleting the existing record and inserting the new one. Uses database
-        transactions to ensure atomicity and data consistency.
+        transactions to ensure atomicity and data consistency. The device status
+        is preserved and updated with a new timestamp.
 
         Args:
             record (EnergyMeterRecord): New energy meter configuration including nodes.
@@ -173,6 +209,12 @@ class SQLiteDBClient:
 
         Returns:
             bool: True if update successful, False otherwise.
+
+        Note:
+            - Device status record is preserved (not deleted/recreated)
+            - Device status updated_at timestamp is refreshed
+            - Connection timestamps (first/last) remain unchanged
+            - Creates device status if it doesn't exist
         """
 
         logger = LoggerManager.get_logger(__name__)
@@ -214,6 +256,23 @@ class SQLiteDBClient:
                     (record.id, node.name, node.protocol, json.dumps(node.config)),
                 )
 
+            # Ensure device status exists and update timestamp (robust approach)
+            self.cursor.execute(
+                """
+                INSERT OR IGNORE INTO device_status (device_id) 
+                VALUES (?)
+                """,
+                (record.id,),
+            )
+            self.cursor.execute(
+                """
+                UPDATE device_status 
+                SET updated_at = CURRENT_TIMESTAMP 
+                WHERE device_id = ?
+                """,
+                (record.id,),
+            )
+
             # Commit transaction
             self.conn.commit()
             logger.info(f"Successfully updated energy meter '{record.name}' with ID {record.id}")
@@ -226,10 +285,11 @@ class SQLiteDBClient:
 
     def delete_energy_meter(self, record: EnergyMeterRecord) -> bool:
         """
-        Deletes an energy meter and all its associated nodes from the database.
+        Deletes an energy meter and all its associated data from the database.
 
         Uses database transactions to ensure atomicity. The foreign key cascade
-        constraint automatically removes all associated nodes when the device is deleted.
+        constraints automatically remove all associated nodes and device status
+        when the device is deleted.
 
         Args:
             record (EnergyMeterRecord): Energy meter record to delete.
@@ -237,6 +297,11 @@ class SQLiteDBClient:
 
         Returns:
             bool: True if deletion successful, False otherwise.
+
+        Note:
+            This operation cascades to delete:
+            - All associated node records (nodes table)
+            - Device status record (device_status table)
         """
 
         logger = LoggerManager.get_logger(__name__)
@@ -320,3 +385,36 @@ class SQLiteDBClient:
             logger.exception(f"Failed to retrieve energy meters: {e}")
 
         return meters
+
+    def update_device_connection_status(self, device_id: int, status: bool) -> bool:
+        """
+        Updates device connection timestamps.
+
+        Args:
+            device_id (int): Device identifier
+            status (bool): True for connected, False for disconnected
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+
+        logger = LoggerManager.get_logger(__name__)
+
+        try:
+            conn_parameter = "on" if status else "off"
+
+            self.cursor.execute(
+                f"""
+                UPDATE device_status 
+                SET connection_{conn_parameter}_datetime = CURRENT_TIMESTAMP
+                WHERE device_id = ?
+                """,
+                (device_id,),
+            )
+
+            self.conn.commit()
+            return True
+
+        except Exception as e:
+            logger.exception(f"Failed to update connection status for device {device_id}: {e}")
+            return False

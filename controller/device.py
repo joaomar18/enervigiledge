@@ -26,10 +26,18 @@ class Device(ABC):
         measurements_queue (asyncio.Queue): Queue for logging measurements.
         nodes (Set[Node]): Set of nodes (data points) for the device.
         connected (bool): Indicates whether the device is currently connected.
-        network_connected (bool): Indicates wether the device network is responding
+        network_connected (bool): Indicates whether the device network is responding.
     """
 
-    def __init__(self, id: int, name: str, protocol: Protocol, publish_queue: asyncio.Queue, measurements_queue: asyncio.Queue, nodes: Set[Node]):
+    def __init__(
+        self,
+        id: int,
+        name: str,
+        protocol: Protocol,
+        publish_queue: asyncio.Queue,
+        measurements_queue: asyncio.Queue,
+        nodes: Set[Node],
+    ):
         self.id = id
         self.name = name
         self.connected = False
