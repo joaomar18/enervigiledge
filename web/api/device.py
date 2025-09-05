@@ -182,6 +182,45 @@ async def delete_device(
 async def get_device_state(
     request: Request, safety: HTTPSafety = Depends(services.get_safety), device_manager: DeviceManager = Depends(services.get_device_manager)
 ) -> JSONResponse:
+    """Retrieves current state of a specific device."""
+
+    id_raw = request.query_params.get("id")
+
+    if not id_raw:
+        raise ValueError("Missing required query parameters: 'id'")
+
+    try:
+        device_id = int(id_raw)
+    except ValueError:
+        raise ValueError(f"Invalid device id: {id_raw!r}")
+
+    device = device_manager.get_device(device_id)
+    if not device:
+        raise ValueError(f"Device with id {device_id} does not exist.")
+    device_state = device.get_device_state()
+    return JSONResponse(content=device_state)
+
+
+@router.get("/get_all_devices_state")
+@auth_endpoint(AuthConfigs.PROTECTED)
+async def get_all_devices_state(
+    request: Request, safety: HTTPSafety = Depends(services.get_safety), device_manager: DeviceManager = Depends(services.get_device_manager)
+) -> JSONResponse:
+    """Retrieves current state of all devices."""
+
+    all_states = []
+    for device in device_manager.devices:
+        device_state = device.get_device_state()
+        all_states.append(device_state)
+
+    return JSONResponse(content=all_states)
+
+
+@router.get("/get_device_state_with_image")
+@auth_endpoint(AuthConfigs.PROTECTED)
+async def get_device_state(
+    request: Request, safety: HTTPSafety = Depends(services.get_safety), device_manager: DeviceManager = Depends(services.get_device_manager)
+) -> JSONResponse:
     """Retrieves current state and image of a specific device."""
 
     id_raw = request.query_params.get("id")
@@ -203,7 +242,7 @@ async def get_device_state(
     return JSONResponse(content=device_state)
 
 
-@router.get("/get_all_devices_state")
+@router.get("/get_all_devices_state_with_image")
 @auth_endpoint(AuthConfigs.PROTECTED)
 async def get_all_devices_state(
     request: Request, safety: HTTPSafety = Depends(services.get_safety), device_manager: DeviceManager = Depends(services.get_device_manager)
