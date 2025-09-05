@@ -100,7 +100,7 @@ class OPCUAEnergyMeter(EnergyMeter):
             meter_type=meter_type,
             meter_options=meter_options,
             communication_options=communication_options,
-            meter_nodes=nodes if nodes else set(),
+            nodes=nodes if nodes else set(),
             on_connection_change=on_connection_change,
         )
 
