@@ -36,8 +36,8 @@ class ProtocolPlugin:
         Dataclass representing protocol-specific connection options and configuration
         parameters required for establishing communication with devices.
     node_factory:
-        Callable factory function used to create protocol-specific 
-        :class:`~controller.node.Node` instances from :class:`~db.db.NodeRecord` 
+        Callable factory function used to create protocol-specific
+        :class:`~controller.node.Node` instances from :class:`~db.db.NodeRecord`
         database objects. The factory handles protocol-specific node initialization
         and configuration.
     """
@@ -72,7 +72,7 @@ class ProtocolRegistry:
         raise TypeError("ProtocolRegistry is a static class and cannot be instantiated")
 
     @staticmethod
-    def register_protocol(protocol: Protocol, meter_class: Type[Device], options_class: Type, node_factory: NodeFactory) -> None:
+    def register_protocol(protocol: Protocol, meter_class: Type[EnergyMeter], options_class: Type, node_factory: NodeFactory) -> None:
         """
         Register protocol specific handlers in the static registry.
 
@@ -81,7 +81,7 @@ class ProtocolRegistry:
         protocol:
             The :class:`~controller.types.Protocol` implemented by the plugin.
         meter_class:
-            Device class implementing the protocol.
+            Energy meter class implementing the protocol.
         options_class:
             Dataclass for connection options.
         node_factory:
