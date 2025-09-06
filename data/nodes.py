@@ -8,8 +8,7 @@ from typing import Dict, Set, Any
 #############LOCAL IMPORTS#############
 
 from controller.node import Node, NodeType
-from controller.types import Protocol, NodeRecord, EnergyMeterRecord, NodeConfig
-from controller.meter import EnergyMeterType, EnergyMeterOptions
+from controller.types import Protocol, NodeRecord, EnergyMeterRecord, NodeConfig, EnergyMeterType, EnergyMeterOptions
 from protocol.modbus_rtu.rtu_device import ModbusRTUOptions, ModbusRTUNode
 from protocol.opcua.opcua_device import OPCUAOptions, OPCUANode
 
@@ -72,8 +71,16 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
     nodes.add(ModbusRTUNode(name="l2_reverse_active_energy", type=NodeType.FLOAT, register=0x0114, unit="kWh"))
     nodes.add(ModbusRTUNode(name="l2_forward_reactive_energy", type=NodeType.FLOAT, register=0x0124, unit="kVArh"))
     nodes.add(ModbusRTUNode(name="l2_reverse_reactive_energy", type=NodeType.FLOAT, register=0x012C, unit="kVArh"))
-    nodes.add(Node(NodeConfig(name="l2_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, calculate_increment=False, calculated=True)))
-    nodes.add(Node(NodeConfig(name="l2_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, calculate_increment=False, calculated=True)))
+    nodes.add(
+        Node(NodeConfig(name="l2_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, calculate_increment=False, calculated=True))
+    )
+    nodes.add(
+        Node(
+            NodeConfig(
+                name="l2_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, calculate_increment=False, calculated=True
+            )
+        )
+    )
     nodes.add(Node(NodeConfig(name="l2_apparent_power", type=NodeType.FLOAT, unit="kVA", calculated=True)))
     nodes.add(Node(NodeConfig(name="l2_power_factor", type=NodeType.FLOAT, unit="", calculated=True)))
     nodes.add(Node(NodeConfig(name="l2_power_factor_direction", type=NodeType.STRING, unit="", calculated=True)))
@@ -87,8 +94,16 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
     nodes.add(ModbusRTUNode(name="l3_forward_reactive_energy", type=NodeType.FLOAT, register=0x0126, unit="kVArh"))
     nodes.add(ModbusRTUNode(name="l3_reverse_reactive_energy", type=NodeType.FLOAT, register=0x012E, unit="kVArh"))
     nodes.add(ModbusRTUNode(name="frequency", type=NodeType.FLOAT, register=0x0014, unit="Hz", logging=True, logging_period=1))
-    nodes.add(Node(NodeConfig(name="l3_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, calculate_increment=False, calculated=True)))
-    nodes.add(Node(NodeConfig(name="l3_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, calculate_increment=False, calculated=True)))
+    nodes.add(
+        Node(NodeConfig(name="l3_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, calculate_increment=False, calculated=True))
+    )
+    nodes.add(
+        Node(
+            NodeConfig(
+                name="l3_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, calculate_increment=False, calculated=True
+            )
+        )
+    )
     nodes.add(Node(NodeConfig(name="l3_apparent_power", type=NodeType.FLOAT, unit="kVA", calculated=True)))
     nodes.add(Node(NodeConfig(name="l3_power_factor", type=NodeType.FLOAT, unit="", calculated=True)))
     nodes.add(Node(NodeConfig(name="l3_power_factor_direction", type=NodeType.STRING, unit="", calculated=True)))
@@ -192,8 +207,16 @@ def get_sm1238_db() -> EnergyMeterRecord:
     nodes.add(OPCUANode(name="l2_reactive_power", type=NodeType.FLOAT, node_id="ns=4;i=16", unit="VAr"))
     nodes.add(OPCUANode(name="l2_apparent_power", type=NodeType.FLOAT, node_id="ns=4;i=17", unit="VA"))
     nodes.add(OPCUANode(name="l2_power_factor", type=NodeType.FLOAT, node_id="ns=4;i=18", unit=""))
-    nodes.add(Node(NodeConfig(name="l2_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, positive_incremental=True, calculated=True)))
-    nodes.add(Node(NodeConfig(name="l2_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, positive_incremental=True, calculated=True)))
+    nodes.add(
+        Node(NodeConfig(name="l2_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, positive_incremental=True, calculated=True))
+    )
+    nodes.add(
+        Node(
+            NodeConfig(
+                name="l2_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, positive_incremental=True, calculated=True
+            )
+        )
+    )
     nodes.add(Node(NodeConfig(name="l2_power_factor_direction", type=NodeType.STRING, unit="", calculated=True)))
 
     nodes.add(OPCUANode(name="l3_voltage", type=NodeType.FLOAT, node_id="ns=4;i=21", unit="V", logging=True, logging_period=15))
@@ -202,8 +225,16 @@ def get_sm1238_db() -> EnergyMeterRecord:
     nodes.add(OPCUANode(name="l3_reactive_power", type=NodeType.FLOAT, node_id="ns=4;i=23", unit="VAr"))
     nodes.add(OPCUANode(name="l3_apparent_power", type=NodeType.FLOAT, node_id="ns=4;i=24", unit="VA"))
     nodes.add(OPCUANode(name="l3_power_factor", type=NodeType.FLOAT, node_id="ns=4;i=25", unit=""))
-    nodes.add(Node(NodeConfig(name="l3_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, positive_incremental=True, calculated=True)))
-    nodes.add(Node(NodeConfig(name="l3_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, positive_incremental=True, calculated=True)))
+    nodes.add(
+        Node(NodeConfig(name="l3_active_energy", type=NodeType.FLOAT, unit="kWh", incremental_node=True, positive_incremental=True, calculated=True))
+    )
+    nodes.add(
+        Node(
+            NodeConfig(
+                name="l3_reactive_energy", type=NodeType.FLOAT, unit="kVArh", incremental_node=True, positive_incremental=True, calculated=True
+            )
+        )
+    )
     nodes.add(Node(NodeConfig(name="l3_power_factor_direction", type=NodeType.STRING, unit="", calculated=True)))
 
     nodes.add(OPCUANode(name="frequency", type=NodeType.FLOAT, node_id="ns=4;i=33", unit="Hz"))

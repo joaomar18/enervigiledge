@@ -227,6 +227,17 @@ class SQLiteDBClient:
             # Begin transaction
             self.cursor.execute("BEGIN TRANSACTION")
 
+            # Preserve device status by temporarily storing it
+            self.cursor.execute(
+                """
+                SELECT connection_on_datetime, connection_off_datetime, created_at 
+                FROM device_status 
+                WHERE device_id = ?
+                """,
+                (record.id,),
+            )
+            status_data = self.cursor.fetchone()
+
             # Delete existing nodes and device
             self.cursor.execute("DELETE FROM nodes WHERE device_id = ?", (record.id,))
             self.cursor.execute("DELETE FROM devices WHERE id = ?", (record.id,))
@@ -256,22 +267,24 @@ class SQLiteDBClient:
                     (record.id, node.name, node.protocol, json.dumps(node.config)),
                 )
 
-            # Ensure device status exists and update timestamp (robust approach)
-            self.cursor.execute(
-                """
-                INSERT OR IGNORE INTO device_status (device_id) 
-                VALUES (?)
-                """,
-                (record.id,),
-            )
-            self.cursor.execute(
-                """
-                UPDATE device_status 
-                SET updated_at = CURRENT_TIMESTAMP 
-                WHERE device_id = ?
-                """,
-                (record.id,),
-            )
+            # Restore device status with preserved created_at and updated updated_at
+            if status_data:
+                self.cursor.execute(
+                    """
+                    INSERT INTO device_status (device_id, connection_on_datetime, connection_off_datetime, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    (record.id, status_data[0], status_data[1], status_data[2]),
+                )
+            else:
+                # Create new status if none existed
+                self.cursor.execute(
+                    """
+                    INSERT INTO device_status (device_id)
+                    VALUES (?)
+                    """,
+                    (record.id,),
+                )
 
             # Commit transaction
             self.conn.commit()
