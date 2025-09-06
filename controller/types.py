@@ -146,6 +146,17 @@ class NodeConfig:
         if self.protocol not in Protocol.valid_protocols():
             raise ValueError(f"Protocol {self.protocol} is not valid.")
 
+        # Auto-fix for non numeric types
+        if self.type in {NodeType.BOOL, NodeType.STRING}:
+            self.incremental_node = False
+            self.positive_incremental = None
+            self.calculate_increment = None
+            self.min_alarm = False
+            self.max_alarm = False
+            self.min_alarm_value = None
+            self.max_alarm_value = None
+            self.unit = None
+
         if self.type in {NodeType.BOOL, NodeType.STRING}:
             if self.incremental_node:
                 raise ValueError(f"incremental_node is not valid for {self.type.name} nodes.")
@@ -169,8 +180,12 @@ class NodeConfig:
         if self.logging and (not isinstance(self.logging_period, int) or self.logging_period <= 0):
             raise ValueError(f"Invalid logging period '{self.logging_period}' for node '{self.name}'. Must be a positive integer.")
 
-        if self.type is not NodeType.FLOAT and self.decimal_places is not None:
-            raise ValueError(f"Non float nodes can't have defined number of decimal places")
+        # Auto-fix for non decimal places types
+        if self.type is not NodeType.FLOAT:
+            self.decimal_places = None
+
+        if self.type is NodeType.FLOAT and not isinstance(self.decimal_places, int):
+            raise ValueError(f"decimal_places must be an int for FLOAT nodes, got {type(self.decimal_places).__name__}")
 
 
 ##########     D E V I C E     A N D     E N E R G Y     M E T E R     E N U M S     &     D A T A     C L A S S E S     ##########
