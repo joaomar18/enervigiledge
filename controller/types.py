@@ -1,6 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
 from enum import Enum
+import datetime
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any, Set, Callable
 
@@ -253,3 +254,33 @@ class EnergyMeterRecord:
     communication_options: Dict[str, Any]
     nodes: Set[NodeRecord]
     id: Optional[int] = None
+
+
+@dataclass
+class DeviceHistoryStatus:
+    """
+    Represents the operational status and connection history of a device.
+
+    Tracks connection events and record lifecycle timestamps for monitoring
+    device availability and operational status over time.
+
+    Attributes:
+        connection_on_datetime (Optional[datetime.datetime]): Timestamp when was the device last connection.
+        connection_off_datetime (Optional[datetime.datetime]): Timestamp when was the device last disconnection.
+        created_at (Optional[datetime.datetime]): Timestamp when the device was first created.
+        updated_at (Optional[datetime.datetime]): Timestamp when the device was last modified.
+    """
+
+    connection_on_datetime: Optional[datetime.datetime]
+    connection_off_datetime: Optional[datetime.datetime]
+    created_at: Optional[datetime.datetime]
+    updated_at: Optional[datetime.datetime]
+
+    def get_status(self) -> Dict[str, Any]:
+        """
+        Returns a dictionary representation of the device history status.
+
+        Returns:
+            Dict[str, Any]: All status attributes as key-value pairs.
+        """
+        return asdict(self)

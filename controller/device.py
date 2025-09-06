@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 
 #############LOCAL IMPORTS#############
 
-from controller.types import Protocol
+from controller.types import Protocol, DeviceHistoryStatus
 from controller.node import Node
 
 #######################################
@@ -100,3 +100,17 @@ class Device(ABC):
         """
 
         return {"id": self.id, "name": self.name, "protocol": self.protocol, "connected": self.connected}
+
+    def get_device_info(self, get_history_method: Callable[[int], DeviceHistoryStatus]) -> Dict[str, Any]:
+        """
+        Returns comprehensive device information including history status.
+
+        Args:
+            get_history_method: Callback to retrieve device history status.
+
+        Returns:
+            Dict[str, Any]: Device info with ID, name, protocol, status, and history.
+        """
+
+        history = get_history_method(self.id)
+        return {"id": self.id, "name": self.name, "protocol": self.protocol, "connected": self.connected, "history": history.get_status() if history else None}

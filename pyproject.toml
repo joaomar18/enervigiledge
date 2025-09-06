@@ -1,5 +1,5 @@
 [tool.black]
-line-length = 160        
+line-length = 150        
 skip-string-normalization = true
 target-version = ['py311']
 

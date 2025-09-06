@@ -10,7 +10,7 @@ from dataclasses import dataclass
 ############### LOCAL IMPORTS ###################
 
 from util.debug import LoggerManager
-from controller.types import Protocol, EnergyMeterType, NodeRecord, EnergyMeterRecord
+from controller.types import Protocol, EnergyMeterType, NodeRecord, EnergyMeterRecord, DeviceHistoryStatus
 
 #################################################
 
@@ -386,7 +386,7 @@ class SQLiteDBClient:
 
         return meters
 
-    def update_device_connection_status(self, device_id: int, status: bool) -> bool:
+    def update_device_connection_history(self, device_id: int, status: bool) -> bool:
         """
         Updates device connection timestamps.
 
@@ -418,3 +418,42 @@ class SQLiteDBClient:
         except Exception as e:
             logger.exception(f"Failed to update connection status for device {device_id}: {e}")
             return False
+
+    def get_device_history(self, device_id: int) -> DeviceHistoryStatus:
+        """
+        Retrieves the connection history and status timestamps for a device.
+
+        Args:
+            device_id (int): Device identifier
+
+        Returns:
+            DeviceHistoryStatus: Object containing connection timestamps and record lifecycle info
+        """
+
+        logger = LoggerManager.get_logger(__name__)
+
+        try:
+            self.cursor.execute(
+                """
+                SELECT connection_on_datetime, connection_off_datetime, created_at, updated_at
+                FROM device_status
+                WHERE device_id = ?
+                """,
+                (device_id,),
+            )
+            row = self.cursor.fetchone()
+
+            if row:
+                return DeviceHistoryStatus(
+                    connection_on_datetime=row[0],
+                    connection_off_datetime=row[1],
+                    created_at=row[2],
+                    updated_at=row[3],
+                )
+            else:
+                logger.warning(f"No status record found for device ID {device_id}")
+                return DeviceHistoryStatus(None, None, None, None)
+
+        except Exception as e:
+            logger.exception(f"Failed to retrieve device history for device {device_id}: {e}")
+            return DeviceHistoryStatus(None, None, None, None)

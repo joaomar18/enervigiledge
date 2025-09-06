@@ -201,6 +201,33 @@ async def get_device_state(
     return JSONResponse(content=device_state)
 
 
+@router.get("/get_device_info")
+@auth_endpoint(AuthConfigs.PROTECTED)
+async def get_device_info(
+    request: Request,
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
+    database: SQLiteDBClient = Depends(services.get_db),
+) -> JSONResponse:
+    """Retrieves comprehensive device information including history status of the device."""
+
+    id_raw = request.query_params.get("id")
+
+    if not id_raw:
+        raise ValueError("Missing required query parameters: 'id'")
+
+    try:
+        device_id = int(id_raw)
+    except ValueError:
+        raise ValueError(f"Invalid device id: {id_raw!r}")
+
+    device = device_manager.get_device(device_id)
+    if not device:
+        raise ValueError(f"Device with id {device_id} does not exist.")
+    device_info = device.get_device_info(database.get_device_history)
+    return JSONResponse(content=device_info)
+
+
 @router.get("/get_all_devices_state")
 @auth_endpoint(AuthConfigs.PROTECTED)
 async def get_all_devices_state(
@@ -240,6 +267,34 @@ async def get_device_state(
     device_state = device.get_device_state()
     device_state["image"] = get_device_image(device.id, "default", "db/device_img/")
     return JSONResponse(content=device_state)
+
+
+@router.get("/get_device_info_with_image")
+@auth_endpoint(AuthConfigs.PROTECTED)
+async def get_device_info(
+    request: Request,
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
+    database: SQLiteDBClient = Depends(services.get_db),
+) -> JSONResponse:
+    """Retrieves device information including history status and image of a specific device."""
+
+    id_raw = request.query_params.get("id")
+
+    if not id_raw:
+        raise ValueError("Missing required query parameters: 'id'")
+
+    try:
+        device_id = int(id_raw)
+    except ValueError:
+        raise ValueError(f"Invalid device id: {id_raw!r}")
+
+    device = device_manager.get_device(device_id)
+    if not device:
+        raise ValueError(f"Device with id {device_id} does not exist.")
+    device_info = device.get_device_info(database.get_device_history)
+    device_info["image"] = get_device_image(device.id, "default", "db/device_img/")
+    return JSONResponse(content=device_info)
 
 
 @router.get("/get_all_devices_state_with_image")
