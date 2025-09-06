@@ -120,8 +120,8 @@ class SQLiteDBClient:
                 """
                 CREATE TABLE IF NOT EXISTS device_status (
                     device_id INTEGER PRIMARY KEY,
-                    connection_on_datetime TEXT,
-                    connection_off_datetime TEXT,
+                    connection_on_datetime TEXT DEFAULT NULL,
+                    connection_off_datetime TEXT DEFAULT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
