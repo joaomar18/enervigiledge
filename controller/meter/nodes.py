@@ -10,7 +10,7 @@ from controller.node import Node
 from controller.types import EnergyMeterType, EnergyMeterOptions
 from controller.exceptions import *
 import controller.meter.validation as validation
-import util.functions.generic as generic
+import util.functions.meter as meter_util
 
 #######################################
 
@@ -64,7 +64,7 @@ class EnergyMeterNodes:
         """
         Validates a node's name and unit against energy meter standards.
         """
-        validation.validate_node(node, EnergyMeterNodes.VALID_NODES, EnergyMeterNodes.VALID_UNITS.get(generic.remove_phase_string(node.name)))
+        validation.validate_node(node, EnergyMeterNodes.VALID_NODES, EnergyMeterNodes.VALID_UNITS.get(meter_util.remove_phase_string(node.name)))
 
     @staticmethod
     def validate_logging_consistency(nodes: Dict[str, Node], node_to_check: Optional[Node] = None) -> None:

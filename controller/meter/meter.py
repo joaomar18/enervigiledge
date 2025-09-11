@@ -17,7 +17,8 @@ from controller.meter.nodes import EnergyMeterNodes
 import controller.meter.calculation as calculation
 from mqtt.client import MQTTMessage
 from db.timedb import Measurement
-import util.functions.generic as functions_generic
+import util.functions.generic as generic
+import util.functions.meter as meter_util
 from util.debug import LoggerManager
 
 #######################################
@@ -58,25 +59,6 @@ class EnergyMeter(Device):
         calculation_methods (Dict[str, Tuple[Callable, Dict[str, Any]]]): Map of suffixes to calculation methods.
         disconnected_calculation (bool): Flag to make the device make one and only calculation of nodes on disconnection
     """
-
-    @staticmethod
-    def get_node_phase(node: Node) -> str:
-        """
-        Returns the phase prefix of a node based on its name.
-
-        Identifies whether a node belongs to a specific phase (e.g., "l1_", "l2_", "l3_"),
-        a line-to-line voltage (e.g., "l1_l2_"), or represents a totalized value ("total_").
-
-        Args:
-            node (Node): The node whose name is to be analyzed.
-
-        Returns:
-            str: The phase prefix ("l1_", "l2_", "l3_", "l1_l2_", etc.), or an empty string if none match.
-        """
-        for phase in ("l1_l2_", "l2_l3_", "l3_l1_", "l1_", "l2_", "l3_", "total_"):
-            if node.name.startswith(phase):
-                return phase
-        return ""
 
     def __init__(
         self,
@@ -182,7 +164,7 @@ class EnergyMeter(Device):
                 node.last_log_datetime = current_time
                 continue
 
-            elapsed_time = functions_generic.subtract_datetime_mins(current_time, node.last_log_datetime)
+            elapsed_time = generic.subtract_datetime_mins(current_time, node.last_log_datetime)
 
             if elapsed_time >= node.logging_period:
                 log_data = [node.submit_log(current_time)]
@@ -199,7 +181,7 @@ class EnergyMeter(Device):
             node (Node): The node used to identify related energy nodes.
         """
 
-        prefix = EnergyMeter.get_node_phase(node)
+        prefix = meter_util.get_node_prefix(node)
 
         for energy_type in ("reactive", "active"):
             if f"_{energy_type}_energy" not in node.name:
@@ -248,7 +230,7 @@ class EnergyMeter(Device):
 
         for node in calculated_nodes.values():
 
-            prefix = EnergyMeter.get_node_phase(node)
+            prefix = meter_util.get_node_prefix(node)
 
             for key, (func, kwargs) in self.calculation_methods.items():
                 if key in node.name:

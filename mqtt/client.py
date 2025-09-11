@@ -14,7 +14,7 @@ import logging
 #############LOCAL IMPORTS#############
 
 from util.debug import LoggerManager
-import util.functions.generic as generic
+import util.functions.auth as auth_util
 
 #######################################
 
@@ -74,7 +74,7 @@ class MQTTClient:
         self.address = os.getenv("MQTT_ADDRESS")
         self.port = int(os.getenv("MQTT_PORT"))
         self.username = os.getenv("MQTT_USERNAME")
-        self.password = generic.decrypt_password(password_encrypted=os.getenv("MQTT_PASSWORD_ENCRYPTED"), key=os.getenv("MQTT_PASSWORD_KEY"))
+        self.password = auth_util.decrypt_password(password_encrypted=os.getenv("MQTT_PASSWORD_ENCRYPTED"), key=os.getenv("MQTT_PASSWORD_KEY"))
 
         self.publish_queue: asyncio.Queue[MQTTMessage] = asyncio.Queue(maxsize=1000)
         self.publish_task: Optional[asyncio.Task] = None

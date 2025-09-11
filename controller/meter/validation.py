@@ -9,7 +9,7 @@ from typing import Dict, Set, Optional
 from controller.types import NodeType, EnergyMeterOptions, EnergyMeterType
 from controller.exceptions import UnitError, NodeUnknownError, NodeMissingError, LoggingPeriodError
 from controller.node import Node
-import util.functions.generic as functions_generic
+import util.functions.meter as meter_util
 
 #######################################
 
@@ -17,22 +17,22 @@ import util.functions.generic as functions_generic
 def validate_node(node: Node, valid_nodes: Set[str], valid_units: Optional[Set[str]]) -> None:
     """
     Validates a node's name and unit against predefined valid options for energy meter nodes.
-    
-    Custom nodes bypass validation. For regular nodes, validates that the base name 
+
+    Custom nodes bypass validation. For regular nodes, validates that the base name
     (without phase prefix) exists in valid_nodes and that units are appropriate for the node type.
-    
+
     Args:
         node (Node): The node to validate
         valid_nodes (Set[str]): Set of valid base node names
         valid_units (Optional[Set[str]]): Set of valid units for this node type
-        
+
     Raises:
         NodeUnknownError: If the node's base name is not recognized
         UnitError: If unit validation fails
     """
 
     if not node.custom:
-        base_name = functions_generic.remove_phase_string(node.name)
+        base_name = meter_util.remove_phase_string(node.name)
 
         if base_name not in valid_nodes:
             raise NodeUnknownError(f"Invalid node {node.name} with type {node.type}")
@@ -52,14 +52,14 @@ def validate_node(node: Node, valid_nodes: Set[str], valid_units: Optional[Set[s
 def validate_logging_consistency(nodes: Dict[str, Node], node_to_check: Optional[Node] = None) -> None:
     """
     Validates that logging-enabled nodes in the same measurement category have consistent logging periods.
-    
+
     Groups nodes by category (energy, power, voltage, current, frequency) and ensures
     all nodes within each category use the same logging period.
-    
+
     Args:
         nodes (Dict[str, Node]): Dictionary of all nodes
         node_to_check (Optional[Node]): If provided, only validates this node's category
-                                       
+
     Raises:
         LoggingPeriodError: If logging periods are inconsistent within a category
     """
@@ -75,7 +75,9 @@ def validate_logging_consistency(nodes: Dict[str, Node], node_to_check: Optional
     for category, suffixes in category_suffixes.items():
 
         if node_to_check is None:
-            logging_nodes = [node for node in nodes.values() if any(node.name.endswith(suffix) for suffix in suffixes) and node.logging and not node.custom]
+            logging_nodes = [
+                node for node in nodes.values() if any(node.name.endswith(suffix) for suffix in suffixes) and node.logging and not node.custom
+            ]
         else:
             if not node_to_check.logging:
                 return
@@ -83,7 +85,9 @@ def validate_logging_consistency(nodes: Dict[str, Node], node_to_check: Optional
             if not any(node_to_check.name.endswith(suffix) for suffix in suffixes):
                 continue
 
-            logging_nodes = [node for node in nodes.values() if any(node.name.endswith(suffix) for suffix in suffixes) and node.logging and not node.custom]
+            logging_nodes = [
+                node for node in nodes.values() if any(node.name.endswith(suffix) for suffix in suffixes) and node.logging and not node.custom
+            ]
 
         if not logging_nodes:
             continue
@@ -101,20 +105,22 @@ def validate_logging_consistency(nodes: Dict[str, Node], node_to_check: Optional
             return
 
 
-def validate_energy_nodes(phase: str, energy_type: str, nodes: Dict[str, Node], meter_type: EnergyMeterType, meter_options: EnergyMeterOptions) -> None:
+def validate_energy_nodes(
+    phase: str, energy_type: str, nodes: Dict[str, Node], meter_type: EnergyMeterType, meter_options: EnergyMeterOptions
+) -> None:
     """
     Validates that calculated energy nodes have required dependency nodes based on meter configuration.
-    
-    Checks different calculation methods: three-phase total summation, forward/reverse energy 
+
+    Checks different calculation methods: three-phase total summation, forward/reverse energy
     difference, or power-based energy integration.
-    
+
     Args:
         phase (str): Phase prefix ("l1_", "l2_", "l3_", "total_", or "")
         energy_type (str): Energy type ("active" or "reactive")
         nodes (Dict[str, Node]): Dictionary of all available nodes
         meter_type (EnergyMeterType): Meter type (SINGLE_PHASE or THREE_PHASE)
         meter_options (EnergyMeterOptions): Configuration options
-        
+
     Raises:
         NodeMissingError: If required dependency nodes are missing
     """
@@ -151,18 +157,18 @@ def validate_energy_nodes(phase: str, energy_type: str, nodes: Dict[str, Node], 
 def validate_power_nodes(phase: str, power_type: str, nodes: Dict[str, Node], meter_type: EnergyMeterType) -> None:
     """
     Validates that calculated power nodes have sufficient input measurements for calculation.
-    
+
     Checks different calculation paths based on available measurements:
     - Active power: (voltage + current + power_factor) or (apparent + reactive)
     - Reactive power: (voltage + current + power_factor) or (apparent + active)
     - Apparent power: (voltage + current) or (active + reactive)
-    
+
     Args:
         phase (str): Phase prefix ("l1_", "l2_", "l3_", "total_", or "")
         power_type (str): Power type ("active", "reactive", or "apparent")
         nodes (Dict[str, Node]): Dictionary of all available nodes
         meter_type (EnergyMeterType): Meter type (SINGLE_PHASE or THREE_PHASE)
-        
+
     Raises:
         NodeMissingError: If insufficient measurements are available for calculation
     """
@@ -204,15 +210,15 @@ def validate_power_nodes(phase: str, power_type: str, nodes: Dict[str, Node], me
 def validate_pf_nodes(phase: str, nodes: Dict[str, Node], meter_type: EnergyMeterType) -> None:
     """
     Validates that calculated power factor nodes have required active and reactive power measurements.
-    
+
     For three-phase total, requires all individual phase power measurements.
     For individual phases, requires phase-specific active and reactive power.
-    
+
     Args:
         phase (str): Phase prefix ("l1_", "l2_", "l3_", "total_", or "")
         nodes (Dict[str, Node]): Dictionary of all available nodes
         meter_type (EnergyMeterType): Meter type (SINGLE_PHASE or THREE_PHASE)
-        
+
     Raises:
         NodeMissingError: If required power measurement nodes are missing
     """
@@ -245,18 +251,18 @@ def validate_pf_nodes(phase: str, nodes: Dict[str, Node], meter_type: EnergyMete
 def validate_pf_direction_nodes(phase: str, nodes: Dict[str, Node], meter_type: EnergyMeterType, meter_options: EnergyMeterOptions) -> None:
     """
     Validates that calculated power factor direction nodes have required measurements based on meter configuration.
-    
+
     Different meter options require different measurements:
     - Negative reactive power mode: requires power_factor + reactive_power
     - Forward/reverse energy mode: requires power_factor + reactive_energy
     - Default mode: requires power_factor only
-    
+
     Args:
         phase (str): Phase prefix ("l1_", "l2_", "l3_", "total_", or "")
         nodes (Dict[str, Node]): Dictionary of all available nodes
         meter_type (EnergyMeterType): Meter type (SINGLE_PHASE or THREE_PHASE)
         meter_options (EnergyMeterOptions): Configuration options affecting direction method
-        
+
     Raises:
         NodeMissingError: If required dependency nodes are missing for the configured method
     """

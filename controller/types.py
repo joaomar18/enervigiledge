@@ -35,6 +35,27 @@ class Protocol(str, Enum):
 ##########     N O D E     E N U M S     &     D A T A     C L A S S E S     ##########
 
 
+class NodePhase(str, Enum):
+    """
+    Enumeration of supported electrical phases.
+
+    Attributes:
+        L1 (str): Phase L1.
+        L2 (str): Phase L2.
+        L3 (str): Phase L3.
+        TOTAL (str): Total of all phases.
+        GENERAL (str): Non-phase-specific.
+        SINGLEPHASE (str): Single-phase system.
+    """
+
+    L1 = "L1"
+    L2 = "L2"
+    L3 = "L3"
+    TOTAL = "Total"
+    GENERAL = "General"
+    SINGLEPHASE = "Singlephase"
+
+
 class NodeType(str, Enum):
     """
     Enumeration of supported node data types.
