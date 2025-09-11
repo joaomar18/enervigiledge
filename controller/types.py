@@ -2,7 +2,7 @@
 
 from enum import Enum
 import datetime
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Optional, Dict, Any, Set, Callable
 
 #######################################
@@ -110,6 +110,24 @@ class BaseNodeRecordConfig:
 
 
 @dataclass
+class NodeAttributes:
+    """
+    Holds domain-specific attributes for a node.
+
+    Currently includes the node's electrical phase.
+    Defaults to NodePhase.GENERAL if not specified.
+    """
+
+    phase: NodePhase = NodePhase.GENERAL
+
+    def get_attributes(self) -> Dict[str, Any]:
+        """
+        Returns the node attributes as a dictionary.
+        """
+        return asdict(self)
+
+
+@dataclass
 class NodeRecord:
     """
     Database record for a node configuration with protocol-specific attributes.
@@ -122,6 +140,7 @@ class NodeRecord:
         name (str): Unique node identifier within the device.
         protocol (str): Communication protocol (MODBUS_RTU, OPC_UA, NONE, etc.).
         config (Dict[str, Any]): Complete configuration dictionary containing:
+        attributes (Dict[str, Any]): Domain-specific attributes (e.g. {"phase": "L1"}).
             - Base attributes: type, unit, enabled, publish, alarms, logging, etc.
             - Protocol-specific: register (Modbus), node_id (OPC UA), etc.
         device_id (Optional[int]): Database ID of the parent device.
@@ -130,19 +149,53 @@ class NodeRecord:
     name: str
     protocol: str
     config: Dict[str, Any]
+    attributes: Dict[str, Any]
     device_id: Optional[int] = None
 
     def __eq__(self, other):
         if not isinstance(other, NodeRecord):
             return False
-        return (self.device_id, self.name, self.protocol) == (other.device_id, other.name, other.protocol)
+        return (self.device_id, self.name) == (other.device_id, other.name)
 
     def __hash__(self):
-        return hash((self.device_id, self.name, self.protocol))
+        return hash((self.device_id, self.name))
 
 
 @dataclass
 class NodeConfig:
+    """
+    Configuration for a node within a device.
+
+    Defines both functional behavior (type, unit, protocol, alarms, logging) and
+    domain-specific attributes (e.g. phase) used to manage and validate node data.
+    This configuration is used when creating and initializing Node instances.
+
+    Attributes:
+        name (str): Unique node identifier within the device.
+        type (NodeType): The data type of the node (FLOAT, BOOL, STRING, etc.).
+        unit (str | None): Measurement unit (e.g. "V", "A", "W") or None.
+        protocol (Protocol): Communication protocol for the node (default NONE).
+        enabled (bool): Whether the node is active and should be polled.
+        incremental_node (bool | None): Marks if the node represents a cumulative counter.
+        positive_incremental (bool | None): If True, only positive increments are allowed.
+        calculate_increment (bool | None): Whether to calculate incremental deltas from values.
+        publish (bool): Whether to publish the node's values externally (e.g. MQTT).
+        calculated (bool): True if this node is derived from other nodes instead of hardware.
+        custom (bool): Whether the node is user-defined.
+        logging (bool): Whether to log values periodically to the database.
+        logging_period (int): Period in seconds for logging when enabled.
+        min_alarm (bool): Whether to trigger an alarm if value drops below min_alarm_value.
+        max_alarm (bool): Whether to trigger an alarm if value exceeds max_alarm_value.
+        min_alarm_value (float | None): Minimum threshold for alarm triggering.
+        max_alarm_value (float | None): Maximum threshold for alarm triggering.
+        decimal_places (int | None): Number of decimal places to display (FLOAT only).
+        attributes (NodeAttributes): Domain-specific metadata (e.g. phase).
+        on_value_change (Callable | None): Optional callback when node value changes.
+
+    Methods:
+        validate(): Validates configuration values and enforces type-dependent rules.
+    """
+
     name: str
     type: NodeType
     unit: str | None
@@ -161,6 +214,7 @@ class NodeConfig:
     min_alarm_value: float | None = 0.0
     max_alarm_value: float | None = 0.0
     decimal_places: int | None = 3
+    attributes: NodeAttributes = field(default_factory=NodeAttributes)
     on_value_change: Callable[[], None] | None = None
 
     def validate(self) -> None:

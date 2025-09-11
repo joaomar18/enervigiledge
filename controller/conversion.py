@@ -104,6 +104,7 @@ def convert_dict_to_node(dict_node: Dict[str, Any]) -> Node:
         raise ValueError(f"Missing required fields for node record")
 
     node_dict_config = dict_node.get('config')
+    node_dict_attributes = dict_node.get('attributes')
 
     result = objects.check_required_keys(node_dict_config, BaseNodeRecordConfig)
     if not result:
@@ -123,14 +124,14 @@ def convert_dict_to_node(dict_node: Dict[str, Any]) -> Node:
 
     if protocol is Protocol.NONE:
 
-        node_record = NodeRecord(name=name, protocol=protocol, config=node_dict_config)
+        node_record = NodeRecord(name=name, protocol=protocol, config=node_dict_config, attributes=node_dict_attributes)
         return ProtocolRegistry.base_node_factory(node_record)
 
     plugin = ProtocolRegistry.get_protocol_plugin(protocol)
     if not plugin:
         raise ValueError(f"Protocol {protocol} is not supported for node creation")
 
-    node_record = NodeRecord(name=name, protocol=protocol, config=node_dict_config)
+    node_record = NodeRecord(name=name, protocol=protocol, config=node_dict_config, attributes=node_dict_attributes)
     return plugin.node_factory(node_record)
 
 

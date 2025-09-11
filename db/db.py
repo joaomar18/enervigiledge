@@ -112,6 +112,7 @@ class SQLiteDBClient:
                     name TEXT NOT NULL,
                     protocol TEXT NOT NULL,
                     config TEXT NOT NULL,
+                    attributes TEXT NOT NULL,
                     FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
                 )
             """
@@ -170,10 +171,10 @@ class SQLiteDBClient:
                 node.device_id = device_id
                 self.cursor.execute(
                     """
-                    INSERT INTO nodes (device_id, name, protocol, config)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO nodes (device_id, name, protocol, config, attributes)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
-                    (device_id, node.name, node.protocol, json.dumps(node.config)),
+                    (device_id, node.name, node.protocol, json.dumps(node.config), json.dumps(node.attributes)),
                 )
 
             # Create initial device status entry
@@ -261,10 +262,10 @@ class SQLiteDBClient:
                 node.device_id = record.id
                 self.cursor.execute(
                     """
-                    INSERT INTO nodes (device_id, name, protocol, config)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO nodes (device_id, name, protocol, config, attributes)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
-                    (record.id, node.name, node.protocol, json.dumps(node.config)),
+                    (record.id, node.name, node.protocol, json.dumps(node.config), json.dumps(node.attributes)),
                 )
 
             # Restore device status with preserved created_at and updated updated_at
@@ -367,19 +368,32 @@ class SQLiteDBClient:
             device_rows = self.cursor.fetchall()
 
             for device_row in device_rows:
-                device_id, name, protocol, device_type, meter_opts_str, comm_opts_str = device_row
+                (
+                    device_id,
+                    name,
+                    protocol,
+                    device_type,
+                    meter_opts_str,
+                    comm_opts_str,
+                ) = device_row
 
                 self.cursor.execute(
                     """
-                    SELECT name, protocol, config FROM nodes WHERE device_id = ?
+                    SELECT name, protocol, config, attributes FROM nodes WHERE device_id = ?
                 """,
                     (device_id,),
                 )
                 node_rows = self.cursor.fetchall()
 
                 nodes = set()
-                for node_name, node_protocol, config_str in node_rows:
-                    node = NodeRecord(device_id=device_id, name=node_name, protocol=node_protocol, config=json.loads(config_str))
+                for node_name, node_protocol, config_str, attributes_str in node_rows:
+                    node = NodeRecord(
+                        device_id=device_id,
+                        name=node_name,
+                        protocol=node_protocol,
+                        config=json.loads(config_str),
+                        attributes=json.loads(attributes_str),
+                    )
                     nodes.add(node)
 
                 meter = EnergyMeterRecord(

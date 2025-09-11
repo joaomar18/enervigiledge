@@ -7,10 +7,9 @@ from typing import Callable, Dict, Optional, Type
 
 #############LOCAL IMPORTS#############
 
-from controller.device import Device
 from controller.meter.meter import EnergyMeter
 from controller.node import NodeType, Node, ModbusRTUNode, OPCUANode
-from controller.types import Protocol, NodeRecord, NodeConfig
+from controller.types import Protocol, NodeRecord, NodeConfig, NodeAttributes
 from protocol.modbus_rtu.rtu_device import ModbusRTUOptions, ModbusRTUEnergyMeter
 from protocol.opcua.opcua_device import OPCUAOptions, OPCUAEnergyMeter
 
@@ -114,7 +113,12 @@ def _base_node_factory(record: NodeRecord) -> Node:
     """Create a :class:`Node` from a :class:`NodeRecord`."""
     cfg = record.config
     config = NodeConfig(
-        name=record.name, type=NodeType(cfg["type"]), unit=cfg["unit"], protocol=Protocol.NONE, **{k: v for k, v in cfg.items() if k not in ["type", "unit"]}
+        name=record.name,
+        type=NodeType(cfg["type"]),
+        unit=cfg["unit"],
+        protocol=Protocol.NONE,
+        **{k: v for k, v in cfg.items() if k not in ["type", "unit"]},
+        attributes=NodeAttributes(**record.attributes),
     )
     return Node(config)
 
@@ -133,6 +137,7 @@ def _modbus_rtu_node_factory(record: NodeRecord) -> Node:
         unit=cfg["unit"],
         register=cfg["register"],
         **{k: v for k, v in cfg.items() if k not in ["type", "unit", "register"]},
+        attributes=NodeAttributes(**record.attributes),
     )
 
 
@@ -150,6 +155,7 @@ def _opcua_node_factory(record: NodeRecord) -> Node:
         unit=cfg["unit"],
         node_id=cfg["node_id"],
         **{k: v for k, v in cfg.items() if k not in ["type", "unit", "node_id"]},
+        attributes=NodeAttributes(**record.attributes),
     )
 
 

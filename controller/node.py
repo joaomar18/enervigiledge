@@ -52,6 +52,7 @@ class Node:
         self.calculated = configuration.calculated
         self.custom = configuration.custom
         self.decimal_places = configuration.decimal_places
+        self.attributes = configuration.attributes
         self.on_value_change = configuration.on_value_change
 
         # Logging
@@ -408,20 +409,21 @@ class Node:
 
     def get_publish_format(self) -> Dict[str, Any]:
         """
-        Prepares the node's current value and metadata for MQTT publishing.
-        Applies rounding for non-incremental FLOAT nodes.
+        Formats the node's current value, metadata, and attributes for MQTT publishing and API acess.
+
+        Applies rounding to non-incremental FLOAT nodes, includes type, unit,
+        and (if enabled) alarm states. Also appends all domain-specific attributes.
 
         Returns:
             Dict[str, Any]: A dictionary containing the node's value, type, unit,
-            and (if applicable) alarm states.
-
-        Raises:
-            Exception: If the node value is None, indicating no data has been set yet.
+            alarm states (if applicable), and domain-specific attributes.
         """
 
         output = {
             "value": (
-                round(self.value, self.decimal_places) if self.type is NodeType.FLOAT and not self.incremental_node and self.value is not None else self.value
+                round(self.value, self.decimal_places)
+                if self.type is NodeType.FLOAT and not self.incremental_node and self.value is not None
+                else self.value
             ),
             "type": self.type.value,
             "unit": self.unit,
@@ -432,6 +434,11 @@ class Node:
                 output["min_alarm_state"] = self.min_alarm_state
             if self.max_alarm:
                 output["max_alarm_state"] = self.max_alarm_state
+
+        attributes = self.attributes.get_attributes()
+
+        for name, value in attributes.items():
+            output[name] = value
 
         return output
 
@@ -454,8 +461,12 @@ class Node:
 
         if self.type in {NodeType.INT, NodeType.FLOAT} and not self.incremental_node:
             output["mean_value"] = round(self.mean_value, self.decimal_places)
-            output["min_value"] = round(self.min_value, self.decimal_places) if self.type is NodeType.FLOAT and self.min_value is not None else self.min_value
-            output["max_value"] = round(self.max_value, self.decimal_places) if self.type is NodeType.FLOAT and self.max_value is not None else self.max_value
+            output["min_value"] = (
+                round(self.min_value, self.decimal_places) if self.type is NodeType.FLOAT and self.min_value is not None else self.min_value
+            )
+            output["max_value"] = (
+                round(self.max_value, self.decimal_places) if self.type is NodeType.FLOAT and self.max_value is not None else self.max_value
+            )
         else:
             output["value"] = self.value
 
@@ -495,7 +506,8 @@ class Node:
         )
 
         configuration = base_config.get_config()
-        return NodeRecord(device_id=None, name=self.name, protocol=self.protocol, config=configuration)
+        attributes = self.attributes.get_attributes()
+        return NodeRecord(device_id=None, name=self.name, protocol=self.protocol, config=configuration, attributes=attributes)
 
 
 class ModbusRTUNode(Node):
