@@ -2,7 +2,7 @@
 
 import logging
 from colorama import Fore, Style
-from typing import Dict
+from typing import Dict, Optional
 
 #######################################
 
@@ -65,7 +65,7 @@ class LoggerManager:
                 logger.handlers.clear()
 
     @staticmethod
-    def get_logger(name: str, level: int = None) -> logging.Logger:
+    def get_logger(name: str, level: Optional[int] = None) -> logging.Logger:
         """
         Returns a logger with the specified name and log level.
         If the logger was already created, returns the existing instance.

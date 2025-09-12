@@ -24,7 +24,7 @@ async def auto_login(request: Request, safety: HTTPSafety = Depends(services.get
     username, token = await safety.update_jwt_token(request)
     response = JSONResponse(content={"message": "Auto-login successful", "username": username})
     response.set_cookie(
-        key="token", value=token, httponly=True, secure=True, samesite="None", max_age=3600 if not safety.active_tokens[token].auto_login else 2592000
+        key="token", value=token, httponly=True, secure=True, samesite="none", max_age=3600 if not safety.active_tokens[token].auto_login else 2592000
     )
     return response
 
@@ -37,7 +37,7 @@ async def login(request: Request, safety: HTTPSafety = Depends(services.get_safe
     username, token = await safety.create_jwt_token(request)
     response = JSONResponse(content={"message": "Login successful", "username": username})
     response.set_cookie(
-        key="token", value=token, httponly=True, secure=True, samesite="None", max_age=3600 if not safety.active_tokens[token].auto_login else 2592000
+        key="token", value=token, httponly=True, secure=True, samesite="none", max_age=3600 if not safety.active_tokens[token].auto_login else 2592000
     )
     return response
 

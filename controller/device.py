@@ -57,7 +57,7 @@ class Device(ABC):
     @abstractmethod
     async def start(self) -> None:
         """
-        Starts the energy meter device operations and communication protocol.
+        Starts the device operations and communication protocol.
         """
 
         pass
@@ -65,7 +65,7 @@ class Device(ABC):
     @abstractmethod
     async def stop(self) -> None:
         """
-        Stops the energy meter device operations and cleans up resources.
+        Stops the device operations and cleans up resources.
         """
 
         pass
@@ -113,4 +113,10 @@ class Device(ABC):
         """
 
         history = get_history_method(self.id)
-        return {"id": self.id, "name": self.name, "protocol": self.protocol, "connected": self.connected, "history": history.get_status() if history else None}
+        return {
+            "id": self.id,
+            "name": self.name,
+            "protocol": self.protocol,
+            "connected": self.connected,
+            "history": history.get_status() if history else None,
+        }

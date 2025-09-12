@@ -1,6 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
-from typing import Dict, Any, Type, Tuple, List
+from typing import Dict, Any, Type, Tuple, List, TypeVar
 import dataclasses
 
 #######################################
@@ -11,7 +11,7 @@ import dataclasses
 
 
 def check_required_keys(
-    input_dict: Dict[str, Any], type_class: Type, ignore_keys: Tuple[str] = ()
+    input_dict: Dict[str, Any], type_class: Type, ignore_keys: Tuple[str] = tuple()
 ) -> Tuple[Tuple[dataclasses.Field, ...], List[str], List[str]] | None:
     """
     Validates dictionary against dataclass required fields and returns field metadata.
@@ -121,3 +121,28 @@ def create_dict_from_fields(
                 output_dict[field_name] = None
 
     return output_dict
+
+
+T = TypeVar("T")
+
+
+def require_field(dict: dict[str, Any], key: str, expected_type: Type[T]) -> T:
+    """
+    Retrieves and validates a required field from a dictionary.
+
+    Args:
+        d: The source dictionary.
+        key: The field key to retrieve.
+        expected_type: The expected type of the field value.
+
+    Returns:
+        The field value, cast to the expected type.
+
+    Raises:
+        ValueError: If the field is missing or not of the expected type.
+    """
+
+    value = dict.get(key)
+    if not isinstance(value, expected_type):
+        raise ValueError(f"Field '{key}' is required and must be of type {expected_type.__name__}")
+    return value

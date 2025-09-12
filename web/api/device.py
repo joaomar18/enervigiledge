@@ -18,6 +18,7 @@ from util.functions.images import process_and_save_image, get_device_image, dele
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
 from protocol.opcua.opcua_device import OPCUAEnergyMeter
 from controller.conversion import convert_dict_to_energy_meter
+import util.functions.objects as objects
 
 #######################################
 
@@ -43,6 +44,7 @@ async def _parse_device_request(request: Request) -> Tuple[Dict | None, Dict | N
 
     if content_type.startswith("multipart/form-data"):
         form = await request.form()
+        device_data_str = objects.require_field(form, "deviceData", str)
 
         device_data_str = form.get("deviceData")
         device_nodes_str = form.get("deviceNodes")
@@ -119,9 +121,7 @@ async def edit_device(
         raise ValueError("All fields are required")
 
     # Tries to initialize a new energy meter with the given configuration. Throws exception if an error is found in the configuration
-    energy_meter: ModbusRTUEnergyMeter | OPCUAEnergyMeter = convert_dict_to_energy_meter(
-        device_data, device_nodes, device_manager.publish_queue, device_manager.measurements_queue
-    )
+    energy_meter = convert_dict_to_energy_meter(device_data, device_nodes, device_manager.publish_queue, device_manager.measurements_queue)
 
     device = device_manager.get_device(device_id)
     if not device:

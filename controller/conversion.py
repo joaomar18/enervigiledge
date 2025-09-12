@@ -16,12 +16,12 @@ import util.functions.objects as objects
 #######################################
 
 
-def convert_dict_to_meter_options(dict_meter_options: Dict[str, any]) -> EnergyMeterOptions:
+def convert_dict_to_meter_options(dict_meter_options: Dict[str, Any]) -> EnergyMeterOptions:
     """
     Converts a dictionary to EnergyMeterOptions with field validation.
 
     Args:
-        dict_meter_options (Dict[str, any]): Dictionary with meter configuration fields.
+        dict_meter_options (Dict[str, Any]): Dictionary with meter configuration fields.
 
     Returns:
         EnergyMeterOptions: Validated dataclass instance.
@@ -103,8 +103,8 @@ def convert_dict_to_node(dict_node: Dict[str, Any]) -> Node:
     if not result:
         raise ValueError(f"Missing required fields for node record")
 
-    node_dict_config = dict_node.get('config')
-    node_dict_attributes = dict_node.get('attributes')
+    node_dict_config: Dict[str, Any] = dict_node.get('config', {})
+    node_dict_attributes: Dict[str, Any] = dict_node.get('attributes', {})
 
     result = objects.check_required_keys(node_dict_config, BaseNodeRecordConfig)
     if not result:
@@ -135,7 +135,7 @@ def convert_dict_to_node(dict_node: Dict[str, Any]) -> Node:
     return plugin.node_factory(node_record)
 
 
-def convert_dict_to_energy_nodes(list_nodes: List[Dict[str, any]]) -> Set[Node]:
+def convert_dict_to_energy_nodes(list_nodes: List[Dict[str, Any]]) -> Set[Node]:
     """
     Converts a list representation of multiple nodes into a set of Node objects.
 
@@ -207,7 +207,7 @@ def convert_dict_to_energy_meter(
 
     # Extract and validate common fields
     try:
-        meter_id = int(dict_energy_meter['id']) if dict_energy_meter.get('id') else None
+        meter_id = int(dict_energy_meter['id']) if dict_energy_meter.get('id') is not None else None
         protocol_str = str(dict_energy_meter['protocol'])
         meter_type_str = str(dict_energy_meter['type'])
         name = str(dict_energy_meter['name'])

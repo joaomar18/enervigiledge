@@ -12,8 +12,6 @@
 class TokenNotInRequest(Exception):
     """Raised when the safety token is not in the request"""
 
-    pass
-
 
 class TokenInRequestInvalid(Exception):
     """Raised when the safety token in the request is invalid or doesn't exist in the registered safety tokens"""
@@ -26,4 +24,6 @@ class UserConfigurationExists(Exception):
 class InvalidCredentials(Exception):
     """Raised when credentials (username and password) are invalid (not recognized)."""
 
-    pass
+
+class InvalidRequest(Exception):
+    """Raised when a request is malformed or contains invalid data."""

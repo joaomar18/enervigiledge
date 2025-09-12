@@ -19,6 +19,8 @@ from argon2.exceptions import VerifyMismatchError, InvalidHashError
 from util.debug import LoggerManager
 from web.exceptions import TokenNotInRequest, TokenInRequestInvalid, UserConfigurationExists, InvalidCredentials
 import web.validation as validation
+import util.functions.objects as objects
+import util.functions.web as web_util
 
 #######################################
 
@@ -92,9 +94,9 @@ class HTTPSafety:
         ph (PasswordHasher): Argon2 password hasher instance for secure password hashing and verification.
     """
 
-    USER_CONFIG_PATH = "user_config.json"  # Path to user/password file
-    MAX_REQUEST_ATTEMPTS = 5  # Max failed request attempts for sensitive endpoints (login, deletes, ...)
-    BLOCK_TIME = timedelta(minutes=15)  # IP Block Time on exceeding max request attempts
+    USER_CONFIG_PATH = "user_config.json"
+    MAX_REQUEST_ATTEMPTS = 5
+    BLOCK_TIME = timedelta(minutes=15)
 
     def __init__(self):
         self.failed_requests: Dict[str, Dict[str, RequestsSafety]] = {}
@@ -122,11 +124,8 @@ class HTTPSafety:
 
         payload: Dict[str, Any] = await request.json()  # request payload
 
-        username: str = payload.get("username")
-        password: str = payload.get("password")
-
-        if not username or not password:
-            raise ValueError(f"Username and password required. Got username: {username} and password: {password}")
+        username = objects.require_field(payload, "username", str)
+        password = objects.require_field(payload, "password", str)
 
         if not validation.validate_password(password):
             raise InvalidCredentials("Password must be at least 5 characters and not just whitespace.")
@@ -156,13 +155,11 @@ class HTTPSafety:
         """
 
         payload: Dict[str, str] = await request.json()
-        username = payload.get("username")
-        old_password = payload.get("old_password")
-        new_password = payload.get("new_password")
-        confirm_new_password = payload.get("confirm_new_password")
 
-        if not all([username, old_password, new_password, confirm_new_password]):
-            raise ValueError("All fields are required")
+        username = objects.require_field(payload, "username", str)
+        old_password = objects.require_field(payload, "old_password", str)
+        new_password = objects.require_field(payload, "new_password", str)
+        confirm_new_password = objects.require_field(payload, "confirm_new_password", str)
 
         if new_password != confirm_new_password:
             raise ValueError("New password confirmation does not match")
@@ -178,8 +175,8 @@ class HTTPSafety:
         with open(HTTPSafety.USER_CONFIG_PATH, "r") as file:
             config: Dict[str, Any] = json.load(file)
 
-        stored_username = config.get("username")
-        stored_hash = config.get("password_hash")
+        stored_username = objects.require_field(config, "username", str)
+        stored_hash = objects.require_field(config, "password_hash", str)
 
         if username != stored_username:
             raise ValueError("Invalid username")
@@ -221,7 +218,7 @@ class HTTPSafety:
             return token
 
         # Fall back to IP + User-Agent fingerprint for unauthenticated requests
-        ip = request.client.host
+        ip = web_util.get_ip_address(request)
         user_agent = request.headers.get("user-agent", "")
         fingerprint = f"{ip}:{hash(user_agent)}"
         return fingerprint
@@ -244,13 +241,9 @@ class HTTPSafety:
 
         payload: Dict[str, Any] = await request.json()  # request payload
 
-        username: str = payload.get("username")
-        password: str = payload.get("password")
+        username: str = objects.require_field(payload, "username", str)
+        password: str = objects.require_field(payload, "password", str)
         auto_login: bool = payload.get("auto_login", False)
-
-        # Check if username and password exist
-        if not username or not password:
-            raise ValueError(f"Username and password required. Got username: {username} and password: {password}")
 
         # Checks if configuration file exists
         if not os.path.exists(HTTPSafety.USER_CONFIG_PATH):
@@ -264,15 +257,19 @@ class HTTPSafety:
         if username != config.get("username") or not validation.validate_password(password):
             raise InvalidCredentials("Invalid credentials")
 
+        stored_hash = objects.require_field(config, "password_hash", str)
+
         try:
-            self.ph.verify(config.get("password_hash"), password)
+            self.ph.verify(stored_hash, password)
         except (VerifyMismatchError, InvalidHashError):
             raise InvalidCredentials("Invalid credentials")
 
         # Create token and return it
         token_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
         token = jwt.encode(token_payload, config["jwt_secret"], algorithm="HS256")
-        self.active_tokens[token] = LoginToken(token=token, user=username, ip=request.client.host, auto_login=auto_login, keep_session_until=None)
+        self.active_tokens[token] = LoginToken(
+            token=token, user=username, ip=web_util.get_ip_address(request), auto_login=auto_login, keep_session_until=None
+        )
         return (username, token)
 
     async def update_jwt_token(self, request: Request) -> Tuple[str, str]:
@@ -303,7 +300,7 @@ class HTTPSafety:
         current_auto_login = self.active_tokens[token].auto_login
         del self.active_tokens[token]
         self.active_tokens[new_token] = LoginToken(
-            token=new_token, user=username, ip=request.client.host, auto_login=current_auto_login, keep_session_until=None
+            token=new_token, user=username, ip=web_util.get_ip_address(request), auto_login=current_auto_login, keep_session_until=None
         )
         return (username, new_token)
 
@@ -323,7 +320,7 @@ class HTTPSafety:
 
         del self.active_tokens[token]
 
-    def check_authorization_token(self, request: Optional[Request]) -> Tuple[str, str, str]:
+    def check_authorization_token(self, request: Request) -> Tuple[str, str, str]:
         """
         Validates JWT token and returns authentication details.
 
@@ -368,7 +365,7 @@ class HTTPSafety:
         if not stored_token or stored_token.token != token:
             raise TokenNotInRequest("Security token expired or not present in the active tokens")
 
-        if stored_token.user != username or stored_token.ip != request.client.host:
+        if stored_token.user != username or stored_token.ip != web_util.get_ip_address(request):
             raise TokenInRequestInvalid("Token is invalid or session expired")
 
         return (username, token, str(config["jwt_secret"]))
@@ -406,7 +403,7 @@ class HTTPSafety:
 
         return self.failed_requests.get(self.get_client_identifier(request), {}).get(request.url.path).blocked_until.isoformat()
 
-    def get_remaining_requests(self, request: Request) -> str:
+    def get_remaining_requests(self, request: Request) -> int:
         """Returns number of remaining requests before client gets blocked."""
 
         client_id = self.get_client_identifier(request)
