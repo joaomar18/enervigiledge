@@ -63,6 +63,13 @@ class EnergyMeterNodes:
     def validate_node(node: Node) -> None:
         """
         Validates a node's name and unit against energy meter standards.
+
+        Args:
+            node (Node): The node to validate for name and unit compliance.
+
+        Raises:
+            NodeUnknownError: If the node name is not recognized.
+            UnitError: If the node unit is invalid for the node type.
         """
         validation.validate_node(
             node, EnergyMeterNodes.VALID_NODES, EnergyMeterNodes.VALID_UNITS.get(meter_util.remove_phase_string(node.config.name))
@@ -72,6 +79,13 @@ class EnergyMeterNodes:
     def validate_logging_consistency(nodes: Dict[str, Node], node_to_check: Optional[Node] = None) -> None:
         """
         Validates that nodes in the same measurement category have consistent logging periods.
+
+        Args:
+            nodes (Dict[str, Node]): Dictionary of all nodes to validate.
+            node_to_check (Optional[Node]): Specific node to focus validation on, if any.
+
+        Raises:
+            LoggingPeriodError: If nodes have inconsistent logging periods within the same category.
         """
 
         validation.validate_logging_consistency(nodes, node_to_check)
@@ -87,10 +101,11 @@ class EnergyMeterNodes:
             - 'V' → treated as no prefix (1.0)
 
         Args:
-            node (Optional[Node]): The node with a value and unit.
+            value (Union[int, float]): The numeric value to scale.
+            unit (Optional[str]): The unit string containing the prefix.
 
         Returns:
-            Optional[float]: Scaled numeric value, or None if not applicable.
+            Union[int, float]: Scaled numeric value based on unit prefix.
         """
 
         unit_str = unit if unit is not None else ""
@@ -106,15 +121,15 @@ class EnergyMeterNodes:
         to prefixed units (e.g., kW, kWh) according to the target node's unit.
 
         For example:
-            - If node.unit is 'kWh', the value will be divided by 1e3.
-            - If node.unit is 'MWh', the value will be divided by 1e6.
+            - If unit is 'kWh', the value will be divided by 1e3.
+            - If unit is 'MWh', the value will be divided by 1e6.
 
         Args:
-            value (float): The calculated value to be scaled.
-            node (Node): The target node whose unit prefix determines the scaling.
+            value (Union[int, float]): The calculated value to be scaled.
+            unit (Optional[str]): The target unit whose prefix determines the scaling.
 
         Returns:
-            float: The value scaled to the target node's unit prefix.
+            Union[int, float]: The value scaled to the target unit prefix.
         """
 
         unit_str = unit if unit is not None else ""
@@ -185,6 +200,13 @@ class EnergyMeterNodes:
     def validate_energy_nodes(self, phase: str, energy_type: str) -> None:
         """
         Validates energy nodes for the specified phase and energy type configuration.
+
+        Args:
+            phase (str): Phase prefix ("l1_", "l2_", "l3_", "total_", or "" for single-phase).
+            energy_type (str): Type of energy to validate ("active" or "reactive").
+
+        Raises:
+            NodeMissingError: If required energy nodes are missing for the configuration.
         """
 
         validation.validate_energy_nodes(phase, energy_type, self.nodes, self.meter_type, self.meter_options)
@@ -192,6 +214,13 @@ class EnergyMeterNodes:
     def validate_power_nodes(self, phase: str, power_type: str) -> None:
         """
         Validates power nodes for the specified phase and power type configuration.
+
+        Args:
+            phase (str): Phase prefix ("l1_", "l2_", "l3_", "total_", or "" for single-phase).
+            power_type (str): Type of power to validate ("active", "reactive", or "apparent").
+
+        Raises:
+            NodeMissingError: If required power nodes are missing for the configuration.
         """
 
         validation.validate_power_nodes(phase, power_type, self.nodes, self.meter_type)
@@ -199,6 +228,12 @@ class EnergyMeterNodes:
     def validate_pf_nodes(self, phase: str) -> None:
         """
         Validates power factor nodes for the specified phase configuration.
+
+        Args:
+            phase (str): Phase prefix ("l1_", "l2_", "l3_", "total_", or "" for single-phase).
+
+        Raises:
+            NodeMissingError: If required power factor nodes are missing for the configuration.
         """
 
         validation.validate_pf_nodes(phase, self.nodes, self.meter_type)
@@ -206,6 +241,12 @@ class EnergyMeterNodes:
     def validate_pf_direction_nodes(self, phase: str) -> None:
         """
         Validates power factor direction nodes for the specified phase configuration.
+
+        Args:
+            phase (str): Phase prefix ("l1_", "l2_", "l3_", "total_", or "" for single-phase).
+
+        Raises:
+            NodeMissingError: If required power factor direction nodes are missing for the configuration.
         """
 
         validation.validate_pf_direction_nodes(phase, self.nodes, self.meter_type, self.meter_options)

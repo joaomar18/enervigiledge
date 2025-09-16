@@ -12,6 +12,13 @@ from enum import Enum
 class Protocol(str, Enum):
     """
     Enumeration of supported communication protocols.
+    
+    Attributes:
+        NONE (str): No protocol specified.
+        OPC_UA (str): OPC Unified Architecture protocol.
+        MQTT (str): Message Queuing Telemetry Transport protocol.
+        MODBUS_TCP (str): Modbus TCP/IP protocol.
+        MODBUS_RTU (str): Modbus RTU serial protocol.
     """
 
     NONE = "NONE"
@@ -22,5 +29,10 @@ class Protocol(str, Enum):
 
     @classmethod
     def valid_protocols(cls) -> set[str]:
-        """Returns a set of all valid protocol string values."""
+        """
+        Returns a set of all valid protocol string values.
+        
+        Returns:
+            set[str]: Set containing all protocol enum values as strings.
+        """
         return {p.value for p in cls}

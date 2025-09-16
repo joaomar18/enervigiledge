@@ -84,6 +84,7 @@ class BaseNodeRecordConfig:
         Returns:
             Dict[str, Any]: A dictionary with all base configurations and it's values
         """
+
         return asdict(self)
 
 
@@ -101,7 +102,11 @@ class NodeAttributes:
     def get_attributes(self) -> Dict[str, Any]:
         """
         Returns the node attributes as a dictionary.
+
+        Returns:
+            Dict[str, Any]: Dictionary containing all node attributes.
         """
+
         return asdict(self)
 
 
@@ -131,11 +136,28 @@ class NodeRecord:
     device_id: Optional[int] = None
 
     def __eq__(self, other):
+        """
+        Compares two NodeRecord instances for equality based on device_id and name.
+
+        Args:
+            other: Another object to compare with.
+
+        Returns:
+            bool: True if both objects are NodeRecord instances with same device_id and name.
+        """
+
         if not isinstance(other, NodeRecord):
             return False
         return (self.device_id, self.name) == (other.device_id, other.name)
 
     def __hash__(self):
+        """
+        Returns hash value based on device_id and name for use in sets and dictionaries.
+
+        Returns:
+            int: Hash value of the (device_id, name) tuple.
+        """
+
         return hash((self.device_id, self.name))
 
 
@@ -195,6 +217,18 @@ class NodeConfig:
 
     @staticmethod
     def create_from_node_record(record: NodeRecord) -> "NodeConfig":
+        """
+        Creates a NodeConfig instance from a NodeRecord database record.
+
+        Extracts configuration data from the record and filters valid fields
+        to construct a properly typed NodeConfig instance with enum conversions.
+
+        Args:
+            record: Database record containing node configuration data.
+
+        Returns:
+            NodeConfig: Configured node instance ready for use.
+        """
 
         config = record.config
         valid_fields = set(NodeConfig.__dataclass_fields__.keys())
@@ -210,6 +244,18 @@ class NodeConfig:
         )
 
     def validate(self) -> None:
+        """
+        Validates the node configuration and applies type-specific auto-fixes.
+
+        Performs comprehensive validation including protocol validation, type-dependent
+        attribute restrictions, alarm configuration validation, and logging period checks.
+        Automatically fixes incompatible settings for non-numeric types.
+
+        Raises:
+            ValueError: If protocol is invalid, alarm settings are inconsistent,
+                       logging period is invalid, or type-specific constraints are violated.
+        """
+
         if self.protocol not in Protocol.valid_protocols():
             raise ValueError(f"Protocol {self.protocol} is not valid.")
 

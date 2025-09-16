@@ -1,6 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
-from typing import Dict, Any, Optional, Type, Generic, ClassVar
+from typing import Dict, Any, Optional, Type
 from abc import ABC, abstractmethod
 from datetime import datetime
 
@@ -15,6 +15,16 @@ from controller.types.node import NodeConfig
 
 
 class NumericNodeProcessor(NodeProcessor[N]):
+    """
+    Abstract base class for processors that handle numeric values (int or float).
+
+    Provides functionality for alarm checking, statistical tracking, directional
+    monitoring, and incremental value handling specific to numeric data types.
+
+    Args:
+        configuration (NodeConfig): Node configuration containing settings and metadata.
+        value_type (Type[N]): The numeric type this processor handles (int or float).
+    """
 
     @property
     @abstractmethod
@@ -45,23 +55,36 @@ class NumericNodeProcessor(NodeProcessor[N]):
         super().__init_subclass__(**kw)
 
     def check_alarms(self, value: N) -> None:
+        """
+        Checks value against configured alarm thresholds and updates alarm states.
+
+        Args:
+            value (N): The value to check against alarm thresholds.
+        """
 
         if self.config.min_alarm and self.config.min_alarm_value is not None:
-
             if value < self.config.min_alarm_value:
                 self.min_alarm_state = True
 
         if self.config.max_alarm and self.config.max_alarm_value is not None:
-
             if value > self.config.max_alarm_value:
                 self.max_alarm_state = True
 
     def reset_direction(self) -> None:
+        """
+        Resets the directional tracking flags to False.
+        """
 
         self.positive_direction = False
         self.negative_direction = False
 
     def update_direction(self, new_value: N) -> None:
+        """
+        Updates directional tracking flags based on value change.
+
+        Args:
+            new_value (N): The new value to compare against the current value.
+        """
 
         if self.value is None:
             return
@@ -75,6 +98,9 @@ class NumericNodeProcessor(NodeProcessor[N]):
             self.negative_direction = True
 
     def reset_value(self) -> None:
+        """
+        Resets all processor state including value, statistics, and directional tracking.
+        """
 
         super().reset_value()
         self.initial_value = None
@@ -87,6 +113,12 @@ class NumericNodeProcessor(NodeProcessor[N]):
         self.negative_direction = False
 
     def update_statistics(self, value: N) -> None:
+        """
+        Updates running statistics (min, max, mean) with the new value.
+
+        Args:
+            value (N): The new value to include in statistics.
+        """
 
         float_value = float(value)
         self.mean_sum += float_value
@@ -100,6 +132,12 @@ class NumericNodeProcessor(NodeProcessor[N]):
             self.max_value = value
 
     def set_value(self, value: Optional[N]) -> None:
+        """
+        Sets the processor value, handling both incremental and non-incremental modes.
+
+        Args:
+            value (Optional[N]): The value to set, or None to clear the value.
+        """
 
         if not super().prepare_set_value(value) or value is None:  # Node disabled or value is None
             return
@@ -110,6 +148,12 @@ class NumericNodeProcessor(NodeProcessor[N]):
             self.__set_value_non_incremental(value)
 
     def __set_value_incremental(self, value: N) -> None:
+        """
+        Handles value setting for incremental nodes (counters, energy meters).
+
+        Args:
+            value (N): The raw incremental value from the device.
+        """
 
         if self.initial_value is None:
             self.initial_value = value
@@ -133,6 +177,12 @@ class NumericNodeProcessor(NodeProcessor[N]):
         self.value = new_value
 
     def __set_value_non_incremental(self, value: N) -> None:
+        """
+        Handles value setting for standard measurement nodes.
+
+        Args:
+            value (N): The measurement value from the device.
+        """
 
         self.update_direction(value)
         self.value = value
@@ -140,6 +190,15 @@ class NumericNodeProcessor(NodeProcessor[N]):
         self.check_alarms(value)
 
     def get_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """
+        Formats numeric value for MQTT publishing with proper decimal place rounding.
+
+        Args:
+            additional_data (Dict[str, Any]): Additional data to include in the output.
+
+        Returns:
+            Dict[str, Any]: Formatted data including the properly rounded value.
+        """
 
         output = additional_data.copy()
         if self.value is not None:
@@ -150,6 +209,16 @@ class NumericNodeProcessor(NodeProcessor[N]):
         return super().get_publish_format(additional_data=output)
 
     def submit_log(self, date_time: datetime, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """
+        Prepares numeric data for database logging including statistical values.
+
+        Args:
+            date_time (datetime): The end time for this logging period.
+            additional_data (Dict[str, Any]): Additional data to include in the log.
+
+        Returns:
+            Dict[str, Any]: Log data including mean, min, and max values with proper formatting.
+        """
 
         output = additional_data.copy()
 

@@ -259,6 +259,11 @@ class EnergyMeter(Device):
     def calculate_energy(self, prefix: str, energy_type: str, node: Node) -> None:
         """
         Calculates energy values for the specified node using meter configuration.
+
+        Args:
+            prefix (str): Phase prefix ("l1_", "l2_", "l3_", "total_") for node identification.
+            energy_type (str): Type of energy to calculate ("active" or "reactive").
+            node (Node): Target node to store the calculated energy value.
         """
 
         calculation.calculate_energy(prefix, energy_type, node, self.meter_nodes.nodes, self.meter_options)
@@ -266,6 +271,11 @@ class EnergyMeter(Device):
     def calculate_power(self, prefix: str, power_type: str, node: Node):
         """
         Calculates power values for the specified node using meter nodes.
+
+        Args:
+            prefix (str): Phase prefix ("l1_", "l2_", "l3_", "total_") for node identification.
+            power_type (str): Type of power to calculate ("active", "reactive", or "apparent").
+            node (Node): Target node to store the calculated power value.
         """
 
         calculation.calculate_power(prefix, power_type, node, self.meter_nodes.nodes)
@@ -273,6 +283,10 @@ class EnergyMeter(Device):
     def calculate_pf(self, prefix: str, node: Node) -> None:
         """
         Calculates power factor values for the specified node using meter nodes.
+
+        Args:
+            prefix (str): Phase prefix ("l1_", "l2_", "l3_", "total_") for node identification.
+            node (Node): Target node to store the calculated power factor value.
         """
 
         calculation.calculate_pf(prefix, node, self.meter_nodes.nodes)
@@ -280,6 +294,10 @@ class EnergyMeter(Device):
     def calculate_pf_direction(self, prefix: str, node: Node) -> None:
         """
         Calculates power factor direction values for the specified node using meter configuration.
+
+        Args:
+            prefix (str): Phase prefix ("l1_", "l2_", "l3_", "total_") for node identification.
+            node (Node): Target node to store the calculated power factor direction value.
         """
 
         calculation.calculate_pf_direction(prefix, node, self.meter_nodes.nodes, self.meter_options)

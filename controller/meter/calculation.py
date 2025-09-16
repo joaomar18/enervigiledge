@@ -119,6 +119,17 @@ def calculate_power(prefix: str, power_type: str, node: Node, meter_nodes: Dict[
 
 
 def _calculate_apparent_power(prefix: str, node: Node, meter_nodes: Dict[str, Node]) -> None:
+    """
+    Calculates apparent power using available measurements.
+
+    Uses active/reactive power (S = √(P² + Q²)) or voltage/current (S = V × I).
+    Priority is given to power-based calculation when both methods are available.
+
+    Args:
+        prefix (str): Phase prefix for node identification.
+        node (Node): Target node to store the calculated apparent power value.
+        meter_nodes (Dict[str, Node]): Dictionary containing all meter nodes.
+    """
 
     v_node = meter_util.find_node(f"{prefix}voltage", meter_nodes)
     i_node = meter_util.find_node(f"{prefix}current", meter_nodes)
@@ -154,6 +165,17 @@ def _calculate_apparent_power(prefix: str, node: Node, meter_nodes: Dict[str, No
 
 
 def _calculate_active_power(prefix: str, node: Node, meter_nodes: Dict[str, Node]) -> None:
+    """
+    Calculates active power using available measurements.
+
+    Uses apparent/reactive power (P = √(S² - Q²)) or voltage/current/power factor (P = V × I × PF).
+    Priority is given to power-based calculation when both methods are available.
+
+    Args:
+        prefix (str): Phase prefix for node identification.
+        node (Node): Target node to store the calculated active power value.
+        meter_nodes (Dict[str, Node]): Dictionary containing all meter nodes.
+    """
 
     v_node = meter_util.find_node(f"{prefix}voltage", meter_nodes)
     i_node = meter_util.find_node(f"{prefix}current", meter_nodes)
@@ -192,6 +214,17 @@ def _calculate_active_power(prefix: str, node: Node, meter_nodes: Dict[str, Node
 
 
 def _calculate_reactive_power(prefix: str, node: Node, meter_nodes: Dict[str, Node]) -> None:
+    """
+    Calculates reactive power using available measurements.
+
+    Uses apparent/active power (Q = √(S² - P²)) or voltage/current/power factor (Q = V × I × sin(acos(PF))).
+    Priority is given to power-based calculation when both methods are available.
+
+    Args:
+        prefix (str): Phase prefix for node identification.
+        node (Node): Target node to store the calculated reactive power value.
+        meter_nodes (Dict[str, Node]): Dictionary containing all meter nodes.
+    """
 
     v_node = meter_util.find_node(f"{prefix}voltage", meter_nodes)
     i_node = meter_util.find_node(f"{prefix}current", meter_nodes)
