@@ -19,9 +19,7 @@ from controller.exceptions import NotImplemeted
 
 @pytest.fixture(autouse=True)
 def reset_types_registry():
-    """
-    Ensure each test runs with an empty types registry and no leakage between tests.
-    """
+
     original = TypeRegistry._registry.copy()
     TypeRegistry._registry.clear()
     yield

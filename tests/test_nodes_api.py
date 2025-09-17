@@ -1,4 +1,5 @@
 ########### EXTERNAL IMPORTS ############
+
 import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -7,6 +8,7 @@ from argon2 import PasswordHasher
 #########################################
 
 ############# LOCAL IMPORTS #############
+
 from web.api import nodes
 from web.api import auth
 from web.dependencies import services
@@ -41,8 +43,6 @@ class DummyTimeDB:
 
 
 class DummySQLiteDB:
-    """Stub for the sqlite dependency used by services.set_dependencies."""
-
     pass
 
 

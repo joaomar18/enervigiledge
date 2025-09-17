@@ -35,7 +35,6 @@ class DummyMeter(EnergyMeter):
         pass
 
     def get_meter_record(self) -> EnergyMeterRecord:
-        """Implementation of the abstract method for testing purposes."""
         return EnergyMeterRecord(
             id=self.id,
             name=self.name,
