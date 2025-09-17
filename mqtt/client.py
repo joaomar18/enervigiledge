@@ -19,8 +19,6 @@ import util.functions.objects as objects
 
 #######################################
 
-LoggerManager.get_logger(__name__).setLevel(logging.ERROR)
-
 
 @dataclass
 class MQTTMessage:
@@ -56,7 +54,16 @@ class MQTTClient:
         """
 
         load_dotenv(config_file)
-        required = ["MQTT_CLIENT_ID", "MQTT_ADDRESS", "MQTT_PORT", "MQTT_USERNAME", "MQTT_PASSWORD_ENCRYPTED", "MQTT_PASSWORD_KEY", "ENABLED"]
+        required = [
+            "ENABLED",
+            "USE_AUTHENTICATION",
+            "MQTT_CLIENT_ID",
+            "MQTT_ADDRESS",
+            "MQTT_PORT",
+            "MQTT_USERNAME",
+            "MQTT_PASSWORD_ENCRYPTED",
+            "MQTT_PASSWORD_KEY",
+        ]
         missing = [var for var in required if os.getenv(var) is None]
         if missing:
             raise ValueError(f"Missing required MQTT config(s): {', '.join(missing)}")
@@ -72,6 +79,7 @@ class MQTTClient:
         MQTTClient.check_config_valid(config_file)
 
         self.enabled = objects.require_env_variable("ENABLED").upper() == "TRUE"
+        self.use_authentication = objects.require_env_variable("USE_AUTHENTICATION").upper() == "TRUE"
         self.id = objects.require_env_variable("MQTT_CLIENT_ID")
         self.address = objects.require_env_variable("MQTT_ADDRESS")
         self.port = int(objects.require_env_variable("MQTT_PORT"))
@@ -96,7 +104,10 @@ class MQTTClient:
             if self.client is not None or self.publish_task is not None:
                 raise RuntimeError("Client or publish task are already instantiated")
             loop = asyncio.get_event_loop()
-            self.client = mqtt.Client(hostname=self.address, port=self.port, username=self.username, password=self.password)
+            if self.use_authentication:
+                self.client = mqtt.Client(hostname=self.address, port=self.port, username=self.username, password=self.password)
+            else:
+                self.client = mqtt.Client(hostname=self.address, port=self.port)
             self.publish_task = loop.create_task(self.publisher())
         except Exception as e:
             logger.exception(f"Failed to start MQTT client: {str(e)}")

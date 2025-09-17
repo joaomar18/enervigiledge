@@ -44,7 +44,7 @@ async def async_main():
     #sqlitedb_client.insert_energy_meter(get_sm1238_db())
 
     await device_manager.start()
-    #await mqtt_client.start()
+    await mqtt_client.start()
     await http_server.start()
 
     try:
