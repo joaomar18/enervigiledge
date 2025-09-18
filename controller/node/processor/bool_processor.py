@@ -68,6 +68,12 @@ class BoolNodeProcessor(NodeProcessor[bool]):
         output["value"] = self.value
         return super().get_publish_format(additional_data=output)
 
+    def get_detailed_state(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+
+        output = additional_data.copy()
+        output["value"] = self.value
+        return super().get_detailed_state(additional_data=output)
+
     def submit_log(self, date_time: datetime, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
         """
         Prepares boolean data for database logging.

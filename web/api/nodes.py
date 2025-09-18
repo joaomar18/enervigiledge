@@ -43,6 +43,31 @@ async def get_nodes_state(
     return JSONResponse(content=nodes_state)
 
 
+@router.get("/get_node_detailed_state")
+@auth_endpoint(AuthConfigs.PROTECTED)
+async def get_node_detailed_state(
+    request: Request, safety: HTTPSafety = Depends(services.get_safety), device_manager: DeviceManager = Depends(services.get_device_manager)
+) -> JSONResponse:
+
+    device_id = int(objects.require_field(request.query_params, "id", str))
+    node_name = objects.require_field(request.query_params, "node_name", str)
+
+    device = device_manager.get_device(device_id)
+    if not device:
+        raise ValueError(f"Device with id {device_id} does not exist.")
+
+    nodes = [node for node in device.nodes if node.config.name == node_name]
+
+    if len(nodes) == 0:
+        raise ValueError(f"Device with id {device_id} does not have a node with name {node_name}.")
+    elif len(nodes) != 1:
+        raise ValueError(f"Device with id {device_id} has more than 1 node with name {node_name}.")
+
+    node_detailed_state = nodes[0].processor.get_detailed_state()
+
+    return JSONResponse(content=node_detailed_state)
+
+
 @router.get("/get_nodes_config")
 @auth_endpoint(AuthConfigs.PROTECTED)
 async def get_nodes_config(

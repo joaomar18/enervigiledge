@@ -208,6 +208,16 @@ class NumericNodeProcessor(NodeProcessor[N]):
 
         return super().get_publish_format(additional_data=output)
 
+    def get_detailed_state(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+
+        output = additional_data.copy()
+        if self.value is not None:
+            output["value"] = round(self.value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.value)
+        else:
+            output["value"] = self.value
+
+        return super().get_detailed_state(additional_data=output)
+
     def submit_log(self, date_time: datetime, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
         """
         Prepares numeric data for database logging including statistical values.

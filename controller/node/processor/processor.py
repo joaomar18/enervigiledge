@@ -28,6 +28,7 @@ class NodeProcessor(ABC, Generic[V]):
         configuration (NodeConfig): Node configuration containing settings and metadata.
         value_type (Type[V]): The Python type this processor handles.
     """
+
     def __init__(self, configuration: NodeConfig, value_type: Type[V]):
         self.config = configuration
         self._value_type = value_type
@@ -149,6 +150,18 @@ class NodeProcessor(ABC, Generic[V]):
         attributes = self.config.attributes.get_attributes()
         for name, value in attributes.items():
             output[name] = value
+
+        return output
+
+    def get_detailed_state(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+
+        output = additional_data.copy()
+        output["type"] = self.config.type.value
+        output["incremental"] = self.config.incremental_node
+        output["last_update_date"] = datetime.fromtimestamp(self.timestamp) if self.timestamp is not None else None
+        output["last_reset_date"] = self.last_log_datetime
+        output["min_alarm_value"] = self.config.min_alarm_value
+        output["max_alarm_value"] = self.config.max_alarm_value
 
         return output
 
