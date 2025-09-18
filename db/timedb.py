@@ -348,6 +348,7 @@ class TimeDBClient:
         while current_start + time_step_ms <= end_time_ms:
             start_date = date.get_date_from_timestamp(current_start)
             end_date = date.get_date_from_timestamp(current_start + time_step_ms)
+            print(f"Start Time: {start_date}, End Time: {end_date}")
             current_start += time_step_ms
 
     def get_variable_logs_between(

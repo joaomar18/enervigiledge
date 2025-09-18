@@ -75,23 +75,10 @@ def process_time_span(start_time: datetime, end_time: datetime, time_step_ms: in
     start_time_ms = get_timestamp(remove_sec_precision(start_time))
     end_time_ms = get_timestamp(remove_sec_precision(end_time))
 
-    print(f"Initial Start Time: {remove_sec_precision(start_time)}")
-    print(f"Initial End Time: {remove_sec_precision(end_time)}")
-
-    print(f"Initial Start Time Ms: {start_time_ms}")
-    print(f"Initial End Time Ms: {end_time_ms}")
-    print(f"Time Step: {time_step_ms}")
-
     aligned_start_time_ms = (start_time_ms // time_step_ms) * time_step_ms
     aligned_end_time_ms = ((end_time_ms + time_step_ms - 1) // time_step_ms) * time_step_ms
 
-    print(f"Final Start Time Ms: {aligned_start_time_ms}")
-    print(f"Final End Time Ms: {aligned_end_time_ms}")
-
     aligned_start_time = get_date_from_timestamp(aligned_start_time_ms)
     aligned_end_time = get_date_from_timestamp(aligned_end_time_ms)
-
-    print(f"Final Start Time: {aligned_start_time}")
-    print(f"Final End Time: {aligned_end_time}")
 
     return aligned_start_time, aligned_end_time

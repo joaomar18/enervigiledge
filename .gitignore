@@ -5,3 +5,4 @@ user_config.json
 config.db*
 pyproject.toml
 influxdb.conf
+influxdb-data
