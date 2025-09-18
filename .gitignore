@@ -4,3 +4,4 @@ user_config.json
 .venv/
 config.db*
 pyproject.toml
+influxdb.conf

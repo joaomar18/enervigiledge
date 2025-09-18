@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from util.debug import LoggerManager
 from controller.node.node import Node
 from controller.node.processor.numeric_processor import NumericNodeProcessor
+import util.functions.date as date
+import util.functions.calculation as calculation
 
 #######################################
 
@@ -91,10 +93,10 @@ class TimeDBClient:
             start_time: datetime = item["start_time"]
             end_time: datetime = item["end_time"]
 
-            formatted_start = start_time.strftime("%Y-%m-%d %H:%M")
-            formatted_end = end_time.strftime("%Y-%m-%d %H:%M")
+            formatted_start = date.get_datestr_up_to_min(start_time)
+            formatted_end = date.get_datestr_up_to_min(end_time)
 
-            end_time_trimmed = end_time.replace(second=0, microsecond=0)
+            end_time_trimmed = date.remove_sec_precision(end_time)
 
             fields: dict[str, Any] = {k: v for k, v in item.items() if k not in ("name", "start_time", "end_time") and v is not None}
             fields["start_time"] = formatted_start
@@ -211,7 +213,7 @@ class TimeDBClient:
         client = self.__require_client()
 
         try:
-            if {"name": measurement.db} not in client.get_list_database():
+            if not self.check_db_exists(measurement.db):
                 client.create_database(measurement.db)
 
             db_data = TimeDBClient.to_db_format(measurement.data)
@@ -239,6 +241,115 @@ class TimeDBClient:
                 raise TypeError(f"Items must be ResultSet. Got type: {type(rs).__name__}")
             yield from rs.get_points()
 
+    def __build_query_without_time_span(self, variable: Node) -> str:
+        if isinstance(variable.processor, NumericNodeProcessor):
+            unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
+
+            if not variable.config.incremental_node:
+                query = f"""
+                        SELECT "start_time", "end_time",
+                        ("mean_sum" / "mean_count") / {unit_factor} AS average_value,
+                        "min_value" / {unit_factor} AS min_value, "max_value" / {unit_factor} AS max_value
+                        FROM "{variable.config.name}"
+                        """.strip()
+            else:
+                query = f"""
+                        SELECT "start_time", "end_time", "value" / {unit_factor} AS value
+                        FROM "{variable.config.name}"
+                        """.strip()
+        else:
+            query = f"""
+                    SELECT "start_time", "end_time", "value"
+                    FROM "{variable.config.name}"
+                    """.strip()
+
+        return query
+
+    def __build_query_with_time_span_non_formatted(self, variable: Node, start_time_str: str, end_time_str: str) -> str:
+        if isinstance(variable.processor, NumericNodeProcessor):
+            unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
+
+            if not variable.config.incremental_node:
+                query = f"""
+                        SELECT "start_time", "end_time",
+                        ("mean_sum" / "mean_count") / {unit_factor} AS average_value,
+                        "min_value" / {unit_factor} AS min_value, "max_value" / {unit_factor} AS max_value
+                        FROM "{variable.config.name}"
+                        WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
+                        """.strip()
+            else:
+                query = f"""
+                        SELECT "start_time", "end_time", "value" / {unit_factor} AS value
+                        FROM "{variable.config.name}"
+                        WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
+                        """.strip()
+        else:
+            query = f"""
+                    SELECT "start_time", "end_time", "value"
+                    FROM "{variable.config.name}"
+                    WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
+                    """.strip()
+
+        return query
+
+    def __build_query_with_time_span_formatted(self, variable: Node, start_time_str: str, end_time_str: str, time_step_ms: Optional[int]) -> str:
+        if isinstance(variable.processor, NumericNodeProcessor):
+            unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
+
+            if not variable.config.incremental_node:
+                query = f"""SELECT FIRST("start_time"), LAST("end_time"), (SUM("mean_sum") / SUM("mean_count")) / {unit_factor} AS average_value,
+                        MIN("min_value") / {unit_factor} AS min_value, MAX("max_value") / {unit_factor} AS max_value FROM "{variable.config.name}"
+                        WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
+                        GROUP BY time({time_step_ms}ms) FILL(null)"""
+            else:
+                query = f"""SELECT FIRST("start_time"), LAST("end_time"), (SUM("value")) / {unit_factor} FROM "{variable.config.name}"
+                        WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
+                        GROUP BY time({time_step_ms}ms) FILL(null)"""
+
+        else:
+            raise ValueError(f"Can't get logs from non numeric variables in formatted time spans")
+
+        return query
+
+    def __build_query_with_time_span(
+        self, variable: Node, start_time_str: str, end_time_str: str, formatted: Optional[bool], time_step_ms: Optional[int]
+    ) -> str:
+
+        if not formatted:
+            query = self.__build_query_with_time_span_non_formatted(variable, start_time_str, end_time_str)
+
+        elif time_step_ms:
+            query = self.__build_query_with_time_span_formatted(variable, start_time_str, end_time_str, time_step_ms)
+
+        else:
+            raise ValueError(f"Wrong parameters to get logs from node {variable.config.name}.")
+
+        return query
+
+    def __build_query(
+        self, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime], formatted: Optional[bool], time_step_ms: Optional[int]
+    ) -> str:
+
+        if start_time and end_time:
+            start_time_str = start_time.isoformat() + "Z"
+            end_time_str = end_time.isoformat() + "Z"
+            query = self.__build_query_with_time_span(variable, start_time_str, end_time_str, formatted, time_step_ms)
+
+        else:
+            query = self.__build_query_without_time_span(variable)
+
+        return query
+
+    def __fill_buckets(self, variable: Node, points: List[Dict[str, Any]], start_time_ms, end_time_ms, time_step_ms) -> None:
+        if not isinstance(variable.processor, NumericNodeProcessor):
+            return
+
+        current_start = start_time_ms
+        while current_start + time_step_ms <= end_time_ms:
+            start_date = date.get_date_from_timestamp(current_start)
+            end_date = date.get_date_from_timestamp(current_start + time_step_ms)
+            current_start += time_step_ms
+
     def get_variable_logs_between(
         self,
         device_name: str,
@@ -251,11 +362,10 @@ class TimeDBClient:
     ) -> List[Dict[str, Any]]:
 
         client = self.__require_client()
-
         db_name = f"{device_name}_{device_id}"
 
         if not self.check_db_exists(db_name):
-            raise ValueError(f"Database '{db_name}' does not exist.")
+            client.create_database(db_name)
 
         if (start_time and not end_time) or (end_time and not start_time):
             raise ValueError("Both 'start_time' and 'end_time' must be provided together.")
@@ -264,60 +374,12 @@ class TimeDBClient:
             raise ValueError("'end_time' must be a later date than 'start_time'.")
 
         client.switch_database(db_name)
-
-        if start_time and end_time:
-            start_str = start_time.isoformat() + "Z"
-            end_str = end_time.isoformat() + "Z"
-            if not formatted:
-
-                if isinstance(variable.processor, NumericNodeProcessor):
-                    if not variable.config.incremental_node:
-                        query = f"""
-                        SELECT start_time, end_time,
-                        "mean_sum" / "mean_count" AS average_value,
-                        min_value, max_value
-                        FROM "{variable.config.name}"
-                        WHERE time >= '{start_str}' AND time <= '{end_str}'
-                        """.strip()
-                    else:
-                        query = f"""
-                        SELECT start_time, end_time, value,
-                        FROM "{variable.config.name}"
-                        WHERE time >= '{start_str}' AND time <= '{end_str}'
-                        """.strip()
-                else:
-                    query = f"""
-                    SELECT start_time, end_time, value,
-                    FROM "{variable.config.name}"
-                    WHERE time >= '{start_str}' AND time <= '{end_str}'
-                    """.strip()
-
-            elif time_step_ms:
-
-                if isinstance(variable.processor, NumericNodeProcessor):
-                    if not variable.config.incremental_node:
-                        query = f"""SELECT SUM("mean_sum") / SUM("mean_count") AS average_value, MIN("min_value") AS min_value, MAX("max_value") AS max_value FROM "{variable.config.name}"
-                        WHERE time >= '{start_str}\' AND time < '{end_str}\
-                        GROUP BY time(#{time_step_ms}ms) FILL(null)"""
-                    else:
-                        query = f"""SELECT * FROM "{variable.config.name}"
-                        WHERE time >= '{start_str}\' AND time < '{end_str}\
-                        GROUP BY time(#{time_step_ms}ms) FILL(null)"""
-
-                else:
-                    query = f"""SELECT * FROM "{variable.config.name}"
-                        WHERE time >= '{start_str}\' AND time < '{end_str}\
-                        GROUP BY time(#{time_step_ms}ms) FILL(null)"""
-
-            else:
-                raise ValueError(f"Wrong parameters to get logs from node {variable.config.name}, in device {device_name} with id {device_id}.")
-
-        else:
-            query = f'SELECT * FROM "{variable.config.name}"'
-
+        query = self.__build_query(variable, start_time, end_time, formatted, time_step_ms)
         result = client.query(query)
-
-        return [{k: v for k, v in point.items() if k != "time"} for point in self.__iter_points(result)]
+        points = [{k: v for k, v in point.items()} for point in self.__iter_points(result)]
+        if formatted and start_time and end_time and time_step_ms:
+            self.__fill_buckets(variable, points, date.get_timestamp(start_time), date.get_timestamp(end_time), time_step_ms)
+        return points
 
     def delete_variable_data(self, device_name: str, device_id: int, variable: Node) -> bool:
 

@@ -10,8 +10,8 @@ import math
 from model.controller.device import EnergyMeterOptions, PowerFactorDirection
 from controller.node.node import Node
 from controller.node.processor.numeric_processor import NumericNodeProcessor
-from controller.meter.nodes import EnergyMeterNodes
 import util.functions.meter as meter_util
+import util.functions.calculation as calculation
 
 #######################################
 
@@ -42,9 +42,9 @@ def calculate_energy(prefix: str, energy_type: str, node: Node, meter_nodes: Dic
                 node.processor.set_value(None)
                 return
 
-            total += EnergyMeterNodes.get_scaled_value(phase_value, phase_node.config.unit)
+            total += calculation.get_scaled_value(phase_value, phase_node.config.unit)
 
-        scaled_total = EnergyMeterNodes.apply_output_scaling(total, node.config.unit)
+        scaled_total = calculation.apply_output_scaling(total, node.config.unit)
         node.processor.set_value(scaled_total)
         return
 
@@ -56,9 +56,9 @@ def calculate_energy(prefix: str, energy_type: str, node: Node, meter_nodes: Dic
         if forward_value is None or reverse_value is None:
             return
 
-        scaled_forward = EnergyMeterNodes.get_scaled_value(forward_value, forward_node.config.unit)
-        scaled_reverse = EnergyMeterNodes.get_scaled_value(reverse_value, reverse_node.config.unit)
-        scaled_value = EnergyMeterNodes.apply_output_scaling(scaled_forward - scaled_reverse, node.config.unit)
+        scaled_forward = calculation.get_scaled_value(forward_value, forward_node.config.unit)
+        scaled_reverse = calculation.get_scaled_value(reverse_value, reverse_node.config.unit)
+        scaled_value = calculation.apply_output_scaling(scaled_forward - scaled_reverse, node.config.unit)
         node.processor.set_value(scaled_value)
 
     elif not meter_options.read_energy_from_meter:
@@ -69,8 +69,8 @@ def calculate_energy(prefix: str, energy_type: str, node: Node, meter_nodes: Dic
             return
 
         elapsed_hours = power_node.processor.elapsed_time / 3600.0 if power_node.processor.elapsed_time else 0.0
-        scaled_power = EnergyMeterNodes.get_scaled_value(power_value, power_node.config.unit)
-        scaled_value = EnergyMeterNodes.apply_output_scaling(scaled_power * elapsed_hours, node.config.unit)
+        scaled_power = calculation.get_scaled_value(power_value, power_node.config.unit)
+        scaled_value = calculation.apply_output_scaling(scaled_power * elapsed_hours, node.config.unit)
         node.processor.set_value(scaled_value)
 
 
@@ -102,9 +102,9 @@ def calculate_power(prefix: str, power_type: str, node: Node, meter_nodes: Dict[
                 node.processor.set_value(None)
                 return
 
-            total += EnergyMeterNodes.get_scaled_value(phase_value, phase_node.config.unit)
+            total += calculation.get_scaled_value(phase_value, phase_node.config.unit)
 
-        scaled_total = EnergyMeterNodes.apply_output_scaling(total, node.config.unit)
+        scaled_total = calculation.apply_output_scaling(total, node.config.unit)
         node.processor.set_value(scaled_total)
         return
 
@@ -145,8 +145,8 @@ def _calculate_apparent_power(prefix: str, node: Node, meter_nodes: Dict[str, No
 
         if p_value is not None and q_value is not None:
 
-            scaled_p = EnergyMeterNodes.get_scaled_value(p_value, p_node.config.unit)
-            scaled_q = EnergyMeterNodes.get_scaled_value(q_value, q_node.config.unit)
+            scaled_p = calculation.get_scaled_value(p_value, p_node.config.unit)
+            scaled_q = calculation.get_scaled_value(q_value, q_node.config.unit)
             value = math.sqrt(scaled_p**2 + scaled_q**2)
 
     elif value is None and v_node is not None and i_node is not None:
@@ -156,11 +156,11 @@ def _calculate_apparent_power(prefix: str, node: Node, meter_nodes: Dict[str, No
 
         if v_value is not None and i_value is not None:
 
-            scaled_v = EnergyMeterNodes.get_scaled_value(v_value, v_node.config.unit)
-            scaled_i = EnergyMeterNodes.get_scaled_value(i_value, i_node.config.unit)
+            scaled_v = calculation.get_scaled_value(v_value, v_node.config.unit)
+            scaled_i = calculation.get_scaled_value(i_value, i_node.config.unit)
             value = scaled_v * scaled_i
 
-    scaled_value = EnergyMeterNodes.apply_output_scaling(value, node.config.unit) if value is not None else None
+    scaled_value = calculation.apply_output_scaling(value, node.config.unit) if value is not None else None
     node.processor.set_value(scaled_value)
 
 
@@ -192,8 +192,8 @@ def _calculate_active_power(prefix: str, node: Node, meter_nodes: Dict[str, Node
 
         if s_value is not None and q_value is not None:
 
-            scaled_s = EnergyMeterNodes.get_scaled_value(s_value, s_node.config.unit)
-            scaled_q = EnergyMeterNodes.get_scaled_value(q_value, q_node.config.unit)
+            scaled_s = calculation.get_scaled_value(s_value, s_node.config.unit)
+            scaled_q = calculation.get_scaled_value(q_value, q_node.config.unit)
             value = math.sqrt(scaled_s**2 - scaled_q**2)
 
     elif value is None and v_node is not None and i_node is not None and pf_node is not None:
@@ -204,12 +204,12 @@ def _calculate_active_power(prefix: str, node: Node, meter_nodes: Dict[str, Node
 
         if v_value is not None and i_value is not None and pf_value is not None:
 
-            scaled_v = EnergyMeterNodes.get_scaled_value(v_value, v_node.config.unit)
-            scaled_i = EnergyMeterNodes.get_scaled_value(i_value, i_node.config.unit)
-            scaled_pf = EnergyMeterNodes.get_scaled_value(pf_value, pf_node.config.unit)
+            scaled_v = calculation.get_scaled_value(v_value, v_node.config.unit)
+            scaled_i = calculation.get_scaled_value(i_value, i_node.config.unit)
+            scaled_pf = calculation.get_scaled_value(pf_value, pf_node.config.unit)
             value = scaled_v * scaled_i * scaled_pf
 
-    scaled_value = EnergyMeterNodes.apply_output_scaling(value, node.config.unit) if value is not None else None
+    scaled_value = calculation.apply_output_scaling(value, node.config.unit) if value is not None else None
     node.processor.set_value(scaled_value)
 
 
@@ -241,8 +241,8 @@ def _calculate_reactive_power(prefix: str, node: Node, meter_nodes: Dict[str, No
 
         if s_value is not None and p_value is not None:
 
-            scaled_s = EnergyMeterNodes.get_scaled_value(s_value, s_node.config.unit)
-            scaled_p = EnergyMeterNodes.get_scaled_value(p_value, p_node.config.unit)
+            scaled_s = calculation.get_scaled_value(s_value, s_node.config.unit)
+            scaled_p = calculation.get_scaled_value(p_value, p_node.config.unit)
             value = math.sqrt(scaled_s**2 - scaled_p**2)
 
     elif value is None and v_node is not None and i_node is not None and pf_node is not None:
@@ -253,12 +253,12 @@ def _calculate_reactive_power(prefix: str, node: Node, meter_nodes: Dict[str, No
 
         if v_value is not None and i_value is not None and pf_value is not None:
 
-            scaled_v = EnergyMeterNodes.get_scaled_value(v_value, v_node.config.unit)
-            scaled_i = EnergyMeterNodes.get_scaled_value(i_value, i_node.config.unit)
-            scaled_pf = EnergyMeterNodes.get_scaled_value(pf_value, pf_node.config.unit)
+            scaled_v = calculation.get_scaled_value(v_value, v_node.config.unit)
+            scaled_i = calculation.get_scaled_value(i_value, i_node.config.unit)
+            scaled_pf = calculation.get_scaled_value(pf_value, pf_node.config.unit)
             value = scaled_v * scaled_i * math.sin(math.acos(scaled_pf))
 
-    scaled_value = EnergyMeterNodes.apply_output_scaling(value, node.config.unit) if value is not None else None
+    scaled_value = calculation.apply_output_scaling(value, node.config.unit) if value is not None else None
     node.processor.set_value(scaled_value)
 
 
@@ -291,8 +291,8 @@ def calculate_pf(prefix: str, node: Node, meter_nodes: Dict[str, Node]) -> None:
                 node.processor.set_value(None)
                 return
 
-            scaled_p = EnergyMeterNodes.get_scaled_value(p_val, p_node.config.unit)
-            scaled_q = EnergyMeterNodes.get_scaled_value(q_val, q_node.config.unit)
+            scaled_p = calculation.get_scaled_value(p_val, p_node.config.unit)
+            scaled_q = calculation.get_scaled_value(q_val, q_node.config.unit)
 
             total_p += scaled_p
             total_q += scaled_q
@@ -312,8 +312,8 @@ def calculate_pf(prefix: str, node: Node, meter_nodes: Dict[str, Node]) -> None:
         node.processor.set_value(None)
         return
 
-    p_val = EnergyMeterNodes.get_scaled_value(p_val, p_node.config.unit)
-    q_val = EnergyMeterNodes.get_scaled_value(q_val, q_node.config.unit)
+    p_val = calculation.get_scaled_value(p_val, p_node.config.unit)
+    q_val = calculation.get_scaled_value(q_val, q_node.config.unit)
 
     if p_val == 0:
         node.processor.set_value(0.0)

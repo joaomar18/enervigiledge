@@ -110,12 +110,12 @@ async def get_logs_from_node(
 ) -> JSONResponse:
     """Retrieves historical logs from a specific device node within time range."""
 
-    device_id = int(objects.require_field(request.query_params, "id", str))
-    name = objects.require_field(request.query_params, "node", str)
-    formatted = request.query_params.get("formatted")
+    device_id = int(objects.require_field(request.query_params, "device_id", str))
+    name = objects.require_field(request.query_params, "node_name", str)
+    formatted = bool(request.query_params.get("formatted"))
 
     if formatted:
-        time_step = objects.require_field(request.query_params, "time_step", int)
+        time_step = int(objects.require_field(request.query_params, "time_step", str))
         start_time = objects.require_field(request.query_params, "start_time", str)
         end_time = request.query_params.get("end_time")
         end_time = end_time if end_time is not None else datetime.isoformat(datetime.now())  # If None accounts end time is now
@@ -131,16 +131,14 @@ async def get_logs_from_node(
     if not device:
         raise ValueError(f"Device with id {device_id} does not exist.")
 
-    if not any(name == node.config.name for node in device.nodes):
+    node = next((n for n in device.nodes if n.config.name == name), None)
+    if not node:
         raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
 
     if formatted and start_time and end_time and time_step:
         (start_time, end_time) = date.process_time_span(start_time, end_time, time_step)
-        pass
 
-    response = timedb.get_measurement_data_between(
-        device_name=device.name, device_id=device_id, measurement=name, start_time=start_time, end_time=end_time
-    )
+    response = timedb.get_variable_logs_between(device.name, device_id, node, start_time, end_time, formatted, time_step)
     return JSONResponse(content=response)
 
 
@@ -156,17 +154,18 @@ async def delete_logs_from_node(
 
     data = await request.json()
 
-    device_id = objects.require_field(data, "id", int)
-    name = objects.require_field(data, "node", str)
+    device_id = objects.require_field(data, "device_id", int)
+    name = objects.require_field(data, "node_name", str)
 
     device = device_manager.get_device(device_id)
     if not device:
         raise ValueError(f"Device with id {device_id} does not exist.")
 
-    if not any(name == node.config.name for node in device.nodes):
-        raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}.")
+    node = next((n for n in device.nodes if n.config.name == name), None)
+    if not node:
+        raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
 
-    result = timedb.delete_measurement_data(device_name=device.name, device_id=device_id, variable=device.nodes)
+    result = timedb.delete_variable_data(device_name=device.name, device_id=device_id, variable=node)
 
     if result:
         message = f"Successfully deleted logs for node '{name}' from device '{device.name}' with id {device_id}."
@@ -186,7 +185,7 @@ async def delete_all_logs(
     """Deletes all historical logs from a specific device."""
 
     data = await request.json()
-    device_id = objects.require_field(data, "id", int)
+    device_id = objects.require_field(data, "device_id", int)
 
     device = device_manager.get_device(device_id)
     if not device:

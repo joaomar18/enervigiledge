@@ -1,6 +1,6 @@
 ###########EXERTNAL IMPORTS############
 
-from typing import Dict, Set, Union, Optional
+from typing import Dict, Set, Optional
 
 #######################################
 
@@ -57,8 +57,6 @@ class EnergyMeterNodes:
         "reverse_reactive_energy": {"VArh", "kVArh"},
     }
 
-    UNIT_PREFIXES = {'m': 1e-3, '': 1.0, 'k': 1e3, 'M': 1e6, 'G': 1e9}
-
     @staticmethod
     def validate_node(node: Node) -> None:
         """
@@ -89,52 +87,6 @@ class EnergyMeterNodes:
         """
 
         validation.validate_logging_consistency(nodes, node_to_check)
-
-    @staticmethod
-    def get_scaled_value(value: Union[int, float], unit: Optional[str]) -> Union[int, float]:
-        """
-        Returns the node value scaled by its unit prefix (if any).
-
-        For example:
-            - 'kW' → multiplies by 1e3
-            - 'mA' → multiplies by 1e-3
-            - 'V' → treated as no prefix (1.0)
-
-        Args:
-            value (Union[int, float]): The numeric value to scale.
-            unit (Optional[str]): The unit string containing the prefix.
-
-        Returns:
-            Union[int, float]: Scaled numeric value based on unit prefix.
-        """
-
-        unit_str = unit if unit is not None else ""
-        factor = EnergyMeterNodes.UNIT_PREFIXES.get(unit_str[0], 1.0)
-        return value * factor
-
-    @staticmethod
-    def apply_output_scaling(value: Union[int, float], unit: Optional[str]) -> Union[int, float]:
-        """
-        Scales a calculated value to match the unit prefix of the target node.
-
-        This is typically used to convert values expressed in base units (e.g., W, Wh)
-        to prefixed units (e.g., kW, kWh) according to the target node's unit.
-
-        For example:
-            - If unit is 'kWh', the value will be divided by 1e3.
-            - If unit is 'MWh', the value will be divided by 1e6.
-
-        Args:
-            value (Union[int, float]): The calculated value to be scaled.
-            unit (Optional[str]): The target unit whose prefix determines the scaling.
-
-        Returns:
-            Union[int, float]: The value scaled to the target unit prefix.
-        """
-
-        unit_str = unit if unit is not None else ""
-        factor = EnergyMeterNodes.UNIT_PREFIXES.get(unit_str[0], 1.0)
-        return value / factor
 
     def __init__(self, meter_type: EnergyMeterType, meter_options: EnergyMeterOptions, nodes: set[Node]):
         """

@@ -10,7 +10,7 @@ from datetime import datetime
 
 from controller.node.processor.processor import NodeProcessor, N
 from model.controller.node import NodeConfig
-from controller.meter.nodes import EnergyMeterNodes
+import util.functions.calculation as calculation
 
 #######################################
 
@@ -231,22 +231,21 @@ class NumericNodeProcessor(NodeProcessor[N]):
         output = additional_data.copy()
 
         if self.config.incremental_node:
-            output["value"] = EnergyMeterNodes.get_scaled_value(self.value, self.config.unit) if self.value is not None else None
-            
+            output["value"] = calculation.get_scaled_value(self.value, self.config.unit) if self.value is not None else None
 
         else:
-            output["mean_sum"] = EnergyMeterNodes.get_scaled_value(self.mean_sum, self.config.unit)
-            output["mean_count"] = EnergyMeterNodes.get_scaled_value(self.mean_count, self.config.unit)
+            output["mean_sum"] = calculation.get_scaled_value(self.mean_sum, self.config.unit)
+            output["mean_count"] = calculation.get_scaled_value(self.mean_count, self.config.unit)
 
             if self.min_value is not None:
                 min_value = round(self.min_value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.min_value)
-                output["min_value"] = EnergyMeterNodes.get_scaled_value(min_value, self.config.unit)
+                output["min_value"] = calculation.get_scaled_value(min_value, self.config.unit)
             else:
                 output["min_value"] = self.min_value
 
             if self.max_value is not None:
                 max_value = round(self.max_value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.max_value)
-                output["max_value"] = EnergyMeterNodes.get_scaled_value(max_value, self.config.unit)
+                output["max_value"] = calculation.get_scaled_value(max_value, self.config.unit)
             else:
                 output["max_value"] = self.max_value
 
