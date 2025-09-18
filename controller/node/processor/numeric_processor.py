@@ -10,6 +10,7 @@ from datetime import datetime
 
 from controller.node.processor.processor import NodeProcessor, N
 from model.controller.node import NodeConfig
+from controller.meter.nodes import EnergyMeterNodes
 
 #######################################
 
@@ -45,7 +46,6 @@ class NumericNodeProcessor(NodeProcessor[N]):
         self.negative_direction = False
         self.min_value: Optional[N] = None
         self.max_value: Optional[N] = None
-        self.mean_value: Optional[float] = None
         self.mean_sum: float = 0.0
         self.mean_count: int = 0
 
@@ -106,7 +106,6 @@ class NumericNodeProcessor(NodeProcessor[N]):
         self.initial_value = None
         self.min_value = None
         self.max_value = None
-        self.mean_value = None
         self.mean_sum = 0.0
         self.mean_count = 0
         self.positive_direction = False
@@ -123,7 +122,6 @@ class NumericNodeProcessor(NodeProcessor[N]):
         float_value = float(value)
         self.mean_sum += float_value
         self.mean_count += 1
-        self.mean_value = self.mean_sum / self.mean_count
 
         if self.min_value is None or value < self.min_value:
             self.min_value = value
@@ -232,22 +230,25 @@ class NumericNodeProcessor(NodeProcessor[N]):
 
         output = additional_data.copy()
 
-        if self.mean_value is not None:
-            output["mean_value"] = (
-                round(self.mean_value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.mean_value)
-            )
-        else:
-            output["mean_value"] = self.mean_value
+        if self.config.incremental_node:
+            output["value"] = EnergyMeterNodes.get_scaled_value(self.value, self.config.unit) if self.value is not None else None
+            
 
-        if self.min_value is not None:
-            output["min_value"] = round(self.min_value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.min_value)
         else:
-            output["mean_value"] = self.min_value
+            output["mean_sum"] = EnergyMeterNodes.get_scaled_value(self.mean_sum, self.config.unit)
+            output["mean_count"] = EnergyMeterNodes.get_scaled_value(self.mean_count, self.config.unit)
 
-        if self.max_value is not None:
-            output["max_value"] = round(self.max_value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.max_value)
-        else:
-            output["mean_value"] = self.max_value
+            if self.min_value is not None:
+                min_value = round(self.min_value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.min_value)
+                output["min_value"] = EnergyMeterNodes.get_scaled_value(min_value, self.config.unit)
+            else:
+                output["min_value"] = self.min_value
+
+            if self.max_value is not None:
+                max_value = round(self.max_value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.max_value)
+                output["max_value"] = EnergyMeterNodes.get_scaled_value(max_value, self.config.unit)
+            else:
+                output["max_value"] = self.max_value
 
         log_data = super().submit_log(date_time=date_time, additional_data=output)
         self.reset_value()

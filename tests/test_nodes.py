@@ -23,7 +23,6 @@ def test_node_updates_direction_and_stats():
     assert node.processor.negative_direction is False
     assert node.processor.min_value == 10
     assert node.processor.max_value == 15
-    assert node.processor.mean_value == pytest.approx(12.5)
 
 
 def test_incremental_node_logic():

@@ -174,11 +174,11 @@ class NodeProcessor(ABC, Generic[V]):
             additional_data (Dict[str, Any]): Additional data to include in the log.
 
         Returns:
-            Dict[str, Any]: Formatted log data including name, unit, and time period.
+            Dict[str, Any]: Formatted log data including name and time period.
         """
 
         output = additional_data.copy()
-        output = {"name": self.config.name, "unit": self.config.unit, "start_time": self.last_log_datetime, "end_time": date_time}
+        output = {"name": self.config.name, "start_time": self.last_log_datetime, "end_time": date_time}
         self.reset_value()
         self.last_log_datetime = date_time
 

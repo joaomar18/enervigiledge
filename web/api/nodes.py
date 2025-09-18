@@ -15,6 +15,7 @@ from web.api.decorator import auth_endpoint, AuthConfigs
 from controller.manager import DeviceManager
 from db.timedb import TimeDBClient
 import util.functions.objects as objects
+import util.functions.date as date
 
 #######################################
 
@@ -117,10 +118,11 @@ async def get_logs_from_node(
         time_step = objects.require_field(request.query_params, "time_step", int)
         start_time = objects.require_field(request.query_params, "start_time", str)
         end_time = request.query_params.get("end_time")
-        end_time = end_time if end_time is not None else datetime.isoformat(datetime.now()) # If None accounts end time is now
+        end_time = end_time if end_time is not None else datetime.isoformat(datetime.now())  # If None accounts end time is now
     else:
         start_time = request.query_params.get("start_time")  # Optional
         end_time = request.query_params.get("end_time")  # Optional
+        time_step = None
 
     start_time = datetime.fromisoformat(start_time) if start_time else None
     end_time = datetime.fromisoformat(end_time) if end_time else None
@@ -131,8 +133,10 @@ async def get_logs_from_node(
 
     if not any(name == node.config.name for node in device.nodes):
         raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
-    
-    
+
+    if formatted and start_time and end_time and time_step:
+        (start_time, end_time) = date.process_time_span(start_time, end_time, time_step)
+        pass
 
     response = timedb.get_measurement_data_between(
         device_name=device.name, device_id=device_id, measurement=name, start_time=start_time, end_time=end_time
@@ -162,7 +166,7 @@ async def delete_logs_from_node(
     if not any(name == node.config.name for node in device.nodes):
         raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}.")
 
-    result = timedb.delete_measurement_data(device_name=device.name, device_id=device_id, measurement=name)
+    result = timedb.delete_measurement_data(device_name=device.name, device_id=device_id, variable=device.nodes)
 
     if result:
         message = f"Successfully deleted logs for node '{name}' from device '{device.name}' with id {device_id}."

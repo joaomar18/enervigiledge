@@ -12,6 +12,8 @@ from dataclasses import dataclass
 #############LOCAL IMPORTS#############
 
 from util.debug import LoggerManager
+from controller.node.node import Node
+from controller.node.processor.numeric_processor import NumericNodeProcessor
 
 #######################################
 
@@ -86,7 +88,6 @@ class TimeDBClient:
                 raise ValueError(f"Missing required fields in data item: {item}")
 
             name: str = item["name"]
-            unit: str = item["unit"]
             start_time: datetime = item["start_time"]
             end_time: datetime = item["end_time"]
 
@@ -95,14 +96,14 @@ class TimeDBClient:
 
             end_time_trimmed = end_time.replace(second=0, microsecond=0)
 
-            fields = {k: v for k, v in item.items() if k not in ("name", "unit", "start_time", "end_time") and v is not None}
-
-            tags = {"unit": unit, "start_time": formatted_start, "end_time": formatted_end}
+            fields: dict[str, Any] = {k: v for k, v in item.items() if k not in ("name", "start_time", "end_time") and v is not None}
+            fields["start_time"] = formatted_start
+            fields["end_time"] = formatted_end
 
             if not fields:
                 return None
 
-            formatted.append({"measurement": name, "fields": fields, "tags": tags, "time": end_time_trimmed})
+            formatted.append({"measurement": name, "fields": fields, "time": end_time_trimmed})
 
         return formatted
 
@@ -238,26 +239,16 @@ class TimeDBClient:
                 raise TypeError(f"Items must be ResultSet. Got type: {type(rs).__name__}")
             yield from rs.get_points()
 
-    def get_measurement_data_between(
-        self, device_name: str, device_id: int, measurement: str, start_time: Optional[datetime] = None, end_time: Optional[datetime] = None
+    def get_variable_logs_between(
+        self,
+        device_name: str,
+        device_id: int,
+        variable: Node,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        formatted: Optional[bool] = None,
+        time_step_ms: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """
-        Retrieve measurement data from InfluxDB for a given device and time range.
-
-        Args:
-            device_name: Name of the device (used to build the database name).
-            device_id: ID of the device.
-            measurement: Measurement (series) name to query.
-            start_time: Start of the time range (inclusive). Must be used with end_time.
-            end_time: End of the time range (inclusive). Must be after start_time.
-
-        Returns:
-            A list of data points (dicts) without the "time" field.
-
-        Raises:
-            ValueError: If the database does not exist, only one time bound is given,
-                or end_time is not later than start_time.
-        """
 
         client = self.__require_client()
 
@@ -277,29 +268,58 @@ class TimeDBClient:
         if start_time and end_time:
             start_str = start_time.isoformat() + "Z"
             end_str = end_time.isoformat() + "Z"
-            query = f'SELECT * FROM "{measurement}" WHERE time >= \'{start_str}\' AND time <= \'{end_str}\''
+            if not formatted:
+
+                if isinstance(variable.processor, NumericNodeProcessor):
+                    if not variable.config.incremental_node:
+                        query = f"""
+                        SELECT start_time, end_time,
+                        "mean_sum" / "mean_count" AS average_value,
+                        min_value, max_value
+                        FROM "{variable.config.name}"
+                        WHERE time >= '{start_str}' AND time <= '{end_str}'
+                        """.strip()
+                    else:
+                        query = f"""
+                        SELECT start_time, end_time, value,
+                        FROM "{variable.config.name}"
+                        WHERE time >= '{start_str}' AND time <= '{end_str}'
+                        """.strip()
+                else:
+                    query = f"""
+                    SELECT start_time, end_time, value,
+                    FROM "{variable.config.name}"
+                    WHERE time >= '{start_str}' AND time <= '{end_str}'
+                    """.strip()
+
+            elif time_step_ms:
+
+                if isinstance(variable.processor, NumericNodeProcessor):
+                    if not variable.config.incremental_node:
+                        query = f"""SELECT SUM("mean_sum") / SUM("mean_count") AS average_value, MIN("min_value") AS min_value, MAX("max_value") AS max_value FROM "{variable.config.name}"
+                        WHERE time >= '{start_str}\' AND time < '{end_str}\
+                        GROUP BY time(#{time_step_ms}ms) FILL(null)"""
+                    else:
+                        query = f"""SELECT * FROM "{variable.config.name}"
+                        WHERE time >= '{start_str}\' AND time < '{end_str}\
+                        GROUP BY time(#{time_step_ms}ms) FILL(null)"""
+
+                else:
+                    query = f"""SELECT * FROM "{variable.config.name}"
+                        WHERE time >= '{start_str}\' AND time < '{end_str}\
+                        GROUP BY time(#{time_step_ms}ms) FILL(null)"""
+
+            else:
+                raise ValueError(f"Wrong parameters to get logs from node {variable.config.name}, in device {device_name} with id {device_id}.")
+
         else:
-            query = f'SELECT * FROM "{measurement}"'
+            query = f'SELECT * FROM "{variable.config.name}"'
 
         result = client.query(query)
 
         return [{k: v for k, v in point.items() if k != "time"} for point in self.__iter_points(result)]
 
-    def delete_measurement_data(self, device_name: str, device_id: int, measurement: str) -> bool:
-        """
-        Deletes all data points for a specific measurement in the corresponding device database.
-
-        Args:
-            device_name (str): Name of the device (used to build the database name).
-            device_id (int): Unique ID of the device.
-            measurement (str): Name of the measurement (typically the node name) to delete.
-
-        Returns:
-            bool: True if the deletion was successful, False if an error occurred during execution.
-
-        Raises:
-            ValueError: If the database for the specified device does not exist.
-        """
+    def delete_variable_data(self, device_name: str, device_id: int, variable: Node) -> bool:
 
         logger = LoggerManager.get_logger(__name__)
         client = self.__require_client()
@@ -311,11 +331,11 @@ class TimeDBClient:
 
         try:
             client.switch_database(db_name)
-            client.query(f'DELETE FROM "{measurement}"')
+            client.query(f'DELETE FROM "{variable.config.name}"')
             return True
 
         except Exception as e:
-            logger.exception(f"Failed to delete measurement '{measurement}' from DB '{db_name}': {e}")
+            logger.exception(f"Failed to delete measurement '{variable.config.name}' from DB '{db_name}': {e}")
             return False
 
     def delete_db(self, device_name: str, device_id: int) -> bool:
