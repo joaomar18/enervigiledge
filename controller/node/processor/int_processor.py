@@ -5,7 +5,7 @@
 #############LOCAL IMPORTS#############
 
 from controller.node.processor.numeric_processor import NumericNodeProcessor
-from controller.types.node import NodeConfig
+from model.controller.node import NodeConfig
 
 #######################################
 

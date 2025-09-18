@@ -13,7 +13,7 @@ from web.api import device
 from web.api import auth
 from web.dependencies import services
 from web.safety import HTTPSafety
-from controller.types.general import Protocol
+from model.controller.general import Protocol
 from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
 

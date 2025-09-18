@@ -9,9 +9,9 @@ from typing import Callable, Dict, Optional, Type
 
 from controller.meter.meter import EnergyMeter
 from controller.node.node import Node, ModbusRTUNode, OPCUANode
-from controller.types.general import Protocol
-from controller.types.device import BaseCommunicationOptions
-from controller.types.node import NodeRecord, NodeConfig
+from model.controller.general import Protocol
+from model.controller.device import BaseCommunicationOptions
+from model.controller.node import NodeRecord, NodeConfig
 from protocol.modbus_rtu.rtu_device import ModbusRTUOptions, ModbusRTUEnergyMeter
 from protocol.opcua.opcua_device import OPCUAOptions, OPCUAEnergyMeter
 from controller.exceptions import NotImplemeted

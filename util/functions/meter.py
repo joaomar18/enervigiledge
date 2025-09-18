@@ -8,8 +8,8 @@ from typing import Dict, Tuple, Optional
 
 from controller.node.node import Node
 from controller.node.processor.processor import NodeProcessor
-from controller.types.device import EnergyMeterType
-from controller.types.node import NodePhase, NodeAttributes
+from model.controller.device import EnergyMeterType
+from model.controller.node import NodePhase, NodeAttributes
 
 #######################################
 

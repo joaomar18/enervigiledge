@@ -6,8 +6,8 @@ from typing import Dict, Set, Optional
 
 #############LOCAL IMPORTS#############
 
-from controller.types.device import EnergyMeterOptions, EnergyMeterType
-from controller.types.node import NodeType
+from model.controller.device import EnergyMeterOptions, EnergyMeterType
+from model.controller.node import NodeType
 from controller.exceptions import UnitError, NodeUnknownError, NodeMissingError, LoggingPeriodError
 from controller.node.node import Node
 import util.functions.meter as meter_util

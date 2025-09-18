@@ -9,12 +9,11 @@ from argon2 import PasswordHasher
 
 ############# LOCAL IMPORTS #############
 
-from web.api import nodes
-from web.api import auth
+from web.api import nodes, auth
 from web.dependencies import services
 from web.safety import HTTPSafety
 from controller.node.node import Node
-from controller.types.node import NodeType, NodeConfig
+from model.controller.node import NodeType, NodeConfig
 
 #########################################
 

@@ -7,7 +7,7 @@ import pytest
 #############LOCAL IMPORTS#############
 
 from controller.node.node import Node
-from controller.types.node import NodeType, NodeConfig
+from model.controller.node import NodeType, NodeConfig
 from controller.node.processor.float_processor import FloatNodeProcessor
 
 #######################################

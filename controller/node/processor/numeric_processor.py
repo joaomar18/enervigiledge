@@ -9,7 +9,7 @@ from datetime import datetime
 #############LOCAL IMPORTS#############
 
 from controller.node.processor.processor import NodeProcessor, N
-from controller.types.node import NodeConfig
+from model.controller.node import NodeConfig
 
 #######################################
 

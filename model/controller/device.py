@@ -9,8 +9,8 @@ from typing import Optional, Dict, Any, Set
 
 #############LOCAL IMPORTS#############
 
-from controller.types.general import Protocol
-from controller.types.node import NodeRecord
+from model.controller.general import Protocol
+from model.controller.node import NodeRecord
 
 #######################################
 

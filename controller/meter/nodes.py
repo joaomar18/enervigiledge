@@ -7,7 +7,7 @@ from typing import Dict, Set, Union, Optional
 #############LOCAL IMPORTS#############
 
 from controller.node.node import Node
-from controller.types.device import EnergyMeterType, EnergyMeterOptions
+from model.controller.device import EnergyMeterType, EnergyMeterOptions
 from controller.exceptions import *
 import controller.meter.validation as validation
 import util.functions.meter as meter_util

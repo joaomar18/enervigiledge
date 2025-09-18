@@ -8,9 +8,9 @@ import pytest
 
 from controller.registry.protocol import ProtocolRegistry
 from controller.meter.meter import EnergyMeter
-from controller.types.general import Protocol
+from model.controller.general import Protocol
 from controller.node.node import Node
-from controller.types.node import NodeConfig, NodeType, NodeRecord
+from model.controller.node import NodeConfig, NodeType, NodeRecord
 from controller.exceptions import NotImplemeted
 
 #######################################

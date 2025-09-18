@@ -12,7 +12,7 @@ from controller.node.processor.bool_processor import BoolNodeProcessor
 from controller.node.processor.float_processor import FloatNodeProcessor
 from controller.node.processor.int_processor import IntNodeProcessor
 from controller.node.processor.string_processor import StringNodeProcessor
-from controller.types.node import NodeType, NodeConfig
+from model.controller.node import NodeType, NodeConfig
 from controller.exceptions import NotImplemeted
 
 #######################################

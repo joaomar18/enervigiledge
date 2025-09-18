@@ -4,7 +4,7 @@
 
 #############LOCAL IMPORTS#############
 
-from controller.types.node import NodeConfig, BaseNodeRecordConfig, NodeRecord
+from model.controller.node import NodeConfig, BaseNodeRecordConfig, NodeRecord
 from controller.registry.node_type import TypeRegistry
 
 #######################################

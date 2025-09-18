@@ -11,9 +11,9 @@ from typing import Set
 
 from controller.node.node import Node
 from controller.meter.meter import EnergyMeter
-from controller.types.general import Protocol
-from controller.types.device import EnergyMeterType
-from controller.types.node import NodeType, NodeConfig
+from model.controller.general import Protocol
+from model.controller.device import EnergyMeterType
+from model.controller.node import NodeType, NodeConfig
 from db.db import EnergyMeterRecord
 from mqtt.client import MQTTMessage
 

@@ -8,8 +8,8 @@ from abc import ABC, abstractmethod
 
 #############LOCAL IMPORTS#############
 
-from controller.types.general import Protocol
-from controller.types.device import DeviceHistoryStatus
+from model.controller.general import Protocol
+from model.controller.device import DeviceHistoryStatus
 from controller.node.node import Node
 
 #######################################

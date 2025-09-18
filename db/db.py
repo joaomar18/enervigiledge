@@ -2,7 +2,7 @@
 
 import sqlite3
 import json
-from typing import List, Dict, Set, Any, Tuple, Optional
+from typing import List, Tuple, Optional
 from dataclasses import dataclass
 
 #################################################
@@ -10,9 +10,9 @@ from dataclasses import dataclass
 ############### LOCAL IMPORTS ###################
 
 from util.debug import LoggerManager
-from controller.types.general import Protocol
-from controller.types.device import EnergyMeterType, EnergyMeterRecord, DeviceHistoryStatus
-from controller.types.node import NodeRecord
+from model.controller.general import Protocol
+from model.controller.device import EnergyMeterType, EnergyMeterRecord, DeviceHistoryStatus
+from model.controller.node import NodeRecord
 
 #################################################
 

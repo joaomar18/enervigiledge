@@ -7,9 +7,9 @@ import asyncio
 
 #############LOCAL IMPORTS#############
 
-from controller.types.general import Protocol
-from controller.types.device import EnergyMeterRecord, EnergyMeterType, EnergyMeterOptions, BaseCommunicationOptions
-from controller.types.node import BaseNodeRecordConfig, NodeRecord
+from model.controller.general import Protocol
+from model.controller.device import EnergyMeterRecord, EnergyMeterType, EnergyMeterOptions, BaseCommunicationOptions
+from model.controller.node import BaseNodeRecordConfig, NodeRecord
 from controller.meter.meter import EnergyMeter
 from controller.registry.protocol import ProtocolRegistry
 from controller.node.node import Node

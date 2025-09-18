@@ -15,8 +15,8 @@ from dataclasses import dataclass
 
 from util.debug import LoggerManager
 from controller.node.node import Node, ModbusRTUNode
-from controller.types.general import Protocol
-from controller.types.device import EnergyMeterType, EnergyMeterOptions, BaseCommunicationOptions
+from model.controller.general import Protocol
+from model.controller.device import EnergyMeterType, EnergyMeterOptions, BaseCommunicationOptions
 from controller.meter.meter import EnergyMeter
 
 #######################################

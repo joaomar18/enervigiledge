@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 
 #############LOCAL IMPORTS#############
 
-from controller.types.node import NodeConfig
+from model.controller.node import NodeConfig
 
 #######################################
 

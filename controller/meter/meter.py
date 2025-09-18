@@ -12,14 +12,14 @@ from abc import abstractmethod
 
 from controller.device import Device
 from controller.node.node import Node
-from controller.types.general import Protocol
-from controller.types.device import EnergyMeterType, EnergyMeterOptions, EnergyMeterRecord, BaseCommunicationOptions
-from controller.types.node import NodeRecord
+from model.controller.general import Protocol
+from model.controller.device import EnergyMeterType, EnergyMeterOptions, EnergyMeterRecord, BaseCommunicationOptions
+from model.controller.node import NodeRecord
 from controller.meter.nodes import EnergyMeterNodes
 import controller.meter.calculation as calculation
 from mqtt.client import MQTTMessage
 from db.timedb import Measurement
-import util.functions.generic as generic
+import util.functions.date as date
 import util.functions.meter as meter_util
 from util.debug import LoggerManager
 
@@ -165,7 +165,7 @@ class EnergyMeter(Device):
                 node.processor.last_log_datetime = current_time
                 continue
 
-            elapsed_time = generic.subtract_datetime_mins(current_time, node.processor.last_log_datetime)
+            elapsed_time = date.subtract_datetime_mins(current_time, node.processor.last_log_datetime)
 
             if elapsed_time >= node.config.logging_period:
                 log_data = [node.processor.submit_log(current_time)]

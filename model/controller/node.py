@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any
 
 #############LOCAL IMPORTS#############
 
-from controller.types.general import Protocol
+from model.controller.general import Protocol
 
 #######################################
 

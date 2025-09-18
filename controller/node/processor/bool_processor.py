@@ -8,7 +8,7 @@ from datetime import datetime
 #############LOCAL IMPORTS#############
 
 from controller.node.processor.processor import NodeProcessor
-from controller.types.node import NodeConfig
+from model.controller.node import NodeConfig
 from controller.exceptions import NotImplemeted
 
 #######################################

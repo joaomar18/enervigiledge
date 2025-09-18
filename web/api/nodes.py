@@ -49,7 +49,7 @@ async def get_node_detailed_state(
     request: Request, safety: HTTPSafety = Depends(services.get_safety), device_manager: DeviceManager = Depends(services.get_device_manager)
 ) -> JSONResponse:
 
-    device_id = int(objects.require_field(request.query_params, "id", str))
+    device_id = int(objects.require_field(request.query_params, "device_id", str))
     node_name = objects.require_field(request.query_params, "node_name", str)
 
     device = device_manager.get_device(device_id)
@@ -111,11 +111,17 @@ async def get_logs_from_node(
 
     device_id = int(objects.require_field(request.query_params, "id", str))
     name = objects.require_field(request.query_params, "node", str)
+    formatted = request.query_params.get("formatted")
 
-    start_time = request.query_params.get("start_time")  # Optional
-    end_time = request.query_params.get("end_time")  # Optional
+    if formatted:
+        time_step = objects.require_field(request.query_params, "time_step", int)
+        start_time = objects.require_field(request.query_params, "start_time", str)
+        end_time = request.query_params.get("end_time")
+        end_time = end_time if end_time is not None else datetime.isoformat(datetime.now()) # If None accounts end time is now
+    else:
+        start_time = request.query_params.get("start_time")  # Optional
+        end_time = request.query_params.get("end_time")  # Optional
 
-    # Optional time range parsing
     start_time = datetime.fromisoformat(start_time) if start_time else None
     end_time = datetime.fromisoformat(end_time) if end_time else None
 
@@ -125,6 +131,8 @@ async def get_logs_from_node(
 
     if not any(name == node.config.name for node in device.nodes):
         raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
+    
+    
 
     response = timedb.get_measurement_data_between(
         device_name=device.name, device_id=device_id, measurement=name, start_time=start_time, end_time=end_time

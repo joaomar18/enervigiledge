@@ -7,9 +7,9 @@ from typing import Set
 #############LOCAL IMPORTS#############
 
 from controller.node.node import Node
-from controller.types.general import Protocol
-from controller.types.device import EnergyMeterRecord, EnergyMeterType, EnergyMeterOptions
-from controller.types.node import NodeRecord, NodeConfig, NodeAttributes, NodePhase, NodeType
+from model.controller.general import Protocol
+from model.controller.device import EnergyMeterRecord, EnergyMeterType, EnergyMeterOptions
+from model.controller.node import NodeRecord, NodeConfig, NodeAttributes, NodePhase, NodeType
 from protocol.modbus_rtu.rtu_device import ModbusRTUOptions, ModbusRTUNode
 from protocol.opcua.opcua_device import OPCUAOptions, OPCUANode
 

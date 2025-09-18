@@ -1,6 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
-from typing import Dict, Any, Type, Union, Tuple, List, Optional, TypeVar, get_origin, cast
+from typing import Dict, Any, Type, Union, Tuple, List, TypeVar, get_origin, cast
 from enum import Enum
 import dataclasses
 import os
