@@ -144,6 +144,7 @@ class NodeProcessor(ABC, Generic[V]):
 
         if self.config.min_alarm:
             output["min_alarm_state"] = self.min_alarm_state
+
         if self.config.max_alarm:
             output["max_alarm_state"] = self.max_alarm_state
 
@@ -178,7 +179,10 @@ class NodeProcessor(ABC, Generic[V]):
         """
 
         output = additional_data.copy()
-        output = {"name": self.config.name, "start_time": date_time - timedelta(minutes=self.config.logging_period), "end_time": date_time}
+        output["name"] = self.config.name
+        output["start_time"] = date_time - timedelta(minutes=self.config.logging_period)
+        output["end_time"] = date_time
+
         self.reset_value()
         self.last_log_datetime = date_time
 

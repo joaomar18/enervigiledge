@@ -204,6 +204,15 @@ class NumericNodeProcessor(NodeProcessor[N]):
         else:
             output["value"] = self.value
 
+        if self.config.decimal_places is not None:
+            output["decimal_places"] = self.config.decimal_places
+
+        if self.config.min_alarm:
+            output["min_alarm_value"] = self.config.min_alarm_value
+
+        if self.config.max_alarm:
+            output["max_alarm_value"] = self.config.max_alarm_value
+
         return super().get_publish_format(additional_data=output)
 
     def get_detailed_state(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:

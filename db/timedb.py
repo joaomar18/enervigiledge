@@ -80,7 +80,6 @@ class TimeDBClient:
         Args:
             data: List of measurement dictionaries containing:
                 - name (str): Measurement name (becomes InfluxDB measurement)
-                - unit (str): Unit of measurement (stored as field)
                 - start_time (datetime): Start of the logging period
                 - end_time (datetime): End of the logging period (becomes InfluxDB timestamp)
                 - Additional fields: Any measurement values (value, min_value, max_value, etc.)
@@ -102,7 +101,7 @@ class TimeDBClient:
         formatted = []
 
         for item in data:
-            if not all(k in item for k in ("name", "unit", "start_time", "end_time")):
+            if not all(k in item for k in ("name", "start_time", "end_time")):
                 raise ValueError(f"Missing required fields in data item: {item}")
 
             name: str = item["name"]
@@ -118,9 +117,13 @@ class TimeDBClient:
             fields["start_time"] = formatted_start
             fields["end_time"] = formatted_end
 
-            if "value" in fields and fields.get("value") is None:
-                return None
-            elif ("min_value" in fields and fields.get("min_value") is None) or ("max_value" in fields and fields.get("max_value") is None):
+            if "value" in fields:
+                if fields.get("value") is None:
+                    return None
+            elif "min_value" in fields and "max_value" in fields:
+                if fields.get("min_value") is None or fields.get("max_value") is None:
+                    return None
+            else:
                 return None
 
             formatted.append({"measurement": name, "fields": fields, "time": end_time_trimmed})
@@ -392,10 +395,13 @@ class TimeDBClient:
 
         if not isinstance(variable.processor, NumericNodeProcessor):
             return
-        
+
         for point in points:
-            current_step_ms = date.get_timestamp(datetime.fromisoformat(point["end_time"])) - date.get_timestamp(datetime.fromisoformat(point["start_time"]))
-            time_step_ms = max(time_step_ms, current_step_ms)
+            if point["start_time"] is not None and point["end_time"] is not None:
+                current_step_ms = date.get_timestamp(datetime.fromisoformat(point["end_time"])) - date.get_timestamp(
+                    datetime.fromisoformat(point["start_time"])
+                )
+                time_step_ms = max(time_step_ms, current_step_ms)
 
         expected_buckets: List[int] = []
 
@@ -407,9 +413,8 @@ class TimeDBClient:
         existing_data: Dict[int, Dict[str, Any]] = {}
 
         for point in points:
-            end_time_str: Optional[str] = point.get('end_time')
-            if end_time_str:
-                point_time_ms = date.get_timestamp(datetime.fromisoformat(end_time_str))
+            if point["end_time"] is not None:
+                point_time_ms = date.get_timestamp(datetime.fromisoformat(point["end_time"]))
                 bucket_end_ms = ((point_time_ms + time_step_ms - 1) // time_step_ms) * time_step_ms
                 existing_data[bucket_end_ms] = point
 
@@ -464,7 +469,7 @@ class TimeDBClient:
         client.switch_database(db_name)
         query = self.__build_query(variable, start_time, end_time, formatted, time_step_ms)
         result = client.query(query)
-        points = [{k: v for k, v in point.items()} for point in self.__iter_points(result)]
+        points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
         if formatted and start_time and end_time and time_step_ms:
             self.__formatted_post_processing(variable, points, date.get_timestamp(start_time), date.get_timestamp(end_time), time_step_ms)
         return points
