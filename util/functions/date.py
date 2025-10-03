@@ -1,5 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
+from typing import Tuple, Optional
 from datetime import datetime
 import time
 
@@ -7,7 +8,66 @@ import time
 
 #############LOCAL IMPORTS#############
 
+from model.date import FormattedTimeStep
+
 #######################################
+
+
+def get_ms_difference(date_1: datetime, date_2: datetime) -> int:
+    """
+    Calculate difference between two datetimes in milliseconds.
+
+    Args:
+        date_1: First datetime (earlier time).
+        date_2: Second datetime (later time).
+
+    Returns:
+        int: Difference in milliseconds (date_2 - date_1).
+    """
+
+    return get_timestamp(date_2) - get_timestamp(date_1)
+
+
+def min_duration_ms(date: datetime) -> int:
+    """Duration in milliseconds until the next minute."""
+
+    next_date = datetime(date.year, date.month, date.day, date.hour, date.minute + 1, date.second, date.microsecond)
+    return get_ms_difference(date, next_date)
+
+
+def min15_duration_ms(date: datetime) -> int:
+    """Duration in milliseconds until 15 minutes later."""
+
+    next_date = datetime(date.year, date.month, date.day, date.hour, date.minute + 15, date.second, date.microsecond)
+    return get_ms_difference(date, next_date)
+
+
+def hour_duration_ms(date: datetime) -> int:
+    """Duration in milliseconds until the next hour."""
+
+    next_date = datetime(date.year, date.month, date.day, date.hour + 1, date.minute, date.second, date.microsecond)
+    return get_ms_difference(date, next_date)
+
+
+def day_duration_ms(date: datetime) -> int:
+    """Duration in milliseconds until the next day."""
+
+    next_date = datetime(date.year, date.month, date.day + 1, date.hour, date.minute, date.second, date.microsecond)
+    return get_ms_difference(date, next_date)
+
+
+def month_duration_ms(date: datetime) -> int:
+    """Duration in milliseconds until the next month."""
+
+    next_date = datetime(date.year, date.month + 1, date.day, date.hour, date.minute, date.second, date.microsecond)
+    return get_ms_difference(date, next_date)
+
+
+def year_duration_ms(date: datetime) -> int:
+    """Duration in milliseconds until the next year."""
+
+    next_date = datetime(date.year + 1, date.month, date.day, date.hour, date.minute, date.second, date.microsecond)
+    return get_ms_difference(date, next_date)
 
 
 def get_current_date() -> datetime:
@@ -22,19 +82,55 @@ def get_current_date() -> datetime:
 
 
 def get_timestamp(date: datetime) -> int:
+    """
+    Convert datetime to millisecond timestamp.
+
+    Args:
+        date: The datetime to convert.
+
+    Returns:
+        int: Timestamp in milliseconds.
+    """
     return int(date.timestamp() * 1000)
 
 
 def get_date_from_timestamp(timestamp: int) -> datetime:
+    """
+    Convert millisecond timestamp to datetime.
+
+    Args:
+        timestamp: Timestamp in milliseconds.
+
+    Returns:
+        datetime: The corresponding datetime object.
+    """
     return datetime.fromtimestamp(timestamp / 1000)
 
 
 def remove_sec_precision(date: datetime) -> datetime:
+    """
+    Remove seconds and microseconds from datetime, keeping only up to minutes.
+
+    Args:
+        date: The datetime to truncate.
+
+    Returns:
+        datetime: Datetime with seconds and microseconds set to zero.
+    """
     date_nosec_precision = datetime(date.year, date.month, date.day, date.hour, date.minute)
     return date_nosec_precision
 
 
 def get_datestr_up_to_min(date: datetime) -> str:
+    """
+    Format datetime as string up to minutes precision.
+
+    Args:
+        date: The datetime to format.
+
+    Returns:
+        str: Formatted date string in "YYYY-MM-DD HH:MM" format.
+    """
     return date.strftime("%Y-%m-%d %H:%M")
 
 
@@ -55,25 +151,34 @@ def subtract_datetime_mins(date_time_01: datetime, date_time_02: datetime) -> in
     return minutes_01 - minutes_02
 
 
-def process_time_span(start_time: datetime, end_time: datetime, time_step_ms: int):
+def process_time_span(start_time: datetime, end_time: datetime, formatted_time_step: Optional[FormattedTimeStep]) -> Tuple[datetime, datetime, int]:
     """
-    Align start and end datetimes to a fixed step size.
+    Align start and end datetimes to a formatted time step and return the step size.
 
-    - Seconds and microseconds are truncated from both inputs.
-    - The start time is floored to the nearest lower multiple of `time_step_ms`.
-    - The end time is ceiled to the nearest upper multiple of `time_step_ms`.
+    - Seconds and microseconds are truncated from both input datetimes.
+    - If no time step is provided, automatically determines the best step based on the time span.
+    - The start time is floored to the nearest lower multiple of the time step.
+    - The end time is ceiled to the nearest upper multiple of the time step.
 
     Args:
-        start_time: Input start datetime.
-        end_time: Input end datetime.
-        time_step_ms: Step size in milliseconds.
+        start_time: Input start datetime to align.
+        end_time: Input end datetime to align.
+        formatted_time_step: Time step to align to, or None for auto-detection.
 
     Returns:
-        tuple[datetime, datetime]: Aligned (start_time, end_time).
+        Tuple[datetime, datetime, int]: Aligned start time, aligned end time, and time step in milliseconds.
     """
+    
+    start_time_fixed_prec = remove_sec_precision(start_time)
+    end_time_fixed_prec = remove_sec_precision(end_time)
 
-    start_time_ms = get_timestamp(remove_sec_precision(start_time))
-    end_time_ms = get_timestamp(remove_sec_precision(end_time))
+    start_time_ms = get_timestamp(start_time_fixed_prec)
+    end_time_ms = get_timestamp(end_time_fixed_prec)
+
+    if formatted_time_step is None:
+        formatted_time_step = get_formatted_time_step(start_time_fixed_prec, start_time_ms, end_time_ms)
+
+    time_step_ms = get_time_step_ms(start_time_fixed_prec, formatted_time_step)
 
     aligned_start_time_ms = (start_time_ms // time_step_ms) * time_step_ms
     aligned_end_time_ms = ((end_time_ms + time_step_ms - 1) // time_step_ms) * time_step_ms
@@ -81,4 +186,61 @@ def process_time_span(start_time: datetime, end_time: datetime, time_step_ms: in
     aligned_start_time = get_date_from_timestamp(aligned_start_time_ms)
     aligned_end_time = get_date_from_timestamp(aligned_end_time_ms)
 
-    return aligned_start_time, aligned_end_time
+    return aligned_start_time, aligned_end_time, time_step_ms
+
+
+def get_formatted_time_step(start_time: datetime, start_time_ms: int, end_time_ms: int) -> FormattedTimeStep:
+    """
+    Determine appropriate time step based on time span duration.
+    
+    Args:
+        start_time: Start datetime for duration calculations.
+        start_time_ms: Start time in milliseconds.
+        end_time_ms: End time in milliseconds.
+        
+    Returns:
+        FormattedTimeStep: Appropriate time step for the given span.
+    """
+    
+    span_ms = end_time_ms - start_time_ms
+
+    if span_ms > year_duration_ms(start_time):
+        return FormattedTimeStep._1Y
+    elif span_ms > month_duration_ms(start_time):
+        return FormattedTimeStep._1M
+    elif span_ms > day_duration_ms(start_time):
+        return FormattedTimeStep._1d
+    elif span_ms > hour_duration_ms(start_time):
+        return FormattedTimeStep._1h
+    elif span_ms > min15_duration_ms(start_time):
+        return FormattedTimeStep._15m
+    else:
+        return FormattedTimeStep._1m
+
+
+def get_time_step_ms(start_time: datetime, formatted_time_step: FormattedTimeStep) -> int:
+    """
+    Convert formatted time step to milliseconds duration.
+    
+    Args:
+        start_time: Reference datetime for duration calculations.
+        formatted_time_step: The formatted time step to convert.
+        
+    Returns:
+        int: Duration in milliseconds for the given time step.
+    """
+    
+    if formatted_time_step is FormattedTimeStep._1m:
+        return min_duration_ms(start_time)
+    elif formatted_time_step is FormattedTimeStep._15m:
+        return min15_duration_ms(start_time)
+    elif formatted_time_step is FormattedTimeStep._1h:
+        return hour_duration_ms(start_time)
+    elif formatted_time_step is FormattedTimeStep._1d:
+        return day_duration_ms(start_time)
+    elif formatted_time_step is FormattedTimeStep._1M:
+        return month_duration_ms(start_time)
+    elif formatted_time_step is FormattedTimeStep._1Y:
+        return year_duration_ms(start_time)
+    else:
+        raise ValueError(f"Unknown formatted time_step {formatted_time_step}.")

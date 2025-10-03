@@ -14,6 +14,7 @@ from web.dependencies import services
 from web.api.decorator import auth_endpoint, AuthConfigs
 from controller.manager import DeviceManager
 from db.timedb import TimeDBClient
+from model.date import FormattedTimeStep
 import util.functions.objects as objects
 import util.functions.date as date
 
@@ -115,7 +116,8 @@ async def get_logs_from_node(
     formatted = bool(request.query_params.get("formatted"))
 
     if formatted:
-        time_step = int(objects.require_field(request.query_params, "time_step", str))
+        time_step = request.query_params.get("time_step")
+        time_step = FormattedTimeStep(time_step) if time_step is not None else None
         start_time = objects.require_field(request.query_params, "start_time", str)
         end_time = request.query_params.get("end_time")
         end_time = end_time if end_time is not None else datetime.isoformat(datetime.now())  # If None accounts end time is now
@@ -126,6 +128,7 @@ async def get_logs_from_node(
 
     start_time = datetime.fromisoformat(start_time) if start_time else None
     end_time = datetime.fromisoformat(end_time) if end_time else None
+    time_step_ms: Optional[int] = None
 
     device = device_manager.get_device(device_id)
     if not device:
@@ -136,9 +139,9 @@ async def get_logs_from_node(
         raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
 
     if formatted and start_time and end_time and time_step:
-        (start_time, end_time) = date.process_time_span(start_time, end_time, time_step)
+        (start_time, end_time, time_step_ms) = date.process_time_span(start_time, end_time, time_step)
 
-    response = timedb.get_variable_logs_between(device.name, device_id, node, start_time, end_time, formatted, time_step)
+    response = timedb.get_variable_logs_between(device.name, device_id, node, start_time, end_time, formatted, time_step_ms)
     return JSONResponse(content=response)
 
 
