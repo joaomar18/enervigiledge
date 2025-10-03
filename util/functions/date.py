@@ -1,7 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
 from typing import Tuple, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 
 #######################################
@@ -107,6 +107,34 @@ def get_date_from_timestamp(timestamp: int) -> datetime:
     return datetime.fromtimestamp(timestamp / 1000)
 
 
+def convert_isostr_to_timezonedate(date_str: str) -> datetime:
+    """
+    Convert ISO format string to local timezone datetime.
+
+    Handles both 'Z' suffix (UTC) and timezone-aware ISO strings.
+    If the datetime is naive (no timezone), assumes UTC.
+
+    Args:
+        date_str: ISO format datetime string (e.g., "2025-10-03T10:25:37.432Z")
+
+    Returns:
+        datetime: Datetime object converted to system's local timezone.
+    """
+
+    # Handle 'Z' suffix (UTC indicator)
+    if date_str.endswith('Z'):
+        date_str = date_str[:-1] + '+00:00'
+
+    # Parse the ISO string
+    date = datetime.fromisoformat(date_str)
+
+    # If no timezone info, assume UTC
+    if date.tzinfo is None:
+        date = date.replace(tzinfo=timezone.utc)
+
+    return date.astimezone()
+
+
 def remove_sec_precision(date: datetime) -> datetime:
     """
     Remove seconds and microseconds from datetime, keeping only up to minutes.
@@ -168,7 +196,7 @@ def process_time_span(start_time: datetime, end_time: datetime, formatted_time_s
     Returns:
         Tuple[datetime, datetime, int]: Aligned start time, aligned end time, and time step in milliseconds.
     """
-    
+
     start_time_fixed_prec = remove_sec_precision(start_time)
     end_time_fixed_prec = remove_sec_precision(end_time)
 
@@ -192,16 +220,16 @@ def process_time_span(start_time: datetime, end_time: datetime, formatted_time_s
 def get_formatted_time_step(start_time: datetime, start_time_ms: int, end_time_ms: int) -> FormattedTimeStep:
     """
     Determine appropriate time step based on time span duration.
-    
+
     Args:
         start_time: Start datetime for duration calculations.
         start_time_ms: Start time in milliseconds.
         end_time_ms: End time in milliseconds.
-        
+
     Returns:
         FormattedTimeStep: Appropriate time step for the given span.
     """
-    
+
     span_ms = end_time_ms - start_time_ms
 
     if span_ms > year_duration_ms(start_time):
@@ -221,15 +249,15 @@ def get_formatted_time_step(start_time: datetime, start_time_ms: int, end_time_m
 def get_time_step_ms(start_time: datetime, formatted_time_step: FormattedTimeStep) -> int:
     """
     Convert formatted time step to milliseconds duration.
-    
+
     Args:
         start_time: Reference datetime for duration calculations.
         formatted_time_step: The formatted time step to convert.
-        
+
     Returns:
         int: Duration in milliseconds for the given time step.
     """
-    
+
     if formatted_time_step is FormattedTimeStep._1m:
         return min_duration_ms(start_time)
     elif formatted_time_step is FormattedTimeStep._15m:

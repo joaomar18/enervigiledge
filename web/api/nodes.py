@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request, Depends
 from typing import Optional
 from fastapi.responses import JSONResponse
 from datetime import datetime
+import time
 
 #######################################
 
@@ -126,10 +127,10 @@ async def get_logs_from_node(
         end_time = request.query_params.get("end_time")  # Optional
         time_step = None
 
-    start_time = datetime.fromisoformat(start_time) if start_time else None
-    end_time = datetime.fromisoformat(end_time) if end_time else None
+    start_time = date.convert_isostr_to_timezonedate(start_time) if start_time else None
+    end_time = date.convert_isostr_to_timezonedate(end_time) if end_time else None
     time_step_ms: Optional[int] = None
-
+    
     device = device_manager.get_device(device_id)
     if not device:
         raise ValueError(f"Device with id {device_id} does not exist.")
@@ -138,10 +139,19 @@ async def get_logs_from_node(
     if not node:
         raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
 
-    if formatted and start_time and end_time and time_step:
+    if formatted and start_time and end_time:
         (start_time, end_time, time_step_ms) = date.process_time_span(start_time, end_time, time_step)
 
+    # Performance measurement
+    start_time_perf = time.perf_counter()
     response = timedb.get_variable_logs_between(device.name, device_id, node, start_time, end_time, formatted, time_step_ms)
+    end_time_perf = time.perf_counter()
+    
+    execution_time_ms = (end_time_perf - start_time_perf) * 1000
+    bucket_count = len(response) if response else 0
+    
+    print(f"⏱️  Query Performance: {execution_time_ms:.2f}ms | Buckets: {bucket_count} | Node: {name} | Formatted: {formatted}")
+    
     return JSONResponse(content=response)
 
 

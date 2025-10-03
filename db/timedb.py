@@ -297,12 +297,12 @@ class TimeDBClient:
             unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
 
             if not variable.config.incremental_node:
-                query = f"""SELECT FIRST("start_time"), LAST("end_time"), (SUM("mean_sum") / SUM("mean_count")) / {unit_factor} AS average_value,
+                query = f"""SELECT FIRST("start_time") AS start_time, LAST("end_time") AS end_time, (SUM("mean_sum") / SUM("mean_count")) / {unit_factor} AS average_value,
                         MIN("min_value") / {unit_factor} AS min_value, MAX("max_value") / {unit_factor} AS max_value FROM "{variable.config.name}"
                         WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
                         GROUP BY time({time_step_ms}ms) FILL(null)"""
             else:
-                query = f"""SELECT FIRST("start_time"), LAST("end_time"), (SUM("value")) / {unit_factor} FROM "{variable.config.name}"
+                query = f"""SELECT FIRST("start_time") AS start_time, LAST("end_time") AS end_time, (SUM("value")) / {unit_factor} AS value FROM "{variable.config.name}"
                         WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
                         GROUP BY time({time_step_ms}ms) FILL(null)"""
 
@@ -340,16 +340,72 @@ class TimeDBClient:
 
         return query
 
-    def __fill_buckets(self, variable: Node, points: List[Dict[str, Any]], start_time_ms, end_time_ms, time_step_ms) -> None:
+    def __formatted_post_processing(
+        self, variable: Node, points: List[Dict[str, Any]], start_time_ms: int, end_time_ms: int, time_step_ms: int
+    ) -> None:
+        """
+        Post-processes InfluxDB formatted query results to ensure proper time bucket alignment and completeness.
+
+        InfluxDB's GROUP BY time() with FILL(null) has limitations:
+        1. FIRST("start_time")/LAST("end_time") return original data timestamps, not bucket boundaries
+        2. May not fill all buckets in the requested range if data is sparse
+
+        This method fixes both issues by:
+        - Aligning start_time/end_time to actual time bucket boundaries
+        - Ensuring complete time series coverage from start_time_ms to end_time_ms
+        - Filling missing buckets with None values for all measurement fields
+
+        Args:
+            variable: Node configuration defining measurement type and structure
+            points: List of data points from InfluxDB query (modified in-place)
+            start_time_ms: Query start time in milliseconds since epoch
+            end_time_ms: Query end time in milliseconds since epoch
+            time_step_ms: Time bucket size in milliseconds
+        """
         if not isinstance(variable.processor, NumericNodeProcessor):
             return
 
-        current_start = start_time_ms
-        while current_start + time_step_ms <= end_time_ms:
-            start_date = date.get_date_from_timestamp(current_start)
-            end_date = date.get_date_from_timestamp(current_start + time_step_ms)
-            print(f"Start Time: {start_date}, End Time: {end_date}")
-            current_start += time_step_ms
+        expected_buckets: List[int] = []
+
+        current_time = start_time_ms
+        while current_time < end_time_ms:
+            expected_buckets.append(current_time)
+            current_time += time_step_ms
+
+        existing_data: Dict[int, Dict[str, Any]] = {}
+
+        for point in points:
+            start_time_str: Optional[str] = point.get('start_time')
+            if start_time_str:
+                point_time = date.convert_isostr_to_timezonedate(start_time_str)
+                point_time_ms = date.get_timestamp(point_time)
+                bucket_start_ms = (point_time_ms // time_step_ms) * time_step_ms
+                existing_data[bucket_start_ms] = point
+
+        points.clear()
+
+        for bucket_start_ms in expected_buckets:
+            bucket_end_ms = bucket_start_ms + time_step_ms
+            aligned_start_time = date.get_datestr_up_to_min(date.get_date_from_timestamp(bucket_start_ms))
+            aligned_end_time = date.get_datestr_up_to_min(date.get_date_from_timestamp(bucket_end_ms))
+
+            if bucket_start_ms in existing_data:
+                point = existing_data[bucket_start_ms].copy()
+                point['start_time'] = aligned_start_time
+                point['end_time'] = aligned_end_time
+            else:
+                if not variable.config.incremental_node:
+                    point = {
+                        'start_time': aligned_start_time,
+                        'end_time': aligned_end_time,
+                        'average_value': None,
+                        'min_value': None,
+                        'max_value': None,
+                    }
+                else:
+                    point = {'start_time': aligned_start_time, 'end_time': aligned_end_time, 'value': None}
+
+            points.append(point)
 
     def get_variable_logs_between(
         self,
@@ -379,7 +435,7 @@ class TimeDBClient:
         result = client.query(query)
         points = [{k: v for k, v in point.items()} for point in self.__iter_points(result)]
         if formatted and start_time and end_time and time_step_ms:
-            self.__fill_buckets(variable, points, date.get_timestamp(start_time), date.get_timestamp(end_time), time_step_ms)
+            self.__formatted_post_processing(variable, points, date.get_timestamp(start_time), date.get_timestamp(end_time), time_step_ms)
         return points
 
     def delete_variable_data(self, device_name: str, device_id: int, variable: Node) -> bool:
