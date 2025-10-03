@@ -62,25 +62,41 @@ class TimeDBClient:
     @staticmethod
     def to_db_format(data: List[Dict[str, Any]]) -> List[Dict[str, Any]] | None:
         """
-        Converts a list of structured measurement dictionaries into InfluxDB write format.
+        Converts structured measurement dictionaries into InfluxDB write format.
 
-        Each item in the input list must include:
-            - name (str): The measurement name.
-            - unit (str): The unit of the measurement
-            - start_time (datetime): Start of the logging period.
-            - end_time (datetime): Timestamp for when the log ends.
+        Transforms measurement data from the application's internal format into the structure
+        required by InfluxDB's write_points() method. This includes:
+        - Extracting measurement names and timestamps
+        - Formatting datetime fields as minute-precision strings
+        - Converting measurement values to InfluxDB fields
+        - Filtering out None values to prevent invalid writes
+        - Using end_time as the primary timestamp for InfluxDB's time field
 
-        Any additional keys will be treated as InfluxDB fields.
+        Data Validation:
+        - Ensures all required fields (name, unit, start_time, end_time) are present
+        - Returns None if critical measurement values are None (prevents writing invalid data)
+        - Skips non-essential fields that are None while preserving valid ones
 
         Args:
-            data (List[Dict[str, Any]]): Raw measurement data from nodes.
+            data: List of measurement dictionaries containing:
+                - name (str): Measurement name (becomes InfluxDB measurement)
+                - unit (str): Unit of measurement (stored as field)
+                - start_time (datetime): Start of the logging period
+                - end_time (datetime): End of the logging period (becomes InfluxDB timestamp)
+                - Additional fields: Any measurement values (value, min_value, max_value, etc.)
 
         Returns:
-            List[Dict[str, Any]] | None: InfluxDB-compatible points ready to write.
-            If measurement values are None returns None
+            List[Dict[str, Any]] | None: InfluxDB-compatible points ready for write_points(),
+            or None if any critical measurement values are None.
 
         Raises:
-            ValueError: If any required key is missing in a data item.
+            ValueError: If any required field is missing from a data item.
+
+        InfluxDB Format:
+            Each returned dictionary contains:
+            - "measurement": The series name
+            - "fields": Dictionary of measurement values and formatted timestamps
+            - "time": Primary timestamp (end_time with second precision removed)
         """
 
         formatted = []
@@ -102,7 +118,9 @@ class TimeDBClient:
             fields["start_time"] = formatted_start
             fields["end_time"] = formatted_end
 
-            if not fields:
+            if "value" in fields and fields.get("value") is None:
+                return None
+            elif ("min_value" in fields and fields.get("min_value") is None) or ("max_value" in fields and fields.get("max_value") is None):
                 return None
 
             formatted.append({"measurement": name, "fields": fields, "time": end_time_trimmed})
@@ -271,7 +289,7 @@ class TimeDBClient:
 
             if not variable.config.incremental_node:
                 query = f"""
-                        SELECT "start_time", "end_time",
+                        SELECT "start_time", "end_time", 
                         ("mean_sum" / "mean_count") / {unit_factor} AS average_value,
                         "min_value" / {unit_factor} AS min_value, "max_value" / {unit_factor} AS max_value
                         FROM "{variable.config.name}"
@@ -279,7 +297,8 @@ class TimeDBClient:
                         """.strip()
             else:
                 query = f"""
-                        SELECT "start_time", "end_time", "value" / {unit_factor} AS value
+                        SELECT "start_time", "end_time",
+                        "value" / {unit_factor} AS value
                         FROM "{variable.config.name}"
                         WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
                         """.strip()
@@ -297,12 +316,14 @@ class TimeDBClient:
             unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
 
             if not variable.config.incremental_node:
-                query = f"""SELECT FIRST("start_time") AS start_time, LAST("end_time") AS end_time, (SUM("mean_sum") / SUM("mean_count")) / {unit_factor} AS average_value,
+                query = f"""SELECT FIRST("start_time") AS start_time, LAST("end_time") AS end_time,
+                        (SUM("mean_sum") / SUM("mean_count")) / {unit_factor} AS average_value,
                         MIN("min_value") / {unit_factor} AS min_value, MAX("max_value") / {unit_factor} AS max_value FROM "{variable.config.name}"
                         WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
                         GROUP BY time({time_step_ms}ms) FILL(null)"""
             else:
-                query = f"""SELECT FIRST("start_time") AS start_time, LAST("end_time") AS end_time, (SUM("value")) / {unit_factor} AS value FROM "{variable.config.name}"
+                query = f"""SELECT FIRST("start_time") AS start_time, LAST("end_time") AS end_time,
+                        (SUM("value")) / {unit_factor} AS value FROM "{variable.config.name}"
                         WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
                         GROUP BY time({time_step_ms}ms) FILL(null)"""
 
@@ -351,9 +372,15 @@ class TimeDBClient:
         2. May not fill all buckets in the requested range if data is sparse
 
         This method fixes both issues by:
-        - Aligning start_time/end_time to actual time bucket boundaries
-        - Ensuring complete time series coverage from start_time_ms to end_time_ms
+        - Mapping data points to their correct time bucket ends using ceiling division
+        - Generating complete time series coverage with bucket end timestamps
+        - Aligning start_time/end_time fields to actual bucket boundaries
         - Filling missing buckets with None values for all measurement fields
+
+        The algorithm uses bucket end alignment where each bucket is defined by [start, end]:
+        - Bucket boundaries: [start_time_ms, start_time_ms + time_step_ms], [start_time_ms + time_step_ms, start_time_ms + 2*time_step_ms], etc.
+        - Data points are mapped to the bucket end that contains their timestamp using ceiling division
+        - Expected buckets are generated as a sequence of bucket end timestamps
 
         Args:
             variable: Node configuration defining measurement type and structure
@@ -362,34 +389,39 @@ class TimeDBClient:
             end_time_ms: Query end time in milliseconds since epoch
             time_step_ms: Time bucket size in milliseconds
         """
+
         if not isinstance(variable.processor, NumericNodeProcessor):
             return
+        
+        for point in points:
+            current_step_ms = date.get_timestamp(datetime.fromisoformat(point["end_time"])) - date.get_timestamp(datetime.fromisoformat(point["start_time"]))
+            time_step_ms = max(time_step_ms, current_step_ms)
 
         expected_buckets: List[int] = []
 
-        current_time = start_time_ms
-        while current_time < end_time_ms:
+        current_time = start_time_ms + time_step_ms
+        while current_time <= end_time_ms:
             expected_buckets.append(current_time)
             current_time += time_step_ms
 
         existing_data: Dict[int, Dict[str, Any]] = {}
 
         for point in points:
-            start_time_str: Optional[str] = point.get('start_time')
-            if start_time_str:
-                point_time_ms = date.get_timestamp(datetime.fromisoformat(start_time_str))
-                bucket_start_ms = (point_time_ms // time_step_ms) * time_step_ms
-                existing_data[bucket_start_ms] = point
+            end_time_str: Optional[str] = point.get('end_time')
+            if end_time_str:
+                point_time_ms = date.get_timestamp(datetime.fromisoformat(end_time_str))
+                bucket_end_ms = ((point_time_ms + time_step_ms - 1) // time_step_ms) * time_step_ms
+                existing_data[bucket_end_ms] = point
 
         points.clear()
 
-        for bucket_start_ms in expected_buckets:
-            bucket_end_ms = bucket_start_ms + time_step_ms
+        for bucket_end_ms in expected_buckets:
+            bucket_start_ms = bucket_end_ms - time_step_ms
             aligned_start_time = date.get_datestr_up_to_min(date.get_date_from_timestamp(bucket_start_ms))
             aligned_end_time = date.get_datestr_up_to_min(date.get_date_from_timestamp(bucket_end_ms))
 
-            if bucket_start_ms in existing_data:
-                point = existing_data[bucket_start_ms]
+            if bucket_end_ms in existing_data:
+                point = existing_data[bucket_end_ms]
                 point['start_time'] = aligned_start_time
                 point['end_time'] = aligned_end_time
             else:

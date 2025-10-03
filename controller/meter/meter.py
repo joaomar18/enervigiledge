@@ -167,7 +167,10 @@ class EnergyMeter(Device):
 
             elapsed_time = date.subtract_datetime_mins(current_time, node.processor.last_log_datetime)
 
-            if elapsed_time >= node.config.logging_period:
+            if (
+                elapsed_time >= node.config.logging_period
+                and date.get_timestamp(date.remove_sec_precision(current_time)) % date.min_to_ms(node.config.logging_period) == 0
+            ):
                 log_data = [node.processor.submit_log(current_time)]
                 log_db = f"{self.name}_{self.id}"
                 await self.measurements_queue.put(Measurement(db=log_db, data=log_data))

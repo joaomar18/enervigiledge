@@ -1,7 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
-from datetime import datetime
-import time
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Type, TypeVar, Generic, TypeGuard
 from abc import ABC, abstractmethod
 
@@ -179,7 +178,7 @@ class NodeProcessor(ABC, Generic[V]):
         """
 
         output = additional_data.copy()
-        output = {"name": self.config.name, "start_time": self.last_log_datetime, "end_time": date_time}
+        output = {"name": self.config.name, "start_time": date_time - timedelta(minutes=self.config.logging_period), "end_time": date_time}
         self.reset_value()
         self.last_log_datetime = date_time
 

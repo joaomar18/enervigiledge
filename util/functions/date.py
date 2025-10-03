@@ -28,6 +28,20 @@ def get_ms_difference(date_1: datetime, date_2: datetime) -> int:
     return get_timestamp(date_2) - get_timestamp(date_1)
 
 
+def min_to_ms(mins: int) -> int:
+    """
+    Convert minutes to milliseconds.
+
+    Args:
+        mins: Number of minutes to convert.
+
+    Returns:
+        int: Equivalent time duration in milliseconds.
+    """
+
+    return mins * 60 * 1000
+
+
 def min_duration_ms(date: datetime) -> int:
     """Duration in milliseconds until the next minute."""
 
