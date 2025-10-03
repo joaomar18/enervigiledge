@@ -1,7 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
 from typing import Tuple, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import time
 
 #######################################
@@ -31,46 +31,49 @@ def get_ms_difference(date_1: datetime, date_2: datetime) -> int:
 def min_duration_ms(date: datetime) -> int:
     """Duration in milliseconds until the next minute."""
 
-    next_date = datetime(date.year, date.month, date.day, date.hour, date.minute + 1, date.second, date.microsecond)
+    next_date = date + timedelta(minutes=1)
     return get_ms_difference(date, next_date)
 
 
 def min15_duration_ms(date: datetime) -> int:
     """Duration in milliseconds until 15 minutes later."""
 
-    next_date = datetime(date.year, date.month, date.day, date.hour, date.minute + 15, date.second, date.microsecond)
+    next_date = date + timedelta(minutes=15)
     return get_ms_difference(date, next_date)
 
 
 def hour_duration_ms(date: datetime) -> int:
     """Duration in milliseconds until the next hour."""
 
-    next_date = datetime(date.year, date.month, date.day, date.hour + 1, date.minute, date.second, date.microsecond)
+    next_date = date + timedelta(hours=1)
     return get_ms_difference(date, next_date)
 
 
 def day_duration_ms(date: datetime) -> int:
     """Duration in milliseconds until the next day."""
 
-    next_date = datetime(date.year, date.month, date.day + 1, date.hour, date.minute, date.second, date.microsecond)
+    next_date = date + timedelta(days=1)
     return get_ms_difference(date, next_date)
 
 
 def month_duration_ms(date: datetime) -> int:
     """Duration in milliseconds until the next month."""
 
-    next_date = datetime(date.year, date.month + 1, date.day, date.hour, date.minute, date.second, date.microsecond)
+    if date.month == 12:
+        next_date = date.replace(year=date.year + 1, month=1)
+    else:
+        next_date = date.replace(month=date.month + 1)
     return get_ms_difference(date, next_date)
 
 
 def year_duration_ms(date: datetime) -> int:
     """Duration in milliseconds until the next year."""
 
-    next_date = datetime(date.year + 1, date.month, date.day, date.hour, date.minute, date.second, date.microsecond)
+    next_date = date.replace(year=date.year + 1)
     return get_ms_difference(date, next_date)
 
 
-def get_current_date() -> datetime:
+def get_current_datetime() -> datetime:
     """
     Returns the current date and time.
 
@@ -78,7 +81,7 @@ def get_current_date() -> datetime:
         datetime: The current timestamp.
     """
 
-    return datetime.fromtimestamp(time.time())
+    return datetime.now().astimezone()
 
 
 def get_timestamp(date: datetime) -> int:

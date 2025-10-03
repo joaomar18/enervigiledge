@@ -377,8 +377,7 @@ class TimeDBClient:
         for point in points:
             start_time_str: Optional[str] = point.get('start_time')
             if start_time_str:
-                point_time = date.convert_isostr_to_timezonedate(start_time_str)
-                point_time_ms = date.get_timestamp(point_time)
+                point_time_ms = date.get_timestamp(datetime.fromisoformat(start_time_str))
                 bucket_start_ms = (point_time_ms // time_step_ms) * time_step_ms
                 existing_data[bucket_start_ms] = point
 
@@ -390,7 +389,7 @@ class TimeDBClient:
             aligned_end_time = date.get_datestr_up_to_min(date.get_date_from_timestamp(bucket_end_ms))
 
             if bucket_start_ms in existing_data:
-                point = existing_data[bucket_start_ms].copy()
+                point = existing_data[bucket_start_ms]
                 point['start_time'] = aligned_start_time
                 point['end_time'] = aligned_end_time
             else:

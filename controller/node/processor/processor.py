@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 #############LOCAL IMPORTS#############
 
 from model.controller.node import NodeConfig
+import util.functions.date as date
 
 #######################################
 
@@ -42,7 +43,7 @@ class NodeProcessor(ABC, Generic[V]):
 
         # Value and Tracking
         self.value: Optional[V] = None
-        self.timestamp: Optional[float] = None
+        self.timestamp: Optional[int] = None
         self.elapsed_time: Optional[float] = None
 
     @staticmethod
@@ -101,7 +102,7 @@ class NodeProcessor(ABC, Generic[V]):
         Updates the processor's timestamp and calculates elapsed time since last update.
         """
 
-        current_timestamp = time.time()
+        current_timestamp = date.get_timestamp(date.get_current_datetime())
         if self.timestamp is None:
             self.timestamp = current_timestamp
             self.elapsed_time = 0.0
@@ -123,7 +124,7 @@ class NodeProcessor(ABC, Generic[V]):
         """
 
         self.value = None
-        self.timestamp = time.time()
+        self.timestamp = date.get_timestamp(date.get_current_datetime())
         self.elapsed_time = None
 
     def get_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
@@ -158,7 +159,7 @@ class NodeProcessor(ABC, Generic[V]):
         output = additional_data.copy()
         output["type"] = self.config.type.value
         output["incremental"] = self.config.incremental_node
-        output["last_update_date"] = datetime.fromtimestamp(self.timestamp) if self.timestamp is not None else None
+        output["last_update_date"] = date.get_date_from_timestamp(self.timestamp) if self.timestamp is not None else None
         output["last_reset_date"] = self.last_log_datetime
         output["min_alarm_value"] = self.config.min_alarm_value
         output["max_alarm_value"] = self.config.max_alarm_value

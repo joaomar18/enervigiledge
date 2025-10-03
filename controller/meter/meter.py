@@ -155,7 +155,7 @@ class EnergyMeter(Device):
             - Resets directional energy for energy-related nodes not independently logged.
         """
 
-        current_time = datetime.now()
+        current_time = date.get_current_datetime()
 
         for node in self.meter_nodes.nodes.values():
             if not node.config.logging or not node.config.enabled:
