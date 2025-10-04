@@ -368,7 +368,7 @@ def calculate_pf_direction(prefix: str, node: Node, meter_nodes: Dict[str, Node]
         if er_node and isinstance(er_node.processor, NumericNodeProcessor):
             if er_node.processor.positive_direction:
                 node.processor.set_value(PowerFactorDirection.LAGGING.value)
-            elif er_node.processor.positive_direction:
+            elif er_node.processor.negative_direction:
                 node.processor.set_value(PowerFactorDirection.LEADING.value)
             else:
                 node.processor.set_value(PowerFactorDirection.UNKNOWN.value)

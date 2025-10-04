@@ -103,11 +103,11 @@ class NodeProcessor(ABC, Generic[V]):
 
         current_timestamp = date.get_timestamp(date.get_current_datetime())
         if self.timestamp is None:
-            self.timestamp = current_timestamp
             self.elapsed_time = 0.0
         else:
-            self.elapsed_time = current_timestamp - self.timestamp
-            self.timestamp = current_timestamp
+            self.elapsed_time = (current_timestamp - self.timestamp) / 1000.0 # converted to seconds
+
+        self.timestamp = current_timestamp
 
     def reset_alarms(self) -> None:
         """

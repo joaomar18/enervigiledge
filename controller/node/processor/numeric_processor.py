@@ -244,7 +244,7 @@ class NumericNodeProcessor(NodeProcessor[N]):
 
         else:
             output["mean_sum"] = calculation.get_scaled_value(self.mean_sum, self.config.unit)
-            output["mean_count"] = calculation.get_scaled_value(self.mean_count, self.config.unit)
+            output["mean_count"] = self.mean_count
 
             if self.min_value is not None:
                 min_value = round(self.min_value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.min_value)
