@@ -250,7 +250,16 @@ class TimeDBClient:
 
     def __iter_points(self, res: ResultSet | Iterable[ResultSet]) -> Iterator[Dict[str, Any]]:
         """
-        Yield points from a single ResultSet or an iterable of ResultSet objects.
+        Yield data points from InfluxDB query results.
+
+        Args:
+            res: Single ResultSet or iterable of ResultSet objects from InfluxDB query.
+
+        Yields:
+            Dict[str, Any]: Individual data points from the result sets.
+
+        Raises:
+            TypeError: If iterable contains non-ResultSet objects.
         """
 
         if isinstance(res, ResultSet):
@@ -263,6 +272,16 @@ class TimeDBClient:
             yield from rs.get_points()
 
     def __build_query_without_time_span(self, variable: Node) -> str:
+        """
+        Build InfluxDB query for all data without time constraints.
+
+        Args:
+            variable: Node configuration defining measurement type and unit conversion.
+
+        Returns:
+            str: InfluxDB query string for retrieving all measurement data.
+        """
+        
         if isinstance(variable.processor, NumericNodeProcessor):
             unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
 
@@ -287,6 +306,18 @@ class TimeDBClient:
         return query
 
     def __build_query_with_time_span_non_formatted(self, variable: Node, start_time_str: str, end_time_str: str) -> str:
+        """
+        Build InfluxDB query for raw data within time range.
+
+        Args:
+            variable: Node configuration defining measurement type and unit conversion.
+            start_time_str: ISO format start time string with 'Z' suffix.
+            end_time_str: ISO format end time string with 'Z' suffix.
+
+        Returns:
+            str: InfluxDB query string for raw data points within time range.
+        """
+        
         if isinstance(variable.processor, NumericNodeProcessor):
             unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
 
@@ -315,6 +346,22 @@ class TimeDBClient:
         return query
 
     def __build_query_with_time_span_formatted(self, variable: Node, start_time_str: str, end_time_str: str, time_step_ms: Optional[int]) -> str:
+        """
+        Build InfluxDB query for time-bucketed aggregated data.
+
+        Args:
+            variable: Node configuration defining measurement type and unit conversion.
+            start_time_str: ISO format start time string with 'Z' suffix.
+            end_time_str: ISO format end time string with 'Z' suffix.
+            time_step_ms: Time bucket size in milliseconds for GROUP BY time().
+
+        Returns:
+            str: InfluxDB query with GROUP BY time() and aggregation functions.
+
+        Raises:
+            NotImplementedError: If variable is not numeric (aggregation not supported).
+        """
+        
         if isinstance(variable.processor, NumericNodeProcessor):
             unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
 
@@ -331,14 +378,30 @@ class TimeDBClient:
                         GROUP BY time({time_step_ms}ms) FILL(null)"""
 
         else:
-            raise ValueError(f"Can't get logs from non numeric variables in formatted time spans")
+            raise NotImplementedError(f"Can't get logs from non numeric variables in formatted time spans")
 
         return query
 
     def __build_query_with_time_span(
         self, variable: Node, start_time_str: str, end_time_str: str, formatted: Optional[bool], time_step_ms: Optional[int]
     ) -> str:
+        """
+        Build InfluxDB query for time-constrained data with format options.
 
+        Args:
+            variable: Node configuration defining measurement type.
+            start_time_str: ISO format start time string with 'Z' suffix.
+            end_time_str: ISO format end time string with 'Z' suffix.
+            formatted: Whether to use time bucket aggregation.
+            time_step_ms: Time bucket size in milliseconds (required if formatted=True).
+
+        Returns:
+            str: InfluxDB query string based on formatting requirements.
+
+        Raises:
+            ValueError: If formatted=True but time_step_ms is not provided.
+        """
+        
         if not formatted:
             query = self.__build_query_with_time_span_non_formatted(variable, start_time_str, end_time_str)
 
@@ -353,7 +416,20 @@ class TimeDBClient:
     def __build_query(
         self, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime], formatted: Optional[bool], time_step_ms: Optional[int]
     ) -> str:
+        """
+        Build InfluxDB query based on time constraints and formatting options.
 
+        Args:
+            variable: Node configuration defining measurement type.
+            start_time: Optional query start time.
+            end_time: Optional query end time.
+            formatted: Whether to use time bucket aggregation.
+            time_step_ms: Time bucket size in milliseconds.
+
+        Returns:
+            str: Complete InfluxDB query string.
+        """
+        
         if start_time and end_time:
             start_time_str = start_time.isoformat() + "Z"
             end_time_str = end_time.isoformat() + "Z"
@@ -442,6 +518,26 @@ class TimeDBClient:
                     point = {'start_time': aligned_start_time, 'end_time': aligned_end_time, 'value': None}
 
             points.append(point)
+            
+    def __round_numeric_variables(self, variable: Node, points: List[Dict[str, Any]]) -> None:
+        """
+        Apply decimal precision rounding to numeric variable values.
+
+        Only applies to non-incremental numeric variables with configured decimal places.
+        Rounds the 'average_value' field in-place for each data point.
+
+        Args:
+            variable: Node configuration with decimal_places setting.
+            points: List of data points to modify (modified in-place).
+        """
+        
+        if not isinstance(variable.processor, NumericNodeProcessor) or variable.config.incremental_node:
+            return
+
+        for point in points:
+            if point["average_value"] is not None and variable.config.decimal_places is not None:
+                point["average_value"] = round(point["average_value"], variable.config.decimal_places)
+                
 
     def get_variable_logs_between(
         self,
@@ -453,7 +549,27 @@ class TimeDBClient:
         formatted: Optional[bool] = None,
         time_step_ms: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
+        """
+        Retrieve measurement data for a specific variable within optional time range.
 
+        Args:
+            device_name: Name of the device containing the variable.
+            device_id: Unique ID of the device.
+            variable: Node configuration defining the variable to query.
+            start_time: Optional query start time (requires end_time).
+            end_time: Optional query end time (requires start_time).
+            formatted: Whether to return time-bucketed aggregated data.
+            time_step_ms: Time bucket size in milliseconds (required if formatted=True).
+
+        Returns:
+            List[Dict[str, Any]]: Retrieved measurement data points with applied
+            unit conversions, post-processing, and precision rounding.
+
+        Raises:
+            ValueError: If only one of start_time/end_time is provided, or if
+            end_time is not later than start_time.
+        """
+        
         client = self.__require_client()
         db_name = f"{device_name}_{device_id}"
 
@@ -472,10 +588,25 @@ class TimeDBClient:
         points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
         if formatted and start_time and end_time and time_step_ms:
             self.__formatted_post_processing(variable, points, date.get_timestamp(start_time), date.get_timestamp(end_time), time_step_ms)
+        self.__round_numeric_variables(variable, points)
         return points
 
     def delete_variable_data(self, device_name: str, device_id: int, variable: Node) -> bool:
+        """
+        Delete all measurement data for a specific variable.
 
+        Args:
+            device_name: Name of the device containing the variable.
+            device_id: Unique ID of the device.
+            variable: Node configuration defining the variable to delete.
+
+        Returns:
+            bool: True if deletion was successful, False otherwise.
+
+        Raises:
+            ValueError: If the device database does not exist.
+        """
+        
         logger = LoggerManager.get_logger(__name__)
         client = self.__require_client()
 
