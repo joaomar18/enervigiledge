@@ -1,6 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Iterator
 from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
 
@@ -154,15 +154,15 @@ def process_time_span(
 
 def get_formatted_time_step(start_time: datetime, end_time: datetime) -> FormattedTimeStep:
 
-    if start_time + relativedelta(years=1) > end_time:
+    if start_time + relativedelta(years=1) < end_time:
         return FormattedTimeStep._1Y
-    elif start_time + relativedelta(months=1) > end_time:
+    elif start_time + relativedelta(months=1) < end_time:
         return FormattedTimeStep._1M
-    elif start_time + relativedelta(days=1) > end_time:
+    elif start_time + relativedelta(days=1) < end_time:
         return FormattedTimeStep._1d
-    elif start_time + relativedelta(hours=1) > end_time:
+    elif start_time + relativedelta(hours=1) < end_time:
         return FormattedTimeStep._1h
-    elif start_time + relativedelta(minutes=15) > end_time:
+    elif start_time + relativedelta(minutes=15) < end_time:
         return FormattedTimeStep._15m
     else:
         return FormattedTimeStep._1m
@@ -187,6 +187,34 @@ def get_time_step_delta(formatted_time_step: FormattedTimeStep) -> relativedelta
 
     elif formatted_time_step is FormattedTimeStep._1Y:
         return relativedelta(years=1)
+    else:
+        raise ValueError(f"Unknown formatted time_step {formatted_time_step}.")
+
+
+def time_step_to_minutes(reference_date: datetime, formatted_time_step: FormattedTimeStep) -> int:
+    if formatted_time_step is FormattedTimeStep._1m:
+        return 1
+
+    elif formatted_time_step is FormattedTimeStep._15m:
+        return 15
+
+    elif formatted_time_step is FormattedTimeStep._1h:
+        return 60
+
+    elif formatted_time_step is FormattedTimeStep._1d:
+        return 60 * 24
+
+    elif formatted_time_step is FormattedTimeStep._1M:
+        start_of_month = reference_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        next_month = start_of_month + relativedelta(months=1)
+        days_in_month = (next_month - start_of_month).days
+        return days_in_month * 60 * 24
+
+    elif formatted_time_step is FormattedTimeStep._1Y:
+        start_of_year = reference_date.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        next_year = start_of_year + relativedelta(years=1)
+        days_in_year = (next_year - start_of_year).days
+        return days_in_year * 60 * 24
     else:
         raise ValueError(f"Unknown formatted time_step {formatted_time_step}.")
 
@@ -220,35 +248,47 @@ def align_end_time(end_time: datetime, formatted_time_step: FormattedTimeStep) -
     if formatted_time_step is FormattedTimeStep._1m:
         if end_time.second == 0 and end_time.microsecond == 0:
             return end_time
-        return end_time.replace(second=0, microsecond=0) + relativedelta(minutes=1)
 
     elif formatted_time_step is FormattedTimeStep._15m:
         if (end_time.minute % 15 == 0) and end_time.second == 0 and end_time.microsecond == 0:
             return end_time
-        aligned_minute = (end_time.minute // 15) * 15
-        return end_time.replace(minute=aligned_minute, second=0, microsecond=0) + relativedelta(minutes=15)
 
     elif formatted_time_step is FormattedTimeStep._1h:
         if end_time.minute == 0 and end_time.second == 0 and end_time.microsecond == 0:
             return end_time
-        return end_time.replace(minute=0, second=0, microsecond=0) + relativedelta(hours=1)
 
     elif formatted_time_step is FormattedTimeStep._1d:
         if end_time.hour == 0 and end_time.minute == 0 and end_time.second == 0 and end_time.microsecond == 0:
             return end_time
-        return end_time.replace(hour=0, minute=0, second=0, microsecond=0) + relativedelta(days=1)
 
     elif formatted_time_step is FormattedTimeStep._1M:
         start_of_month = end_time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         if end_time == start_of_month:
             return end_time
-        return start_of_month + relativedelta(months=1)
 
     elif formatted_time_step is FormattedTimeStep._1Y:
         start_of_year = end_time.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         if end_time == start_of_year:
             return end_time
-        return start_of_year + relativedelta(years=1)
 
     else:
         raise ValueError(f"Unknown formatted time_step {formatted_time_step}.")
+
+    return align_start_time(end_time, formatted_time_step) + get_time_step_delta(formatted_time_step)
+
+
+def iterate_time_periods(
+    start_time: datetime, end_time: datetime, formatted_time_step: FormattedTimeStep
+) -> Optional[Iterator[Tuple[datetime, int]]]:
+
+    if formatted_time_step not in (FormattedTimeStep._1M, FormattedTimeStep._1Y):
+        return None
+
+    current_time = align_start_time(start_time, formatted_time_step)
+    aligned_end_time = align_end_time(end_time, formatted_time_step)
+    time_delta = get_time_step_delta(formatted_time_step)
+
+    while current_time < aligned_end_time:
+        current_minutes_period = time_step_to_minutes(current_time, formatted_time_step)
+        yield (current_time, current_minutes_period)
+        current_time += time_delta
