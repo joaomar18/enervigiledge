@@ -132,8 +132,6 @@ async def get_logs_from_node(
 
     start_time = date.convert_isostr_to_timezonedate(start_time) if start_time else None
     end_time = date.convert_isostr_to_timezonedate(end_time) if end_time else None
-    time_step_ms: Optional[int] = None
-    step_update = False # If time step needs to update in each iteration
 
     device = device_manager.get_device(device_id)
     if not device:
@@ -144,9 +142,9 @@ async def get_logs_from_node(
         raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
 
     if formatted and start_time and end_time:
-        (start_time, end_time, time_step_ms, step_update) = date.process_time_span(start_time, end_time, time_step)
+        (start_time, end_time, time_step) = date.process_time_span(start_time, end_time, time_step)
 
-    response = timedb.get_variable_logs_between(device.name, device_id, node, start_time, end_time, formatted, time_step_ms, step_update)
+    response = timedb.get_variable_logs_between(device.name, device_id, node, start_time, end_time, formatted, time_step)
     return JSONResponse(content=response)
 
 

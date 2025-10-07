@@ -5,6 +5,7 @@ from influxdb import InfluxDBClient
 from influxdb.resultset import ResultSet
 from typing import List, Dict, Any, Optional, Iterable, Iterator
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
 from dataclasses import dataclass
 
 #######################################
@@ -14,6 +15,7 @@ from dataclasses import dataclass
 from util.debug import LoggerManager
 from controller.node.node import Node
 from controller.node.processor.numeric_processor import NumericNodeProcessor
+from model.date import FormattedTimeStep
 import util.functions.date as date
 import util.functions.calculation as calculation
 
@@ -444,46 +446,22 @@ class TimeDBClient:
         self,
         variable: Node,
         points: List[Dict[str, Any]],
-        start_time_ms: int,
-        end_time_ms: int,
-        time_step_ms: int,
-        step_update: bool,
+        start_time: datetime,
+        end_time: datetime,
+        time_step: FormattedTimeStep,
     ) -> None:
-        """
-        Post-processes InfluxDB formatted query results to ensure proper time bucket alignment and completeness.
-
-        InfluxDB's GROUP BY time() with FILL(null) has limitations:
-        1. FIRST("start_time")/LAST("end_time") return original data timestamps, not bucket boundaries
-        2. May not fill all buckets in the requested range if data is sparse
-
-        This method fixes both issues by:
-        - Mapping data points to their correct time bucket ends using ceiling division
-        - Generating complete time series coverage with bucket end timestamps
-        - Aligning start_time/end_time fields to actual bucket boundaries
-        - Filling missing buckets with None values for all measurement fields
-
-        The algorithm uses bucket end alignment where each bucket is defined by [start, end]:
-        - Bucket boundaries: [start_time_ms, start_time_ms + time_step_ms], [start_time_ms + time_step_ms, start_time_ms + 2*time_step_ms], etc.
-        - Data points are mapped to the bucket end that contains their timestamp using ceiling division
-        - Expected buckets are generated as a sequence of bucket end timestamps
-
-        Args:
-            variable: Node configuration defining measurement type and structure
-            points: List of data points from InfluxDB query (modified in-place)
-            start_time_ms: Query start time in milliseconds since epoch
-            end_time_ms: Query end time in milliseconds since epoch
-            time_step_ms: Time bucket size in milliseconds
-        """
 
         if not isinstance(variable.processor, NumericNodeProcessor):
             return
 
+        time_delta = date.get_time_step_delta(time_step)
+
         for point in points:
             if point["start_time"] is not None and point["end_time"] is not None:
-                current_step_ms = date.get_timestamp(datetime.fromisoformat(point["end_time"])) - date.get_timestamp(
-                    datetime.fromisoformat(point["start_time"])
-                )
-                time_step_ms = max(time_step_ms, current_step_ms)
+                st = datetime.fromisoformat(point["start_time"])
+                et = datetime.fromisoformat(point["end_time"])
+
+                time_delta = max(time_delta, relativedelta(et - st))
 
         expected_buckets: List[int] = []
 
@@ -553,29 +531,8 @@ class TimeDBClient:
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
         formatted: Optional[bool] = None,
-        time_step_ms: Optional[int] = None,
-        step_update: bool = False,
+        time_step: Optional[FormattedTimeStep] = None,
     ) -> List[Dict[str, Any]]:
-        """
-        Retrieve measurement data for a specific variable within optional time range.
-
-        Args:
-            device_name: Name of the device containing the variable.
-            device_id: Unique ID of the device.
-            variable: Node configuration defining the variable to query.
-            start_time: Optional query start time (requires end_time).
-            end_time: Optional query end time (requires start_time).
-            formatted: Whether to return time-bucketed aggregated data.
-            time_step_ms: Time bucket size in milliseconds (required if formatted=True).
-
-        Returns:
-            List[Dict[str, Any]]: Retrieved measurement data points with applied
-            unit conversions, post-processing, and precision rounding.
-
-        Raises:
-            ValueError: If only one of start_time/end_time is provided, or if
-            end_time is not later than start_time.
-        """
 
         client = self.__require_client()
         db_name = f"{device_name}_{device_id}"
@@ -590,13 +547,11 @@ class TimeDBClient:
             raise ValueError("'end_time' must be a later date than 'start_time'.")
 
         client.switch_database(db_name)
-        query = self.__build_query(variable, start_time, end_time, formatted, time_step_ms)
+        query = self.__build_query(variable, start_time, end_time, formatted, time_step)
         result = client.query(query)
         points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
-        if formatted and start_time and end_time and time_step_ms:
-            self.__formatted_post_processing(
-                variable, points, date.get_timestamp(start_time), date.get_timestamp(end_time), time_step_ms, step_update
-            )
+        if formatted and start_time and end_time and time_step:
+            self.__formatted_post_processing(variable, points, start_time, end_time, time_step)
         self.__round_numeric_variables(variable, points)
         return points
 
