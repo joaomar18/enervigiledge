@@ -7,7 +7,6 @@ from typing import Optional, Dict
 import os
 import aiomqtt.client as mqtt
 import json
-import logging
 
 #######################################
 

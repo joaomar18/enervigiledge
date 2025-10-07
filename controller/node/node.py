@@ -1,5 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
+from typing import Dict, Any
+
 #######################################
 
 #############LOCAL IMPORTS#############
@@ -34,6 +36,14 @@ class Node:
         configuration.validate()
         self.config = configuration
         self.processor = TypeRegistry.get_type_plugin(configuration.type).node_processor_factory(configuration)
+
+    def get_publish_format(self) -> Dict[str, Any]:
+
+        return self.processor.create_publish_format()
+
+    def get_additional_info(self) -> Dict[str, Any]:
+
+        return self.processor.create_additional_info()
 
     def get_node_record(self) -> NodeRecord:
         """
@@ -100,6 +110,12 @@ class ModbusRTUNode(Node):
         """
         self.connected = state
 
+    def get_additional_info(self) -> Dict[str, Any]:
+
+        additional_info = self.processor.create_additional_info()
+        additional_info["register"] = self.register
+        return additional_info
+
     def get_node_record(self) -> NodeRecord:
         """
         Converts the Modbus RTU node instance into a serializable NodeRecord object.
@@ -142,6 +158,12 @@ class OPCUANode(Node):
             state (bool): True if the node is connected and communicating, False otherwise.
         """
         self.connected = state
+
+    def get_additional_info(self) -> Dict[str, Any]:
+
+        additional_info = self.processor.create_additional_info()
+        additional_info["node_id"] = self.node_id
+        return additional_info
 
     def get_node_record(self) -> NodeRecord:
         """

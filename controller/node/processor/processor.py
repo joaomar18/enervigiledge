@@ -36,9 +36,11 @@ class NodeProcessor(ABC, Generic[V]):
         # Logging
         self.last_log_datetime: Optional[datetime] = None
 
-        # Alarms
+        # Alarms and Warnings
         self.min_alarm_state = False
         self.max_alarm_state = False
+        self.min_warning_state = False
+        self.max_warning_state = False
 
         # Value and Tracking
         self.value: Optional[V] = None
@@ -105,17 +107,19 @@ class NodeProcessor(ABC, Generic[V]):
         if self.timestamp is None:
             self.elapsed_time = 0.0
         else:
-            self.elapsed_time = (current_timestamp - self.timestamp) / 1000.0 # converted to seconds
+            self.elapsed_time = (current_timestamp - self.timestamp) / 1000.0  # converted to seconds
 
         self.timestamp = current_timestamp
 
     def reset_alarms(self) -> None:
         """
-        Resets all alarm states to False.
+        Resets all alarm and warnings states to False.
         """
 
         self.min_alarm_state = False
         self.max_alarm_state = False
+        self.min_warning_state = False
+        self.max_warning_state = False
 
     def reset_value(self) -> None:
         """
@@ -126,16 +130,7 @@ class NodeProcessor(ABC, Generic[V]):
         self.timestamp = date.get_timestamp(date.get_current_datetime())
         self.elapsed_time = None
 
-    def get_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
-        """
-        Formats processor data for MQTT publishing.
-
-        Args:
-            additional_data (Dict[str, Any]): Additional data to include in the output.
-
-        Returns:
-            Dict[str, Any]: Formatted data including type, unit, alarms, and attributes.
-        """
+    def create_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
 
         output = additional_data.copy()
         output["type"] = self.config.type.value
@@ -144,9 +139,11 @@ class NodeProcessor(ABC, Generic[V]):
 
         if self.config.min_alarm:
             output["min_alarm_state"] = self.min_alarm_state
+            output["min_warning_state"] = self.min_warning_state
 
         if self.config.max_alarm:
             output["max_alarm_state"] = self.max_alarm_state
+            output["max_warning_state"] = self.max_warning_state
 
         attributes = self.config.attributes.get_attributes()
         for name, value in attributes.items():
@@ -154,15 +151,23 @@ class NodeProcessor(ABC, Generic[V]):
 
         return output
 
-    def get_detailed_state(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+    def create_additional_info(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
 
         output = additional_data.copy()
-        output["type"] = self.config.type.value
-        output["incremental"] = self.config.incremental_node
-        output["last_update_date"] = date.get_date_from_timestamp(self.timestamp) if self.timestamp is not None else None
-        output["last_reset_date"] = self.last_log_datetime
-        output["min_alarm_value"] = self.config.min_alarm_value
-        output["max_alarm_value"] = self.config.max_alarm_value
+        output["last_update_date"] = datetime.isoformat(date.get_date_from_timestamp(self.timestamp)) if self.timestamp is not None else None
+        output["last_reset_date"] = datetime.isoformat(self.last_log_datetime) if self.last_log_datetime is not None else None
+        if self.config.min_alarm:
+            output["min_alarm_value"] = self.config.min_alarm_value
+            output["min_warning_value"] = self.config.min_warning_value
+
+        if self.config.max_alarm:
+            output["max_alarm_value"] = self.config.max_alarm_value
+            output["max_warning_value"] = self.config.max_warning_value
+
+        output["type"] = self.config.type
+        output["protocol"] = self.config.protocol
+        if self.config.logging:
+            output["logging_period"] = self.config.logging_period
 
         return output
 

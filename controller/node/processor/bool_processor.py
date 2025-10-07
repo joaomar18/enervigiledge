@@ -54,25 +54,14 @@ class BoolNodeProcessor(NodeProcessor[bool]):
         self.value = value
 
     def get_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
-        """
-        Formats boolean value for MQTT publishing.
-
-        Args:
-            additional_data (Dict[str, Any]): Additional data to include in the output.
-
-        Returns:
-            Dict[str, Any]: Formatted data including the boolean value.
-        """
 
         output = additional_data.copy()
         output["value"] = self.value
-        return super().get_publish_format(additional_data=output)
+        return super().create_publish_format(additional_data=output)
 
-    def get_detailed_state(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+    def create_additional_info(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
 
-        output = additional_data.copy()
-        output["value"] = self.value
-        return super().get_detailed_state(additional_data=output)
+        return super().create_additional_info()
 
     def submit_log(self, date_time: datetime, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
         """

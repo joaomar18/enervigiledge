@@ -2,6 +2,7 @@
 
 from typing import Tuple, Optional
 from datetime import datetime, timezone, timedelta
+from dateutil.relativedelta import relativedelta
 import time
 
 #######################################
@@ -71,19 +72,14 @@ def day_duration_ms(date: datetime) -> int:
 
 
 def month_duration_ms(date: datetime) -> int:
-    """Duration in milliseconds until the next month."""
 
-    if date.month == 12:
-        next_date = date.replace(year=date.year + 1, month=1)
-    else:
-        next_date = date.replace(month=date.month + 1)
+    next_date = date + relativedelta(months=1)
     return get_ms_difference(date, next_date)
 
 
 def year_duration_ms(date: datetime) -> int:
-    """Duration in milliseconds until the next year."""
 
-    next_date = date.replace(year=date.year + 1)
+    next_date = date + relativedelta(years=1)
     return get_ms_difference(date, next_date)
 
 
@@ -162,8 +158,8 @@ def remove_sec_precision(date: datetime) -> datetime:
     Returns:
         datetime: Datetime with seconds and microseconds set to zero.
     """
-    date_nosec_precision = datetime(date.year, date.month, date.day, date.hour, date.minute)
-    return date_nosec_precision
+
+    return date.replace(second=0, microsecond=0)
 
 
 def get_datestr_up_to_min(date: datetime) -> str:
@@ -196,23 +192,46 @@ def subtract_datetime_mins(date_time_01: datetime, date_time_02: datetime) -> in
     return minutes_01 - minutes_02
 
 
-def process_time_span(start_time: datetime, end_time: datetime, formatted_time_step: Optional[FormattedTimeStep]) -> Tuple[datetime, datetime, int]:
+def get_aligned_start_time(start_time_ms: int, time_step_ms: int, timezone_offset: Optional[timedelta]) -> int:
     """
-    Align start and end datetimes to a formatted time step and return the step size.
-
-    - Seconds and microseconds are truncated from both input datetimes.
-    - If no time step is provided, automatically determines the best step based on the time span.
-    - The start time is floored to the nearest lower multiple of the time step.
-    - The end time is ceiled to the nearest upper multiple of the time step.
+    Align start timestamp to timezone-aware time step boundary (floor).
 
     Args:
-        start_time: Input start datetime to align.
-        end_time: Input end datetime to align.
-        formatted_time_step: Time step to align to, or None for auto-detection.
+        start_time_ms: Start timestamp in milliseconds.
+        time_step_ms: Time step duration in milliseconds.
+        timezone_offset: Timezone offset from UTC, or None for no adjustment.
 
     Returns:
-        Tuple[datetime, datetime, int]: Aligned start time, aligned end time, and time step in milliseconds.
+        int: Aligned start timestamp in milliseconds.
     """
+
+    timezone_offset_ms = int(timezone_offset.total_seconds() * 1000) if timezone_offset is not None else 0
+    print(timezone_offset_ms)
+    aligned_start_time_ms = (((start_time_ms + timezone_offset_ms) // time_step_ms) * time_step_ms) - timezone_offset_ms
+    return aligned_start_time_ms
+
+
+def get_aligned_end_time(end_time_ms: int, time_step_ms: int, timezone_offset: Optional[timedelta]) -> int:
+    """
+    Align end timestamp to timezone-aware time step boundary (ceil).
+
+    Args:
+        end_time_ms: End timestamp in milliseconds.
+        time_step_ms: Time step duration in milliseconds.
+        timezone_offset: Timezone offset from UTC, or None for no adjustment.
+
+    Returns:
+        int: Aligned end timestamp in milliseconds.
+    """
+
+    timezone_offset_ms = int(timezone_offset.total_seconds() * 1000) if timezone_offset is not None else 0
+    aligned_end_time_ms = ((((end_time_ms + timezone_offset_ms) + time_step_ms - 1) // time_step_ms) * time_step_ms) - timezone_offset_ms
+    return aligned_end_time_ms
+
+
+def process_time_span(
+    start_time: datetime, end_time: datetime, formatted_time_step: Optional[FormattedTimeStep]
+) -> Tuple[datetime, datetime, int, bool]:
 
     start_time_fixed_prec = remove_sec_precision(start_time)
     end_time_fixed_prec = remove_sec_precision(end_time)
@@ -223,15 +242,15 @@ def process_time_span(start_time: datetime, end_time: datetime, formatted_time_s
     if formatted_time_step is None:
         formatted_time_step = get_formatted_time_step(start_time_fixed_prec, start_time_ms, end_time_ms)
 
-    time_step_ms = get_time_step_ms(start_time_fixed_prec, formatted_time_step)
+    time_step_ms, step_update = get_time_step_ms(start_time_fixed_prec, formatted_time_step)
 
-    aligned_start_time_ms = (start_time_ms // time_step_ms) * time_step_ms
-    aligned_end_time_ms = ((end_time_ms + time_step_ms - 1) // time_step_ms) * time_step_ms
+    aligned_start_time_ms = get_aligned_start_time(start_time_ms, time_step_ms, start_time.utcoffset())
+    aligned_end_time_ms = get_aligned_end_time(end_time_ms, time_step_ms, end_time.utcoffset())
 
     aligned_start_time = get_date_from_timestamp(aligned_start_time_ms)
     aligned_end_time = get_date_from_timestamp(aligned_end_time_ms)
 
-    return aligned_start_time, aligned_end_time, time_step_ms
+    return (aligned_start_time, aligned_end_time, time_step_ms, step_update)
 
 
 def get_formatted_time_step(start_time: datetime, start_time_ms: int, end_time_ms: int) -> FormattedTimeStep:
@@ -263,29 +282,19 @@ def get_formatted_time_step(start_time: datetime, start_time_ms: int, end_time_m
         return FormattedTimeStep._1m
 
 
-def get_time_step_ms(start_time: datetime, formatted_time_step: FormattedTimeStep) -> int:
-    """
-    Convert formatted time step to milliseconds duration.
-
-    Args:
-        start_time: Reference datetime for duration calculations.
-        formatted_time_step: The formatted time step to convert.
-
-    Returns:
-        int: Duration in milliseconds for the given time step.
-    """
+def get_time_step_ms(start_time: datetime, formatted_time_step: FormattedTimeStep) -> Tuple[int, bool]:
 
     if formatted_time_step is FormattedTimeStep._1m:
-        return min_duration_ms(start_time)
+        return (min_duration_ms(start_time), False)
     elif formatted_time_step is FormattedTimeStep._15m:
-        return min15_duration_ms(start_time)
+        return (min15_duration_ms(start_time), False)
     elif formatted_time_step is FormattedTimeStep._1h:
-        return hour_duration_ms(start_time)
+        return (hour_duration_ms(start_time), False)
     elif formatted_time_step is FormattedTimeStep._1d:
-        return day_duration_ms(start_time)
+        return (day_duration_ms(start_time), False)
     elif formatted_time_step is FormattedTimeStep._1M:
-        return month_duration_ms(start_time)
+        return (month_duration_ms(start_time), True)
     elif formatted_time_step is FormattedTimeStep._1Y:
-        return year_duration_ms(start_time)
+        return (year_duration_ms(start_time), True)
     else:
         raise ValueError(f"Unknown formatted time_step {formatted_time_step}.")

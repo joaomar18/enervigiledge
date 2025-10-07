@@ -58,5 +58,5 @@ async def test_publish_nodes_filters_and_formats():
     await meter.publish_nodes()
     msg: MQTTMessage = await meter.publish_queue.get()
     assert msg.topic == "meter_1_nodes"
-    assert msg.payload == {"voltage": node1.processor.get_publish_format()}
+    assert msg.payload == {"voltage": node1.get_publish_format()}
     assert meter.publish_queue.empty()

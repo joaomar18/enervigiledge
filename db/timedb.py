@@ -281,7 +281,7 @@ class TimeDBClient:
         Returns:
             str: InfluxDB query string for retrieving all measurement data.
         """
-        
+
         if isinstance(variable.processor, NumericNodeProcessor):
             unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
 
@@ -317,7 +317,7 @@ class TimeDBClient:
         Returns:
             str: InfluxDB query string for raw data points within time range.
         """
-        
+
         if isinstance(variable.processor, NumericNodeProcessor):
             unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
 
@@ -361,7 +361,7 @@ class TimeDBClient:
         Raises:
             NotImplementedError: If variable is not numeric (aggregation not supported).
         """
-        
+
         if isinstance(variable.processor, NumericNodeProcessor):
             unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
 
@@ -401,7 +401,7 @@ class TimeDBClient:
         Raises:
             ValueError: If formatted=True but time_step_ms is not provided.
         """
-        
+
         if not formatted:
             query = self.__build_query_with_time_span_non_formatted(variable, start_time_str, end_time_str)
 
@@ -429,7 +429,7 @@ class TimeDBClient:
         Returns:
             str: Complete InfluxDB query string.
         """
-        
+
         if start_time and end_time:
             start_time_str = start_time.isoformat() + "Z"
             end_time_str = end_time.isoformat() + "Z"
@@ -441,7 +441,13 @@ class TimeDBClient:
         return query
 
     def __formatted_post_processing(
-        self, variable: Node, points: List[Dict[str, Any]], start_time_ms: int, end_time_ms: int, time_step_ms: int
+        self,
+        variable: Node,
+        points: List[Dict[str, Any]],
+        start_time_ms: int,
+        end_time_ms: int,
+        time_step_ms: int,
+        step_update: bool,
     ) -> None:
         """
         Post-processes InfluxDB formatted query results to ensure proper time bucket alignment and completeness.
@@ -490,8 +496,9 @@ class TimeDBClient:
 
         for point in points:
             if point["end_time"] is not None:
-                point_time_ms = date.get_timestamp(datetime.fromisoformat(point["end_time"]))
-                bucket_end_ms = ((point_time_ms + time_step_ms - 1) // time_step_ms) * time_step_ms
+                point_time = datetime.fromisoformat(point["end_time"])
+                point_time_ms = date.get_timestamp(point_time)
+                bucket_end_ms = date.get_aligned_end_time(point_time_ms, time_step_ms, point_time.utcoffset())
                 existing_data[bucket_end_ms] = point
 
         points.clear()
@@ -518,7 +525,7 @@ class TimeDBClient:
                     point = {'start_time': aligned_start_time, 'end_time': aligned_end_time, 'value': None}
 
             points.append(point)
-            
+
     def __round_numeric_variables(self, variable: Node, points: List[Dict[str, Any]]) -> None:
         """
         Apply decimal precision rounding to numeric variable values.
@@ -530,14 +537,13 @@ class TimeDBClient:
             variable: Node configuration with decimal_places setting.
             points: List of data points to modify (modified in-place).
         """
-        
+
         if not isinstance(variable.processor, NumericNodeProcessor) or variable.config.incremental_node:
             return
 
         for point in points:
             if point["average_value"] is not None and variable.config.decimal_places is not None:
                 point["average_value"] = round(point["average_value"], variable.config.decimal_places)
-                
 
     def get_variable_logs_between(
         self,
@@ -548,6 +554,7 @@ class TimeDBClient:
         end_time: Optional[datetime] = None,
         formatted: Optional[bool] = None,
         time_step_ms: Optional[int] = None,
+        step_update: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         Retrieve measurement data for a specific variable within optional time range.
@@ -569,7 +576,7 @@ class TimeDBClient:
             ValueError: If only one of start_time/end_time is provided, or if
             end_time is not later than start_time.
         """
-        
+
         client = self.__require_client()
         db_name = f"{device_name}_{device_id}"
 
@@ -587,7 +594,9 @@ class TimeDBClient:
         result = client.query(query)
         points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
         if formatted and start_time and end_time and time_step_ms:
-            self.__formatted_post_processing(variable, points, date.get_timestamp(start_time), date.get_timestamp(end_time), time_step_ms)
+            self.__formatted_post_processing(
+                variable, points, date.get_timestamp(start_time), date.get_timestamp(end_time), time_step_ms, step_update
+            )
         self.__round_numeric_variables(variable, points)
         return points
 
@@ -606,7 +615,7 @@ class TimeDBClient:
         Raises:
             ValueError: If the device database does not exist.
         """
-        
+
         logger = LoggerManager.get_logger(__name__)
         client = self.__require_client()
 

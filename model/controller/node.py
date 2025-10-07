@@ -188,6 +188,8 @@ class NodeConfig:
         max_alarm (bool): Whether to trigger an alarm if value exceeds max_alarm_value.
         min_alarm_value (float | None): Minimum threshold for alarm triggering.
         max_alarm_value (float | None): Maximum threshold for alarm triggering.
+        min_warning_value (float | None): Minimum treshold for warning triggering.
+        max_warning_value (float | None): Maximum treshold for warning triggering.
         decimal_places (int | None): Number of decimal places to display (FLOAT only).
         attributes (NodeAttributes): Domain-specific metadata (e.g. phase).
 
@@ -212,6 +214,8 @@ class NodeConfig:
     max_alarm: bool = False
     min_alarm_value: float | None = 0.0
     max_alarm_value: float | None = 0.0
+    min_warning_value: float | None = None
+    max_warning_value: float | None = None
     decimal_places: int | None = 3
     attributes: NodeAttributes = field(default_factory=NodeAttributes)
 
@@ -242,6 +246,15 @@ class NodeConfig:
             attributes=NodeAttributes(**record.attributes),
             **filtered_config,
         )
+
+    def __post_init__(self):
+
+        DEFAULT_WARNING_PERCENT = 0.02
+
+        if self.min_warning_value is None and self.min_alarm_value is not None:
+            self.min_warning_value = self.min_alarm_value * (1 + DEFAULT_WARNING_PERCENT)
+        if self.max_warning_value is None and self.max_alarm_value is not None:
+            self.max_warning_value = self.max_alarm_value * (1 - DEFAULT_WARNING_PERCENT)
 
     def validate(self) -> None:
         """

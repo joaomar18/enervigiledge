@@ -56,19 +56,23 @@ class NumericNodeProcessor(NodeProcessor[N]):
 
     def check_alarms(self, value: N) -> None:
         """
-        Checks value against configured alarm thresholds and updates alarm states.
+        Checks value against configured alarm / warning thresholds and updates alarm / warning states.
 
         Args:
-            value (N): The value to check against alarm thresholds.
+            value (N): The value to check against alarm / warning thresholds.
         """
 
         if self.config.min_alarm and self.config.min_alarm_value is not None:
-            if value < self.config.min_alarm_value:
-                self.min_alarm_state = True
+            self.min_alarm_state = value < self.config.min_alarm_value
 
         if self.config.max_alarm and self.config.max_alarm_value is not None:
-            if value > self.config.max_alarm_value:
-                self.max_alarm_state = True
+            self.max_alarm_state = value > self.config.max_alarm_value
+
+        if self.config.min_alarm and self.config.min_warning_value is not None:
+            self.min_warning_state = value < self.config.min_warning_value
+
+        if self.config.max_alarm and self.config.max_warning_value is not None:
+            self.max_warning_state = value > self.config.max_warning_value
 
     def reset_direction(self) -> None:
         """
@@ -187,16 +191,7 @@ class NumericNodeProcessor(NodeProcessor[N]):
         self.update_statistics(value)
         self.check_alarms(value)
 
-    def get_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
-        """
-        Formats numeric value for MQTT publishing with proper decimal place rounding.
-
-        Args:
-            additional_data (Dict[str, Any]): Additional data to include in the output.
-
-        Returns:
-            Dict[str, Any]: Formatted data including the properly rounded value.
-        """
+    def create_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
 
         output = additional_data.copy()
         if self.value is not None:
@@ -207,23 +202,15 @@ class NumericNodeProcessor(NodeProcessor[N]):
         if self.config.decimal_places is not None:
             output["decimal_places"] = self.config.decimal_places
 
-        if self.config.min_alarm:
-            output["min_alarm_value"] = self.config.min_alarm_value
+        if self.config.min_alarm and self.config.max_alarm:
+            output["min_value_range"] = self.config.min_alarm_value
+            output["max_value_range"] = self.config.max_alarm_value
 
-        if self.config.max_alarm:
-            output["max_alarm_value"] = self.config.max_alarm_value
+        return super().create_publish_format(additional_data=output)
 
-        return super().get_publish_format(additional_data=output)
+    def create_additional_info(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
 
-    def get_detailed_state(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
-
-        output = additional_data.copy()
-        if self.value is not None:
-            output["value"] = round(self.value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.value)
-        else:
-            output["value"] = self.value
-
-        return super().get_detailed_state(additional_data=output)
+        return super().create_additional_info()
 
     def submit_log(self, date_time: datetime, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
         """

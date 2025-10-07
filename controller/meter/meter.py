@@ -310,7 +310,7 @@ class EnergyMeter(Device):
         Publishes the current values of all nodes marked for publishing via MQTT.
 
         For each node:
-            - Checks if the node is marked as `publish=True` and has a non-null value.
+            - Checks if the node is marked as `publish=True`.
             - Serializes the node's data using `get_publish_format()`.
 
         The result is sent as a single MQTT message to a topic formatted as:
@@ -320,15 +320,13 @@ class EnergyMeter(Device):
             Exception: If `get_publish_format()` raises due to missing value.
         """
 
-        publish_nodes: Dict[str, Node] = {
-            name: node for name, node in self.meter_nodes.nodes.items() if node.config.publish and node.processor.value is not None
-        }
+        publish_nodes: Dict[str, Node] = {name: node for name, node in self.meter_nodes.nodes.items() if node.config.publish}
 
         topic = f"{self.name}_{self.id}_nodes"
         payload: Dict[str, Any] = {}
 
         for node in publish_nodes.values():
-            payload[node.config.name] = node.processor.get_publish_format()
+            payload[node.config.name] = node.get_publish_format()
 
         if payload:
             await self.publish_queue.put(MQTTMessage(qos=0, topic=topic, payload=payload))

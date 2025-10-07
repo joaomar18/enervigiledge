@@ -4,12 +4,12 @@ from fastapi import APIRouter, Request, Depends
 from typing import Optional
 from fastapi.responses import JSONResponse
 from datetime import datetime
-import time
 
 #######################################
 
 #############LOCAL IMPORTS#############
 
+from controller.meter.meter import EnergyMeter
 from web.safety import HTTPSafety
 from web.dependencies import services
 from web.api.decorator import auth_endpoint, AuthConfigs
@@ -39,16 +39,16 @@ async def get_nodes_state(
         raise ValueError(f"Device with id {device_id} does not exist.")
 
     if filter:
-        nodes_state = {node.config.name: node.processor.get_publish_format() for node in device.nodes if filter in node.config.name}
+        nodes_state = {node.config.name: node.get_publish_format() for node in device.nodes if node.config.publish and filter in node.config.name}
     else:
-        nodes_state = {node.config.name: node.processor.get_publish_format() for node in device.nodes}
+        nodes_state = {node.config.name: node.get_publish_format() for node in device.nodes if node.config.publish}
 
     return JSONResponse(content=nodes_state)
 
 
-@router.get("/get_node_detailed_state")
+@router.get("/get_node_additional_info")
 @auth_endpoint(AuthConfigs.PROTECTED)
-async def get_node_detailed_state(
+async def get_node_additional_info(
     request: Request, safety: HTTPSafety = Depends(services.get_safety), device_manager: DeviceManager = Depends(services.get_device_manager)
 ) -> JSONResponse:
 
@@ -66,7 +66,10 @@ async def get_node_detailed_state(
     elif len(nodes) != 1:
         raise ValueError(f"Device with id {device_id} has more than 1 node with name {node_name}.")
 
-    node_detailed_state = nodes[0].processor.get_detailed_state()
+    node_detailed_state = nodes[0].get_additional_info()
+
+    if isinstance(device, EnergyMeter):
+        node_detailed_state.update({"read_period": device.communication_options.read_period})
 
     return JSONResponse(content=node_detailed_state)
 
@@ -130,7 +133,8 @@ async def get_logs_from_node(
     start_time = date.convert_isostr_to_timezonedate(start_time) if start_time else None
     end_time = date.convert_isostr_to_timezonedate(end_time) if end_time else None
     time_step_ms: Optional[int] = None
-    
+    step_update = False # If time step needs to update in each iteration
+
     device = device_manager.get_device(device_id)
     if not device:
         raise ValueError(f"Device with id {device_id} does not exist.")
@@ -140,18 +144,9 @@ async def get_logs_from_node(
         raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
 
     if formatted and start_time and end_time:
-        (start_time, end_time, time_step_ms) = date.process_time_span(start_time, end_time, time_step)
+        (start_time, end_time, time_step_ms, step_update) = date.process_time_span(start_time, end_time, time_step)
 
-    # Performance measurement
-    start_time_perf = time.perf_counter()
-    response = timedb.get_variable_logs_between(device.name, device_id, node, start_time, end_time, formatted, time_step_ms)
-    end_time_perf = time.perf_counter()
-    
-    execution_time_ms = (end_time_perf - start_time_perf) * 1000
-    bucket_count = len(response) if response else 0
-    
-    print(f"⏱️  Query Performance: {execution_time_ms:.2f}ms | Buckets: {bucket_count} | Node: {name} | Formatted: {formatted}")
-    
+    response = timedb.get_variable_logs_between(device.name, device_id, node, start_time, end_time, formatted, time_step_ms, step_update)
     return JSONResponse(content=response)
 
 
