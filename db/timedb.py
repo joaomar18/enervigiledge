@@ -16,6 +16,7 @@ from util.debug import LoggerManager
 from controller.node.node import Node
 from controller.node.processor.numeric_processor import NumericNodeProcessor
 from model.date import FormattedTimeStep
+from model.db import QueryVariableLogs
 import util.functions.date as date
 import util.functions.calculation as calculation
 
@@ -273,101 +274,56 @@ class TimeDBClient:
                 raise TypeError(f"Items must be ResultSet. Got type: {type(rs).__name__}")
             yield from rs.get_points()
 
-    def __build_query_without_time_span(self, variable: Node) -> str:
-        """
-        Build InfluxDB query for all data without time constraints.
-
-        Args:
-            variable: Node configuration defining measurement type and unit conversion.
-
-        Returns:
-            str: InfluxDB query string for retrieving all measurement data.
-        """
+    def __extend_query(self, query: QueryVariableLogs, variable: Node, formatted: bool) -> None:
 
         if isinstance(variable.processor, NumericNodeProcessor):
             unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
 
             if not variable.config.incremental_node:
-                query = f"""
-                        SELECT "start_time", "end_time",
-                        ("mean_sum" / "mean_count") / {unit_factor} AS average_value,
-                        "min_value" / {unit_factor} AS min_value, "max_value" / {unit_factor} AS max_value
-                        FROM "{variable.config.name}"
-                        """.strip()
-            else:
-                query = f"""
-                        SELECT "start_time", "end_time", "value" / {unit_factor} AS value
-                        FROM "{variable.config.name}"
-                        """.strip()
-        else:
-            query = f"""
-                    SELECT "start_time", "end_time", "value"
-                    FROM "{variable.config.name}"
-                    """.strip()
+                query.where.append('"mean_count" > 0')
+                if formatted: # formatted/bucketed
+                    query.fields.extend([
+                        f'(SUM("mean_sum") / SUM("mean_count")) / {unit_factor} AS average_value',
+                        f'MIN("min_value") / {unit_factor} AS min_value',
+                        f'MAX("max_value") / {unit_factor} AS max_value',
+                    ])
+                else: # raw/non-formatted
+                    query.fields.extend([
+                        f'("mean_sum" / "mean_count") / {unit_factor} AS average_value',
+                        f'"min_value" / {unit_factor} AS min_value',
+                        f'"max_value" / {unit_factor} AS max_value',
+                ])
+            else: # incremental node
+                if formatted:
+                    query.fields.extend([f'SUM("value") / {unit_factor} AS value'])
 
-        return query
+                else:
+                    query.fields.extend([f'"value" / {unit_factor} AS value'])
+        else:
+            if formatted:
+                raise NotImplementedError("Can't get logs from non-numeric variables in formatted time spans")
+            query.fields.extend(['"value"'])
+
+    def __build_query_without_time_span(self, variable: Node) -> str:
+
+        query = QueryVariableLogs(variable=variable.config.name, fields=["start_time", "end_time"])
+        self.__extend_query(query, variable, False)
+        return query.render()
 
     def __build_query_with_time_span_non_formatted(self, variable: Node, start_time_str: str, end_time_str: str) -> str:
-        """
-        Build InfluxDB query for raw data within time range.
 
-        Args:
-            variable: Node configuration defining measurement type and unit conversion.
-            start_time_str: ISO format start time string with 'Z' suffix.
-            end_time_str: ISO format end time string with 'Z' suffix.
-
-        Returns:
-            str: InfluxDB query string for raw data points within time range.
-        """
-
-        if isinstance(variable.processor, NumericNodeProcessor):
-            unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
-
-            if not variable.config.incremental_node:
-                query = f"""
-                        SELECT "start_time", "end_time", 
-                        ("mean_sum" / "mean_count") / {unit_factor} AS average_value,
-                        "min_value" / {unit_factor} AS min_value, "max_value" / {unit_factor} AS max_value
-                        FROM "{variable.config.name}"
-                        WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
-                        """.strip()
-            else:
-                query = f"""
-                        SELECT "start_time", "end_time",
-                        "value" / {unit_factor} AS value
-                        FROM "{variable.config.name}"
-                        WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
-                        """.strip()
-        else:
-            query = f"""
-                    SELECT "start_time", "end_time", "value"
-                    FROM "{variable.config.name}"
-                    WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
-                    """.strip()
-
-        return query
+        query = QueryVariableLogs(variable=variable.config.name, fields=["start_time", "end_time"], where=[f"time >= '{start_time_str}'", f"time <= '{end_time_str}'"])
+        self.__extend_query(query, variable, False)
+        return query.render()
 
     def __build_query_with_time_span_formatted(self, variable: Node, start_time_str: str, end_time_str: str, minutes_step: int) -> str:
+        
+        if minutes_step < 1:
+            raise ValueError("minutes_step must be >= 1")
 
-        if isinstance(variable.processor, NumericNodeProcessor):
-            unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
-
-            if not variable.config.incremental_node:
-                query = f"""SELECT FIRST("start_time") AS start_time, LAST("end_time") AS end_time,
-                        (SUM("mean_sum") / SUM("mean_count")) / {unit_factor} AS average_value,
-                        MIN("min_value") / {unit_factor} AS min_value, MAX("max_value") / {unit_factor} AS max_value FROM "{variable.config.name}"
-                        WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
-                        GROUP BY time({minutes_step}m) FILL(null)"""
-            else:
-                query = f"""SELECT FIRST("start_time") AS start_time, LAST("end_time") AS end_time,
-                        (SUM("value")) / {unit_factor} AS value FROM "{variable.config.name}"
-                        WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
-                        GROUP BY time({minutes_step}m) FILL(null)"""
-
-        else:
-            raise NotImplementedError(f"Can't get logs from non numeric variables in formatted time spans")
-
-        return query
+        query = QueryVariableLogs(variable=variable.config.name, fields=['FIRST("start_time") AS start_time', 'LAST("end_time") AS end_time'], where=[f"time >= '{start_time_str}'", f"time <= '{end_time_str}'"], group_by=[f"time({minutes_step}m)"], fill="null")
+        self.__extend_query(query, variable, True)
+        return query.render()
 
     def __build_query_with_time_span(
         self, variable: Node, start_time_str: str, end_time_str: str, formatted: Optional[bool], minutes_step: Optional[int]
@@ -491,7 +447,31 @@ class TimeDBClient:
             if point["average_value"] is not None and variable.config.decimal_places is not None:
                 point["average_value"] = round(point["average_value"], variable.config.decimal_places)
 
-    def get_variable_logs_between(
+    def __get_formatted_variable_logs(self, client: InfluxDBClient, variable: Node, start_time: datetime, end_time: datetime, time_step: FormattedTimeStep, time_zone: Optional[ZoneInfo] = None) -> List[Dict[str, Any]]:
+            
+        variable_logs: List[Dict[str, Any]] = []
+        query_iterator = date.iterate_time_periods(start_time, end_time, time_step, time_zone)
+        if query_iterator:
+            for st, minutes_step in query_iterator:
+                query = self.__build_query(variable, st, date.calculate_date_delta(st, time_step, time_zone), True, minutes_step)
+                result = client.query(query)
+                points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
+                variable_logs.extend(points)
+        else:
+            query = self.__build_query(variable, start_time, end_time, True, date.time_step_to_minutes(start_time, time_step, time_zone))
+            result = client.query(query)
+            points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
+            variable_logs.extend(points)
+
+        return variable_logs
+
+    def __get_raw_variable_logs(self, client: InfluxDBClient, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime]) -> List[Dict[str, Any]]:
+        
+        query = self.__build_query(variable, start_time, end_time, False, None)
+        result = client.query(query)
+        return [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
+
+    def get_variable_logs(
         self,
         device_name: str,
         device_id: int,
@@ -516,33 +496,18 @@ class TimeDBClient:
             raise ValueError("'end_time' must be a later date than 'start_time'.")
 
         client.switch_database(db_name)
-        final_points: List[Dict[str, Any]] = []
 
-        if formatted and start_time and end_time and time_step:
-
-            query_iterator = date.iterate_time_periods(start_time, end_time, time_step, time_zone)
-            if query_iterator:
-                for st, minutes_step in query_iterator:
-                    query = self.__build_query(variable, st, date.calculate_date_delta(st, time_step, time_zone), formatted, minutes_step)
-                    result = client.query(query)
-                    points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
-                    final_points.extend(points)
-            else:
-                query = self.__build_query(variable, start_time, end_time, formatted, date.time_step_to_minutes(start_time, time_step, time_zone))
-                result = client.query(query)
-                points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
-                final_points.extend(points)
+        if formatted and start_time and end_time and time_step: # Logs are to be Formatted
+            variable_logs = self.__get_formatted_variable_logs(client, variable, start_time, end_time, time_step, time_zone)
 
         else:
-            query = self.__build_query(variable, start_time, end_time, False, None)
-            result = client.query(query)
-            points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
-            final_points.extend(points)
+            variable_logs = self.__get_raw_variable_logs(client, variable, start_time, end_time)
 
-        if formatted and start_time and end_time and time_step:
-            self.__formatted_post_processing(variable, final_points, start_time, end_time, time_step, time_zone)
-        self.__round_numeric_variables(variable, final_points)
-        return final_points
+        if formatted and start_time and end_time and time_step: # Apply post logs processing if logs are Formatted
+            self.__formatted_post_processing(variable, variable_logs, start_time, end_time, time_step, time_zone)
+        self.__round_numeric_variables(variable, variable_logs)
+
+        return variable_logs
 
     def delete_variable_data(self, device_name: str, device_id: int, variable: Node) -> bool:
         """

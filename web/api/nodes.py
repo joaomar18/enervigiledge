@@ -145,7 +145,7 @@ async def get_logs_from_node(
     if formatted and start_time and end_time:
         (start_time, end_time, time_step) = date.process_time_span(start_time, end_time, time_step, time_zone)
 
-    response = timedb.get_variable_logs_between(device.name, device_id, node, start_time, end_time, formatted, time_step, time_zone)
+    response = timedb.get_variable_logs(device.name, device_id, node, start_time, end_time, formatted, time_step, time_zone)
     return JSONResponse(content=response)
 
 
