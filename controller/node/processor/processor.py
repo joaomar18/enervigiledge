@@ -103,7 +103,7 @@ class NodeProcessor(ABC, Generic[V]):
         Updates the processor's timestamp and calculates elapsed time since last update.
         """
 
-        current_timestamp = date.get_timestamp(date.get_current_datetime())
+        current_timestamp = date.get_timestamp(date.get_current_utc_datetime())
         if self.timestamp is None:
             self.elapsed_time = 0.0
         else:
@@ -127,7 +127,7 @@ class NodeProcessor(ABC, Generic[V]):
         """
 
         self.value = None
-        self.timestamp = date.get_timestamp(date.get_current_datetime())
+        self.timestamp = date.get_timestamp(date.get_current_utc_datetime())
         self.elapsed_time = None
 
     def create_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:

@@ -117,7 +117,8 @@ async def get_logs_from_node(
 
     device_id = int(objects.require_field(request.query_params, "device_id", str))
     name = objects.require_field(request.query_params, "node_name", str)
-    formatted = bool(request.query_params.get("formatted"))
+    formatted = objects.check_bool_str(request.query_params.get("formatted"))
+    time_zone = date.get_time_zone_info(request.query_params.get("time_zone"))
 
     if formatted:
         time_step = request.query_params.get("time_step")
@@ -130,8 +131,8 @@ async def get_logs_from_node(
         end_time = request.query_params.get("end_time")  # Optional
         time_step = None
 
-    start_time = date.convert_isostr_to_timezonedate(start_time) if start_time else None
-    end_time = date.convert_isostr_to_timezonedate(end_time) if end_time else None
+    start_time = date.remove_sec_precision(date.convert_isostr_to_date(start_time)) if start_time else None
+    end_time = date.remove_sec_precision(date.convert_isostr_to_date(end_time)) if end_time else None
 
     device = device_manager.get_device(device_id)
     if not device:
@@ -142,9 +143,9 @@ async def get_logs_from_node(
         raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
 
     if formatted and start_time and end_time:
-        (start_time, end_time, time_step) = date.process_time_span(start_time, end_time, time_step)
+        (start_time, end_time, time_step) = date.process_time_span(start_time, end_time, time_step, time_zone)
 
-    response = timedb.get_variable_logs_between(device.name, device_id, node, start_time, end_time, formatted, time_step)
+    response = timedb.get_variable_logs_between(device.name, device_id, node, start_time, end_time, formatted, time_step, time_zone)
     return JSONResponse(content=response)
 
 

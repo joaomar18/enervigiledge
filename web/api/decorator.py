@@ -90,7 +90,7 @@ def auth_endpoint(config: APIMethodConfig):
 
                 # Handle incrementing exceptions
                 if any(isinstance(e, exc) for exc in all_increment_exceptions):
-                    logger.warning(
+                    logger.exception(
                         f"Failed {web_util.get_api_url(request)} API due to exception {exception_name} from IP: {web_util.get_ip_address(request)} due to error: {str(e)}"
                     )
                     safety.increment_failed_requests(request, web_util.get_api_url(request))

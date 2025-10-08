@@ -3,10 +3,10 @@
 import asyncio
 from influxdb import InfluxDBClient
 from influxdb.resultset import ResultSet
-from typing import List, Dict, Any, Optional, Iterable, Iterator
+from typing import List, Dict, Tuple, Any, Optional, Iterable, Iterator
 from datetime import datetime
-from dateutil.relativedelta import relativedelta
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo
 
 #######################################
 
@@ -110,8 +110,8 @@ class TimeDBClient:
             start_time: datetime = item["start_time"]
             end_time: datetime = item["end_time"]
 
-            formatted_start = date.get_datestr_up_to_min(start_time)
-            formatted_end = date.get_datestr_up_to_min(end_time)
+            formatted_start = date.to_iso_minutes(start_time)
+            formatted_end = date.to_iso_minutes(end_time)
 
             end_time_trimmed = date.remove_sec_precision(end_time)
 
@@ -273,22 +273,6 @@ class TimeDBClient:
                 raise TypeError(f"Items must be ResultSet. Got type: {type(rs).__name__}")
             yield from rs.get_points()
 
-    def __minutes_step_to_influx(self, minutes_step: int) -> str:
-        rem = minutes_step * 60
-
-        units = []
-        for unit_seconds, suffix in [
-            (7 * 24 * 3600, "w"),  # weeks
-            (24 * 3600, "d"),  # days
-            (3600, "h"),  # hours
-            (60, "m"),  # minutes
-            (1, "s"),  # seconds
-        ]:
-            val, rem = divmod(rem, unit_seconds)
-            if val:
-                units.append(f"{val}{suffix}")
-        return "".join(units)
-
     def __build_query_without_time_span(self, variable: Node) -> str:
         """
         Build InfluxDB query for all data without time constraints.
@@ -368,18 +352,17 @@ class TimeDBClient:
         if isinstance(variable.processor, NumericNodeProcessor):
             unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
 
-            print(f"Time: {minutes_step}m")
             if not variable.config.incremental_node:
                 query = f"""SELECT FIRST("start_time") AS start_time, LAST("end_time") AS end_time,
                         (SUM("mean_sum") / SUM("mean_count")) / {unit_factor} AS average_value,
                         MIN("min_value") / {unit_factor} AS min_value, MAX("max_value") / {unit_factor} AS max_value FROM "{variable.config.name}"
                         WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
-                        GROUP BY time({self.__minutes_step_to_influx(minutes_step)}) FILL(null)"""
+                        GROUP BY time({minutes_step}m) FILL(null)"""
             else:
                 query = f"""SELECT FIRST("start_time") AS start_time, LAST("end_time") AS end_time,
                         (SUM("value")) / {unit_factor} AS value FROM "{variable.config.name}"
                         WHERE time >= '{start_time_str}' AND time <= '{end_time_str}'
-                        GROUP BY time({self.__minutes_step_to_influx(minutes_step)}m) FILL(null)"""
+                        GROUP BY time({minutes_step}m) FILL(null)"""
 
         else:
             raise NotImplementedError(f"Can't get logs from non numeric variables in formatted time spans")
@@ -406,14 +389,69 @@ class TimeDBClient:
     ) -> str:
 
         if start_time and end_time:
-            start_time_str = start_time.isoformat() + "Z"
-            end_time_str = end_time.isoformat() + "Z"
+            start_time_str = start_time.isoformat()
+            end_time_str = end_time.isoformat()
             query = self.__build_query_with_time_span(variable, start_time_str, end_time_str, formatted, minutes_step)
 
         else:
             query = self.__build_query_without_time_span(variable)
 
         return query
+
+    def __adjust_time_step(self, points: List[Dict[str, Any]], time_step: FormattedTimeStep, time_zone: Optional[ZoneInfo]) -> FormattedTimeStep:
+
+        for point in points:
+            if point["start_time"] is not None and point["end_time"] is not None:
+                st = date.convert_isostr_to_date(point["start_time"])
+                et = date.convert_isostr_to_date(point["end_time"])
+                current_time_step = date.get_formatted_time_step(st, et)
+                if date.time_step_to_minutes(st, time_step, time_zone) < date.time_step_to_minutes(st, current_time_step, time_zone):
+                    time_step = current_time_step
+
+        return time_step
+
+    def __align_points_start_time(
+        self, points: List[Dict[str, Any]], aligned_time_buckets: List[Tuple[datetime, datetime]]
+    ) -> Dict[datetime, Dict[str, Any]]:
+
+        existing_data: Dict[datetime, Dict[str, Any]] = {}
+
+        for point in points:
+            if point["start_time"] is not None:
+                point_time = date.convert_isostr_to_date(point["start_time"])
+                bucket_start = date.find_bucket_for_time(point_time, aligned_time_buckets)
+                existing_data[bucket_start] = point
+        return existing_data
+
+    def __fill_formatted_time_buckets(
+        self,
+        variable: Node,
+        points: List[Dict[str, Any]],
+        aligned_time_buckets: List[Tuple[datetime, datetime]],
+        existing_data: Dict[datetime, Dict[str, Any]],
+    ) -> None:
+        for bucket_start, bucket_end in aligned_time_buckets:
+            if bucket_start in existing_data:
+                point = existing_data[bucket_start]
+                point['start_time'] = date.to_iso_minutes(bucket_start)
+                point['end_time'] = date.to_iso_minutes(bucket_end)
+            else:
+                if not variable.config.incremental_node:
+                    point = {
+                        'start_time': date.to_iso_minutes(bucket_start),
+                        'end_time': date.to_iso_minutes(bucket_end),
+                        'average_value': None,
+                        'min_value': None,
+                        'max_value': None,
+                    }
+                else:
+                    point = {
+                        'start_time': date.to_iso_minutes(bucket_start),
+                        'end_time': date.to_iso_minutes(bucket_end),
+                        'value': None,
+                    }
+
+            points.append(point)
 
     def __formatted_post_processing(
         self,
@@ -422,61 +460,17 @@ class TimeDBClient:
         start_time: datetime,
         end_time: datetime,
         time_step: FormattedTimeStep,
+        time_zone: Optional[ZoneInfo],
     ) -> None:
 
         if not isinstance(variable.processor, NumericNodeProcessor):
             return
 
-        for point in points:
-            if point["start_time"] is not None and point["end_time"] is not None:
-                st = datetime.fromisoformat(point["start_time"])
-                et = datetime.fromisoformat(point["end_time"])
-                current_time_step = date.get_formatted_time_step(st, et)
-
-                if date.time_step_to_minutes(st, time_step) < date.time_step_to_minutes(st, current_time_step):
-                    time_step = current_time_step
-
-        expected_buckets: List[datetime] = []
-
-        current_time = start_time
-        while current_time < end_time:
-            expected_buckets.append(current_time)
-            current_time += date.get_time_step_delta(time_step)
-
-        existing_data: Dict[datetime, Dict[str, Any]] = {}
-
-        for point in points:
-            if point["start_time"] is not None:
-                point_time = datetime.fromisoformat(point["start_time"])
-                bucket_start = date.align_start_time(point_time, time_step)
-                existing_data[bucket_start] = point
-
+        time_step = self.__adjust_time_step(points, time_step, time_zone)
+        aligned_time_buckets = date.get_aligned_time_buckets(start_time, end_time, time_step, time_zone)
+        existing_data = self.__align_points_start_time(points, aligned_time_buckets)
         points.clear()
-
-        for bucket_start in expected_buckets:
-            bucket_end = bucket_start + date.get_time_step_delta(time_step)
-
-            if bucket_start in existing_data:
-                point = existing_data[bucket_start]
-                point['start_time'] = date.get_datestr_up_to_min(bucket_start)
-                point['end_time'] = date.get_datestr_up_to_min(bucket_end)
-            else:
-                if not variable.config.incremental_node:
-                    point = {
-                        'start_time': date.get_datestr_up_to_min(bucket_start),
-                        'end_time': date.get_datestr_up_to_min(bucket_end),
-                        'average_value': None,
-                        'min_value': None,
-                        'max_value': None,
-                    }
-                else:
-                    point = {
-                        'start_time': date.get_datestr_up_to_min(bucket_start),
-                        'end_time': date.get_datestr_up_to_min(bucket_end),
-                        'value': None,
-                    }
-
-            points.append(point)
+        self.__fill_formatted_time_buckets(variable, points, aligned_time_buckets, existing_data)
 
     def __round_numeric_variables(self, variable: Node, points: List[Dict[str, Any]]) -> None:
         """
@@ -506,6 +500,7 @@ class TimeDBClient:
         end_time: Optional[datetime] = None,
         formatted: Optional[bool] = None,
         time_step: Optional[FormattedTimeStep] = None,
+        time_zone: Optional[ZoneInfo] = None,
     ) -> List[Dict[str, Any]]:
 
         client = self.__require_client()
@@ -525,15 +520,15 @@ class TimeDBClient:
 
         if formatted and start_time and end_time and time_step:
 
-            query_iterator = date.iterate_time_periods(start_time, end_time, time_step)
+            query_iterator = date.iterate_time_periods(start_time, end_time, time_step, time_zone)
             if query_iterator:
                 for st, minutes_step in query_iterator:
-                    query = self.__build_query(variable, st, st + date.get_time_step_delta(time_step), formatted, minutes_step)
+                    query = self.__build_query(variable, st, date.calculate_date_delta(st, time_step, time_zone), formatted, minutes_step)
                     result = client.query(query)
                     points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
                     final_points.extend(points)
             else:
-                query = self.__build_query(variable, start_time, end_time, formatted, date.time_step_to_minutes(start_time, time_step))
+                query = self.__build_query(variable, start_time, end_time, formatted, date.time_step_to_minutes(start_time, time_step, time_zone))
                 result = client.query(query)
                 points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
                 final_points.extend(points)
@@ -545,9 +540,8 @@ class TimeDBClient:
             final_points.extend(points)
 
         if formatted and start_time and end_time and time_step:
-            self.__formatted_post_processing(variable, final_points, start_time, end_time, time_step)
+            self.__formatted_post_processing(variable, final_points, start_time, end_time, time_step, time_zone)
         self.__round_numeric_variables(variable, final_points)
-        print(f"Final points: {final_points}")
         return final_points
 
     def delete_variable_data(self, device_name: str, device_id: int, variable: Node) -> bool:

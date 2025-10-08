@@ -1,6 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
-from typing import Dict, Any, Type, Union, Tuple, List, TypeVar, get_origin, cast
+from typing import Dict, Any, Type, Union, Tuple, List, Optional, TypeVar, get_origin, cast
 from enum import Enum
 import dataclasses
 import os
@@ -196,3 +196,19 @@ def resolve_type(t: Any) -> Any:
     if origin is not None:
         return origin or Any
     return t
+
+
+def check_bool_str(string: Optional[str]) -> bool:
+    """
+    Convert string to boolean, case-insensitive check for "TRUE".
+
+    Args:
+        string: String to convert, or None.
+
+    Returns:
+        bool: True if string equals "TRUE" (case-insensitive), False otherwise.
+    """
+
+    if string is not None:
+        return string.upper() == "TRUE"
+    return False
