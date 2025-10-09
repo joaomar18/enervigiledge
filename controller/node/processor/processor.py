@@ -154,8 +154,8 @@ class NodeProcessor(ABC, Generic[V]):
     def create_additional_info(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
 
         output = additional_data.copy()
-        output["last_update_date"] = datetime.isoformat(date.get_date_from_timestamp(self.timestamp)) if self.timestamp is not None else None
-        output["last_reset_date"] = datetime.isoformat(self.last_log_datetime) if self.last_log_datetime is not None else None
+        output["last_update_date"] = date.to_iso(date.get_date_from_timestamp(self.timestamp)) if self.timestamp is not None else None
+        output["last_reset_date"] = date.to_iso(self.last_log_datetime) if self.last_log_datetime is not None else None
         if self.config.min_alarm:
             output["min_alarm_value"] = self.config.min_alarm_value
             output["min_warning_value"] = self.config.min_warning_value

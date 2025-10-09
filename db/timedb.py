@@ -274,6 +274,25 @@ class TimeDBClient:
             yield from rs.get_points()
 
     def __extend_query(self, query: QueryVariableLogs, variable: Node, formatted: bool) -> None:
+        """
+        Extends an InfluxDB query with field selections based on variable type and query mode.
+
+        Adds appropriate SELECT fields and filters to the query object in-place:
+        - Numeric non-incremental: mean_sum, mean_count, average_value, min_value, max_value
+        - Numeric incremental: value (with unit conversion)
+        - Non-numeric: raw value only (formatted mode not supported)
+
+        For formatted queries, applies aggregation functions (SUM/MIN/MAX).
+        For raw queries, selects individual field values.
+
+        Args:
+            query: Query builder modified in-place.
+            variable: Node configuration with processor type and settings.
+            formatted: If True, applies time-bucket aggregations.
+
+        Raises:
+            NotImplementedError: If formatted=True for non-numeric variables.
+        """
 
         if isinstance(variable.processor, NumericNodeProcessor):
             unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
@@ -308,19 +327,54 @@ class TimeDBClient:
             query.fields.extend(['"value"'])
 
     def __build_query_without_time_span(self, variable: Node, time_zone: Optional[ZoneInfo]) -> str:
+        """
+        Builds a raw InfluxDB query to retrieve all logs for a variable without time filtering.
+
+        Args:
+            variable: Node configuration with variable name and processor settings.
+            time_zone: Optional timezone for timestamp conversion.
+
+        Returns:
+            str: Rendered InfluxDB query string.
+        """
 
         query = QueryVariableLogs(variable=variable.config.name, fields=["start_time", "end_time"], timezone=time_zone.key if time_zone else None)
         self.__extend_query(query, variable, False)
         return query.render()
 
     def __build_query_with_time_span_non_formatted(self, variable: Node, start_time_str: str, end_time_str: str, time_zone: Optional[ZoneInfo]) -> str:
+        """
+        Builds a raw InfluxDB query to retrieve variable logs within a time range.
+
+        Args:
+            variable: Node configuration with variable name and processor settings.
+            start_time_str: ISO format start time (inclusive).
+            end_time_str: ISO format end time (exclusive).
+            time_zone: Optional timezone for timestamp conversion.
+
+        Returns:
+            str: Rendered InfluxDB query string with time range filter.
+        """
 
         query = QueryVariableLogs(variable=variable.config.name, fields=["start_time", "end_time"], where=[f"time >= '{start_time_str}'", f"time < '{end_time_str}'"], timezone=time_zone.key if time_zone else None)
         self.__extend_query(query, variable, False)
         return query.render()
 
     def __build_query_with_time_span_formatted(self, variable: Node, start_time_str: str, end_time_str: str, group_by_time: str, time_zone: Optional[ZoneInfo]) -> str:
-        
+        """
+        Builds an aggregated InfluxDB query to retrieve variable logs grouped into time buckets.
+
+        Args:
+            variable: Node configuration with variable name and processor settings.
+            start_time_str: ISO format start time (inclusive).
+            end_time_str: ISO format end time (exclusive).
+            group_by_time: Time bucket interval (e.g., "1h", "15m").
+            time_zone: Optional timezone for timestamp conversion.
+
+        Returns:
+            str: Rendered InfluxDB query string with time bucketing and aggregations.
+        """ 
+
         query = QueryVariableLogs(variable=variable.config.name, fields=['FIRST("start_time") AS start_time', 'LAST("end_time") AS end_time'], where=[f"time >= '{start_time_str}'", f"time < '{end_time_str}'"], group_by=[f"time({group_by_time})"], fill="null", timezone=time_zone.key if time_zone else None)
         self.__extend_query(query, variable, True)
         return query.render()
@@ -328,6 +382,23 @@ class TimeDBClient:
     def __build_query_with_time_span(
         self, variable: Node, start_time_str: str, end_time_str: str, formatted: Optional[bool], group_by_time: Optional[str], time_zone: Optional[ZoneInfo]
     ) -> str:
+        """
+        Builds an InfluxDB query with time range filtering, either raw or aggregated.
+
+        Args:
+            variable: Node configuration with variable name and processor settings.
+            start_time_str: ISO format start time (inclusive).
+            end_time_str: ISO format end time (exclusive).
+            formatted: If True, builds aggregated query; if False, builds raw query.
+            group_by_time: Time bucket interval for formatted queries (e.g., "1h", "15m").
+            time_zone: Optional timezone for timestamp conversion.
+
+        Returns:
+            str: Rendered InfluxDB query string.
+
+        Raises:
+            ValueError: If formatted=True but group_by_time is not provided.
+        """
 
         if not formatted:
             query = self.__build_query_with_time_span_non_formatted(variable, start_time_str, end_time_str, time_zone)
@@ -343,6 +414,23 @@ class TimeDBClient:
     def __build_query(
         self, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime], formatted: Optional[bool], group_by_time: Optional[str], time_zone: Optional[ZoneInfo]
     ) -> str:
+        """
+        Builds an InfluxDB query for variable logs with optional time filtering and aggregation.
+
+        Converts datetime objects to UTC ISO format and delegates to appropriate query builder
+        based on whether time filtering is required.
+
+        Args:
+            variable: Node configuration with variable name and processor settings.
+            start_time: Optional start time for filtering (inclusive).
+            end_time: Optional end time for filtering (exclusive).
+            formatted: If True, builds aggregated query; if False, builds raw query.
+            group_by_time: Time bucket interval for formatted queries (e.g., "1h", "15m").
+            time_zone: Optional timezone for timestamp conversion in results.
+
+        Returns:
+            str: Rendered InfluxDB query string.
+        """
 
         if start_time and end_time:
             start_time_str = start_time.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
@@ -355,6 +443,19 @@ class TimeDBClient:
         return query
 
     def __adjust_time_step(self, points: List[Dict[str, Any]], time_step: FormattedTimeStep) -> FormattedTimeStep:
+        """
+        Adjusts the time step to the largest interval found in the data points.
+
+        Iterates through all points to determine their actual time intervals and returns
+        the maximum time step encountered, ensuring the returned step can accommodate all data.
+
+        Args:
+            points: List of data points containing start_time and end_time fields.
+            time_step: Initial time step to compare against.
+
+        Returns:
+            FormattedTimeStep: The largest time step found across all points.
+        """
 
         for point in points:
             if point["start_time"] is not None and point["end_time"] is not None:
@@ -368,6 +469,19 @@ class TimeDBClient:
     def __align_points_start_time(
         self, points: List[Dict[str, Any]], aligned_time_buckets: List[Tuple[datetime, datetime]]
     ) -> Dict[datetime, Dict[str, Any]]:
+        """
+        Maps data points to their corresponding time bucket start times.
+
+        Creates a dictionary where keys are bucket start times and values are the data points
+        that fall within those buckets, based on each point's start_time.
+
+        Args:
+            points: List of data points containing start_time fields.
+            aligned_time_buckets: List of (start, end) datetime tuples defining time buckets.
+
+        Returns:
+            Dict[datetime, Dict[str, Any]]: Mapping of bucket start times to their data points.
+        """
 
         existing_data: Dict[datetime, Dict[str, Any]] = {}
 
@@ -385,6 +499,20 @@ class TimeDBClient:
         aligned_time_buckets: List[Tuple[datetime, datetime]],
         existing_data: Dict[datetime, Dict[str, Any]],
     ) -> None:
+        """
+        Populates the points list with data for each time bucket, filling gaps with None values.
+
+        For each time bucket, either uses existing data or creates a placeholder point with
+        None values. Updates bucket start/end times to align with the bucket boundaries.
+        The structure of placeholder points depends on whether the variable is incremental.
+
+        Args:
+            variable: Node configuration to determine point structure.
+            points: List to populate with aligned data points (modified in-place).
+            aligned_time_buckets: List of (start, end) datetime tuples defining time buckets.
+            existing_data: Mapping of bucket start times to existing data points.
+        """
+
         for bucket_start, bucket_end in aligned_time_buckets:
             if bucket_start in existing_data:
                 point = existing_data[bucket_start]
@@ -417,6 +545,24 @@ class TimeDBClient:
         time_step: FormattedTimeStep,
         time_zone: Optional[ZoneInfo],
     ) -> Optional[FormattedTimeStep]:
+        """
+        Post-processes formatted query results to ensure complete time bucket coverage.
+
+        Adjusts the time step based on actual data intervals, aligns points to time buckets,
+        and fills gaps with None values to create a continuous time series. Only applies to
+        numeric variables.
+
+        Args:
+            variable: Node configuration to determine processing logic.
+            points: List of data points from query (modified in-place).
+            start_time: Start of the query time range.
+            end_time: End of the query time range.
+            time_step: Initial time step for bucketing.
+            time_zone: Optional timezone for bucket alignment.
+
+        Returns:
+            Optional[FormattedTimeStep]: Adjusted time step, or None for non-numeric variables.
+        """
 
         if not isinstance(variable.processor, NumericNodeProcessor):
             return None
@@ -429,6 +575,24 @@ class TimeDBClient:
         return time_step
 
     def __post_process_points(self, variable: Node, points: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """
+        Calculates global metrics across all points and applies decimal rounding.
+
+        For non-incremental numeric variables:
+            - Rounds individual point average_values to configured decimal places
+            - Calculates global average, min, and max across all points
+            - Removes internal mean_sum and mean_count fields from points
+
+        For incremental numeric variables:
+            - Sums all point values to calculate total
+
+        Args:
+            variable: Node configuration with processor type and decimal settings.
+            points: List of data points (modified in-place for non-incremental nodes).
+
+        Returns:
+            Optional[Dict[str, Any]]: Global metrics dictionary, or None for non-numeric variables.
+        """
 
         if not isinstance(variable.processor, NumericNodeProcessor): 
             return None
@@ -475,7 +639,25 @@ class TimeDBClient:
                 
 
     def __get_formatted_variable_logs(self, client: InfluxDBClient, variable: Node, start_time: datetime, end_time: datetime, time_step: FormattedTimeStep, time_zone: Optional[ZoneInfo] = None) -> List[Dict[str, Any]]:
-            
+        """
+        Retrieves aggregated variable logs grouped by time buckets.
+
+        Executes one or more formatted queries depending on the time range size. For large
+        time spans, splits the query into multiple periods to handle InfluxDB query limits.
+        Filters out the internal 'time' field from results.
+
+        Args:
+            client: Active InfluxDB client connection.
+            variable: Node configuration with variable name and processor settings.
+            start_time: Start of the query time range.
+            end_time: End of the query time range.
+            time_step: Time bucket interval for aggregation.
+            time_zone: Optional timezone for bucket alignment and timestamp conversion.
+
+        Returns:
+            List[Dict[str, Any]]: Aggregated data points across all time buckets.
+        """
+
         variable_logs: List[Dict[str, Any]] = []
 
         query_iterator = date.iterate_time_periods(start_time, end_time, time_step, time_zone)
@@ -495,7 +677,23 @@ class TimeDBClient:
         return variable_logs
 
     def __get_raw_variable_logs(self, client: InfluxDBClient, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime], time_zone: Optional[ZoneInfo]) -> List[Dict[str, Any]]:
-        
+        """
+        Retrieves raw variable logs without aggregation or time bucketing.
+
+        Executes a non-formatted query to get individual data points within the optional
+        time range. Filters out the internal 'time' field from results.
+
+        Args:
+            client: Active InfluxDB client connection.
+            variable: Node configuration with variable name and processor settings.
+            start_time: Optional start time for filtering (inclusive).
+            end_time: Optional end time for filtering (exclusive).
+            time_zone: Optional timezone for timestamp conversion.
+
+        Returns:
+            List[Dict[str, Any]]: Raw data points from the database.
+        """
+
         query = self.__build_query(variable, start_time, end_time, False, None, time_zone)
         result = client.query(query)
         return [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
@@ -511,6 +709,36 @@ class TimeDBClient:
         time_step: Optional[FormattedTimeStep] = None,
         time_zone: Optional[ZoneInfo] = None,
     ) -> Dict[str, Any]:
+        """
+        Retrieves variable logs from InfluxDB with optional time filtering and aggregation.
+
+        Fetches either raw or formatted (time-bucketed) logs for a specific variable.
+        For formatted queries, fills gaps with None values and calculates global metrics.
+        Creates the device database if it doesn't exist.
+
+        Args:
+            device_name: Name of the device containing the variable.
+            device_id: Unique ID of the device.
+            variable: Node configuration with variable name and processor settings.
+            start_time: Optional start time for filtering (inclusive).
+            end_time: Optional end time for filtering (exclusive).
+            formatted: If True, retrieves aggregated time-bucketed data.
+            time_step: Time bucket interval for formatted queries (e.g., hourly, daily).
+            time_zone: Optional timezone for bucket alignment and timestamp conversion.
+
+        Returns:
+            Dict[str, Any]: Dictionary containing:
+                - unit: Variable measurement unit
+                - decimal_places: Precision for numeric values
+                - type: Variable data type
+                - incremental: Whether the variable is incremental
+                - points: List of data points
+                - time_step: Adjusted time step (for formatted queries)
+                - global_metrics: Aggregated statistics (for numeric variables)
+
+        Raises:
+            ValueError: If only one of start_time/end_time is provided, or if end_time <= start_time.
+        """
 
         client = self.__require_client()
         db_name = f"{device_name}_{device_id}"
