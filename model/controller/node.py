@@ -33,6 +33,19 @@ class NodePhase(str, Enum):
     GENERAL = "General"
     SINGLEPHASE = "Singlephase"
 
+class NodeDirection(str, Enum):
+    """
+    Enumeration of supported directional measurements.
+
+    Attributes:
+        FORWARD (str): Forward direction measurement.
+        REVERSE (str): Reverse direction measurement.
+        TOTAL (str): Total of both directions.
+    """
+
+    FORWARD = "Forward"
+    REVERSE = "Reverse"
+    TOTAL = "Total"
 
 class NodeType(str, Enum):
     """

@@ -15,6 +15,7 @@ from web.dependencies import services
 from web.api.decorator import auth_endpoint, AuthConfigs
 from controller.manager import DeviceManager
 from db.timedb import TimeDBClient
+from model.controller.node import NodePhase, NodeDirection
 from model.date import FormattedTimeStep
 import util.functions.objects as objects
 import util.functions.date as date
@@ -148,6 +149,92 @@ async def get_logs_from_node(
     response = timedb.get_variable_logs(device.name, device_id, node, start_time, end_time, formatted, time_step, time_zone)
     return JSONResponse(content=response)
 
+##########     T O     D O     ##########
+@router.get("/get_energy_consumption")
+@auth_endpoint(AuthConfigs.PROTECTED)
+async def get_energy_consumption(    
+    request: Request,
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
+    timedb: TimeDBClient = Depends(services.get_timedb),
+) -> JSONResponse:
+
+    device_id = int(objects.require_field(request.query_params, "device_id", str))
+    phase = NodePhase(objects.require_field(request.query_params, "phase", str))
+    direction = NodeDirection(objects.require_field(request.query_params, "direction", str))
+    formatted = objects.check_bool_str(request.query_params.get("formatted"))
+    time_zone = date.get_time_zone_info(request.query_params.get("time_zone"))
+
+    message = ""
+    return JSONResponse(content={"result": message})
+
+##########     T O     D O     ##########
+@router.get("/get_energy_efficiency")
+@auth_endpoint(AuthConfigs.PROTECTED)
+async def get_energy_efficiency(    
+    request: Request,
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
+    timedb: TimeDBClient = Depends(services.get_timedb),
+) -> JSONResponse:
+
+    device_id = int(objects.require_field(request.query_params, "device_id", str))
+    phase = objects.require_field(request.query_params, "phase", str)
+    formatted = objects.check_bool_str(request.query_params.get("formatted"))
+    time_zone = date.get_time_zone_info(request.query_params.get("time_zone"))
+
+    device = device_manager.get_device(device_id)
+    if not device:
+        raise ValueError(f"Device with id {device_id} does not exist.")    
+
+    message = ""
+    return JSONResponse(content={"result": message})
+
+
+##########     T O     D O     ##########
+@router.get("/get_peak_demand_power")
+@auth_endpoint(AuthConfigs.PROTECTED)
+async def get_peak_demand_power(    
+    request: Request,
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
+    timedb: TimeDBClient = Depends(services.get_timedb),
+) -> JSONResponse:
+
+    device_id = int(objects.require_field(request.query_params, "device_id", str))
+    phase = objects.require_field(request.query_params, "phase", str)
+    formatted = objects.check_bool_str(request.query_params.get("formatted"))
+    time_zone = date.get_time_zone_info(request.query_params.get("time_zone"))
+
+    device = device_manager.get_device(device_id)
+    if not device:
+        raise ValueError(f"Device with id {device_id} does not exist.")
+
+    message = ""
+    return JSONResponse(content={"result": message})
+
+
+##########     T O     D O     ##########
+@router.get("/get_phase_balance")
+@auth_endpoint(AuthConfigs.PROTECTED)
+async def get_phase_balance(    
+    request: Request,
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
+    timedb: TimeDBClient = Depends(services.get_timedb),
+) -> JSONResponse:
+
+    device_id = int(objects.require_field(request.query_params, "device_id", str))
+    formatted = objects.check_bool_str(request.query_params.get("formatted"))
+    time_zone = date.get_time_zone_info(request.query_params.get("time_zone"))
+
+    device = device_manager.get_device(device_id)
+    if not device:
+        raise ValueError(f"Device with id {device_id} does not exist.")
+
+    message = ""
+    return JSONResponse(content={"result": message})
+    
 
 @router.delete("/delete_logs_from_node")
 @auth_endpoint(AuthConfigs.PROTECTED)
