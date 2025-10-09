@@ -274,7 +274,7 @@ class TimeDBClient:
                 raise TypeError(f"Items must be ResultSet. Got type: {type(rs).__name__}")
             yield from rs.get_points()
 
-    def __extend_query(self, query: QueryVariableLogs, variable: Node, formatted: bool) -> None:
+    def __extend_query(self, query: QueryVariableLogs, variable: Node, aggregated: bool) -> None:
         """
         Extends an InfluxDB query with field selections based on variable type and query mode.
 
@@ -289,7 +289,7 @@ class TimeDBClient:
         Args:
             query: Query builder modified in-place.
             variable: Node configuration with processor type and settings.
-            formatted: If True, applies time-bucket aggregations.
+            aggregated: If True, applies time-bucket aggregations.
 
         Raises:
             NotImplementedError: If formatted=True for non-numeric variables.
@@ -300,7 +300,7 @@ class TimeDBClient:
 
             if not variable.config.incremental_node:
                 query.where.append('"mean_count" > 0')
-                if formatted: # formatted/bucketed
+                if aggregated: # aggregated/bucketed
                     query.fields.extend([
                         f'SUM("mean_sum") AS mean_sum',
                         f'SUM("mean_count") AS mean_count',
@@ -317,13 +317,13 @@ class TimeDBClient:
                         f'"max_value" / {unit_factor} AS max_value',
                 ])
             else: # incremental node
-                if formatted:
+                if aggregated:
                     query.fields.extend([f'SUM("value") / {unit_factor} AS value'])
 
                 else:
                     query.fields.extend([f'"value" / {unit_factor} AS value'])
         else:
-            if formatted:
+            if aggregated:
                 raise NotImplementedError("Can't get logs from non-numeric variables in formatted time spans")
             query.fields.extend(['"value"'])
 
@@ -343,7 +343,7 @@ class TimeDBClient:
         self.__extend_query(query, variable, False)
         return query.render()
 
-    def __build_query_with_time_span_non_formatted(self, variable: Node, start_time_str: str, end_time_str: str, time_zone: Optional[ZoneInfo]) -> str:
+    def __build_query_with_time_span_non_aggregated(self, variable: Node, start_time_str: str, end_time_str: str, time_zone: Optional[ZoneInfo]) -> str:
         """
         Builds a raw InfluxDB query to retrieve variable logs within a time range.
 
@@ -361,7 +361,7 @@ class TimeDBClient:
         self.__extend_query(query, variable, False)
         return query.render()
 
-    def __build_query_with_time_span_formatted(self, variable: Node, start_time_str: str, end_time_str: str, group_by_time: str, time_zone: Optional[ZoneInfo]) -> str:
+    def __build_query_with_time_span_aggregated(self, variable: Node, start_time_str: str, end_time_str: str, group_by_time: str, time_zone: Optional[ZoneInfo]) -> str:
         """
         Builds an aggregated InfluxDB query to retrieve variable logs grouped into time buckets.
 
@@ -381,7 +381,7 @@ class TimeDBClient:
         return query.render()
 
     def __build_query_with_time_span(
-        self, variable: Node, start_time_str: str, end_time_str: str, formatted: Optional[bool], group_by_time: Optional[str], time_zone: Optional[ZoneInfo]
+        self, variable: Node, start_time_str: str, end_time_str: str, aggregated: Optional[bool], group_by_time: Optional[str], time_zone: Optional[ZoneInfo]
     ) -> str:
         """
         Builds an InfluxDB query with time range filtering, either raw or aggregated.
@@ -390,7 +390,7 @@ class TimeDBClient:
             variable: Node configuration with variable name and processor settings.
             start_time_str: ISO format start time (inclusive).
             end_time_str: ISO format end time (exclusive).
-            formatted: If True, builds aggregated query; if False, builds raw query.
+            aggregated: If True, builds aggregated query; if False, builds raw query.
             group_by_time: Time bucket interval for formatted queries (e.g., "1h", "15m").
             time_zone: Optional timezone for timestamp conversion.
 
@@ -401,11 +401,11 @@ class TimeDBClient:
             ValueError: If formatted=True but group_by_time is not provided.
         """
 
-        if not formatted:
-            query = self.__build_query_with_time_span_non_formatted(variable, start_time_str, end_time_str, time_zone)
+        if not aggregated:
+            query = self.__build_query_with_time_span_non_aggregated(variable, start_time_str, end_time_str, time_zone)
 
         elif group_by_time:
-            query = self.__build_query_with_time_span_formatted(variable, start_time_str, end_time_str, group_by_time, time_zone)
+            query = self.__build_query_with_time_span_aggregated(variable, start_time_str, end_time_str, group_by_time, time_zone)
 
         else:
             raise ValueError(f"Wrong parameters to get logs from node {variable.config.name}.")
@@ -413,7 +413,7 @@ class TimeDBClient:
         return query
 
     def __build_query(
-        self, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime], formatted: Optional[bool], group_by_time: Optional[str], time_zone: Optional[ZoneInfo]
+        self, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime], aggregated: Optional[bool], group_by_time: Optional[str], time_zone: Optional[ZoneInfo]
     ) -> str:
         """
         Builds an InfluxDB query for variable logs with optional time filtering and aggregation.
@@ -425,7 +425,7 @@ class TimeDBClient:
             variable: Node configuration with variable name and processor settings.
             start_time: Optional start time for filtering (inclusive).
             end_time: Optional end time for filtering (exclusive).
-            formatted: If True, builds aggregated query; if False, builds raw query.
+            aggregated: If True, builds aggregated query; if False, builds raw query.
             group_by_time: Time bucket interval for formatted queries (e.g., "1h", "15m").
             time_zone: Optional timezone for timestamp conversion in results.
 
@@ -436,7 +436,7 @@ class TimeDBClient:
         if start_time and end_time:
             start_time_str = start_time.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
             end_time_str = end_time.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
-            query = self.__build_query_with_time_span(variable, start_time_str, end_time_str, formatted, group_by_time, time_zone)
+            query = self.__build_query_with_time_span(variable, start_time_str, end_time_str, aggregated, group_by_time, time_zone)
 
         else:
             query = self.__build_query_without_time_span(variable, time_zone)
@@ -676,12 +676,13 @@ class TimeDBClient:
 
         return variable_logs
 
-    def __get_raw_variable_logs(self, client: InfluxDBClient, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime], time_zone: Optional[ZoneInfo]) -> List[Dict[str, Any]]:
+    def __get_raw_variable_logs(self, client: InfluxDBClient, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime], time_zone: Optional[ZoneInfo], force_aggregation: Optional[bool]) -> List[Dict[str, Any]]:
         """
-        Retrieves raw variable logs without aggregation or time bucketing.
+        Retrieves variable logs, typically without aggregation or time bucketing.
 
-        Executes a non-formatted query to get individual data points within the optional
-        time range. Filters out the internal 'time' field from results.
+        Executes a non-formatted query to get data points within the optional
+        time range. Aggregation can be forced if specified. Filters out the 
+        internal 'time' field from results.
 
         Args:
             client: Active InfluxDB client connection.
@@ -689,12 +690,13 @@ class TimeDBClient:
             start_time: Optional start time for filtering (inclusive).
             end_time: Optional end time for filtering (exclusive).
             time_zone: Optional timezone for timestamp conversion.
+            force_aggregation: When True, returns results with aggregation applied.
 
         Returns:
-            List[Dict[str, Any]]: Raw data points from the database.
+            List[Dict[str, Any]]: Data points from the database.
         """
 
-        query = self.__build_query(variable, start_time, end_time, False, None, time_zone)
+        query = self.__build_query(variable, start_time, end_time, force_aggregation, None, time_zone)
         result = client.query(query)
         return [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
 
@@ -750,7 +752,7 @@ class TimeDBClient:
             points = self.__get_formatted_variable_logs(client, variable, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone)
 
         else:
-            points = self.__get_raw_variable_logs(client, variable, time_span.start_time, time_span.end_time, time_span.time_zone)
+            points = self.__get_raw_variable_logs(client, variable, time_span.start_time, time_span.end_time, time_span.time_zone, time_span.force_aggregation)
 
         if time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step: # Apply post logs processing if logs are Formatted
             time_span.time_step = self.__formatted_post_processing(variable, points, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone)

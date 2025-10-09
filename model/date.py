@@ -33,6 +33,7 @@ class TimeSpanParameters:
         time_step: Step interval for formatted time spans
         formatted: Whether to use formatted time span behavior
         time_zone: Timezone for interpreting the time span
+        force_aggregation: Whether to force aggregation of data (default: None)
     """
 
     start_time: Optional[datetime]
@@ -40,3 +41,4 @@ class TimeSpanParameters:
     time_step: Optional[FormattedTimeStep]
     formatted: Optional[bool]
     time_zone: Optional[ZoneInfo]
+    force_aggregation: Optional[bool] = None
