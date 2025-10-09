@@ -10,19 +10,58 @@ from datetime import datetime
 #############LOCAL IMPORTS#############
 
 from controller.meter.meter import EnergyMeter
+import controller.meter.extraction as meter_extraction
 from web.safety import HTTPSafety
 from web.dependencies import services
 from web.api.decorator import auth_endpoint, AuthConfigs
 from controller.manager import DeviceManager
 from db.timedb import TimeDBClient
 from model.controller.node import NodePhase, NodeDirection
-from model.date import FormattedTimeStep
+from model.date import FormattedTimeStep, TimeSpanParameters
 import util.functions.objects as objects
 import util.functions.date as date
 
 #######################################
 
+
 router = APIRouter(prefix="/nodes", tags=["nodes"])
+
+
+##########     P A R S E     M E T H O D S     ##########
+
+
+async def _parse_formatted_time_span(request: Request) -> TimeSpanParameters:
+    """Parse time span parameters from request query params.
+    
+    Extracts and converts start_time, end_time, time_step, formatted flag, and time_zone
+    from query parameters. When formatted=true, start_time is required and end_time defaults
+    to now. Returns datetime objects with second precision removed.
+    
+    Returns:
+        TimeSpanParameters containing the parsed time span configuration
+    """
+
+    formatted = objects.check_bool_str(request.query_params.get("formatted"))
+    time_zone = date.get_time_zone_info(request.query_params.get("time_zone"))
+
+    if formatted:
+        time_step = request.query_params.get("time_step")
+        time_step = FormattedTimeStep(time_step) if time_step is not None else None
+        start_time = objects.require_field(request.query_params, "start_time", str)
+        end_time = request.query_params.get("end_time")
+        end_time = end_time if end_time is not None else datetime.isoformat(datetime.now())  # If None accounts end time is now
+    else:
+        start_time = request.query_params.get("start_time")  # Optional
+        end_time = request.query_params.get("end_time")  # Optional
+        time_step = None
+
+    start_time = date.remove_sec_precision(date.convert_isostr_to_date(start_time)) if start_time else None
+    end_time = date.remove_sec_precision(date.convert_isostr_to_date(end_time)) if end_time else None
+
+    return TimeSpanParameters(start_time, end_time, time_step, formatted, time_zone)
+
+
+#########################################################
 
 
 @router.get("/get_nodes_state")
@@ -118,22 +157,7 @@ async def get_logs_from_node(
 
     device_id = int(objects.require_field(request.query_params, "device_id", str))
     name = objects.require_field(request.query_params, "node_name", str)
-    formatted = objects.check_bool_str(request.query_params.get("formatted"))
-    time_zone = date.get_time_zone_info(request.query_params.get("time_zone"))
-
-    if formatted:
-        time_step = request.query_params.get("time_step")
-        time_step = FormattedTimeStep(time_step) if time_step is not None else None
-        start_time = objects.require_field(request.query_params, "start_time", str)
-        end_time = request.query_params.get("end_time")
-        end_time = end_time if end_time is not None else datetime.isoformat(datetime.now())  # If None accounts end time is now
-    else:
-        start_time = request.query_params.get("start_time")  # Optional
-        end_time = request.query_params.get("end_time")  # Optional
-        time_step = None
-
-    start_time = date.remove_sec_precision(date.convert_isostr_to_date(start_time)) if start_time else None
-    end_time = date.remove_sec_precision(date.convert_isostr_to_date(end_time)) if end_time else None
+    time_span = await _parse_formatted_time_span(request)
 
     device = device_manager.get_device(device_id)
     if not device:
@@ -143,13 +167,12 @@ async def get_logs_from_node(
     if not node:
         raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
 
-    if formatted and start_time and end_time:
-        (start_time, end_time, time_step) = date.process_time_span(start_time, end_time, time_step, time_zone)
+    date.process_time_span(time_span)
 
-    response = timedb.get_variable_logs(device.name, device_id, node, start_time, end_time, formatted, time_step, time_zone)
+    response = timedb.get_variable_logs(device.name, device_id, node, time_span)
     return JSONResponse(content=response)
 
-##########     T O     D O     ##########
+
 @router.get("/get_energy_consumption")
 @auth_endpoint(AuthConfigs.PROTECTED)
 async def get_energy_consumption(    
@@ -158,15 +181,21 @@ async def get_energy_consumption(
     device_manager: DeviceManager = Depends(services.get_device_manager),
     timedb: TimeDBClient = Depends(services.get_timedb),
 ) -> JSONResponse:
+    """Retrieves active and reactive energy data for a specific device phase and direction,
+    and computes the corresponding average power factor within the selected time range."""
 
     device_id = int(objects.require_field(request.query_params, "device_id", str))
     phase = NodePhase(objects.require_field(request.query_params, "phase", str))
     direction = NodeDirection(objects.require_field(request.query_params, "direction", str))
-    formatted = objects.check_bool_str(request.query_params.get("formatted"))
-    time_zone = date.get_time_zone_info(request.query_params.get("time_zone"))
+    time_span = await _parse_formatted_time_span(request)
 
-    message = ""
-    return JSONResponse(content={"result": message})
+    device = device_manager.get_device(device_id)
+    if not device:
+        raise ValueError(f"Device with id {device_id} does not exist.")
+    
+    response = meter_extraction.get_meter_energy_consumption(device, phase, direction, timedb, time_span)
+    return JSONResponse(content=response)
+
 
 ##########     T O     D O     ##########
 @router.get("/get_energy_efficiency")
@@ -180,8 +209,7 @@ async def get_energy_efficiency(
 
     device_id = int(objects.require_field(request.query_params, "device_id", str))
     phase = objects.require_field(request.query_params, "phase", str)
-    formatted = objects.check_bool_str(request.query_params.get("formatted"))
-    time_zone = date.get_time_zone_info(request.query_params.get("time_zone"))
+    time_span = await _parse_formatted_time_span(request)
 
     device = device_manager.get_device(device_id)
     if not device:
@@ -203,8 +231,7 @@ async def get_peak_demand_power(
 
     device_id = int(objects.require_field(request.query_params, "device_id", str))
     phase = objects.require_field(request.query_params, "phase", str)
-    formatted = objects.check_bool_str(request.query_params.get("formatted"))
-    time_zone = date.get_time_zone_info(request.query_params.get("time_zone"))
+    time_span = await _parse_formatted_time_span(request)
 
     device = device_manager.get_device(device_id)
     if not device:
@@ -225,8 +252,7 @@ async def get_phase_balance(
 ) -> JSONResponse:
 
     device_id = int(objects.require_field(request.query_params, "device_id", str))
-    formatted = objects.check_bool_str(request.query_params.get("formatted"))
-    time_zone = date.get_time_zone_info(request.query_params.get("time_zone"))
+    time_span = await _parse_formatted_time_span(request)
 
     device = device_manager.get_device(device_id)
     if not device:

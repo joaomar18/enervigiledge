@@ -2,13 +2,14 @@
 
 from enum import Enum
 from dataclasses import dataclass, asdict, field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, List, Any
 
 #######################################
 
 #############LOCAL IMPORTS#############
 
 from model.controller.general import Protocol
+from model.date import FormattedTimeStep
 
 #######################################
 
@@ -33,6 +34,39 @@ class NodePhase(str, Enum):
     GENERAL = "General"
     SINGLEPHASE = "Singlephase"
 
+
+class NodePrefix(str, Enum):
+    """Enumeration of phase-related prefixes for node names.
+
+    Attributes:
+        L1 (str): Prefix for phase L1.
+        L2 (str): Prefix for phase L2.
+        L3 (str): Prefix for phase L3.
+        L1_L2 (str): Prefix for line-to-line phases L1-L2.
+        L1_L3 (str): Prefix for line-to-line phases L1-L3.
+        L2_L1 (str): Prefix for line-to-line phases L2-L1.
+        L2_L3 (str): Prefix for line-to-line phases L2-L3.
+        L3_L1 (str): Prefix for line-to-line phases L3-L1.
+        L3_L2 (str): Prefix for line-to-line phases L3-L2.
+        TOTAL (str): Prefix for total/aggregated values.
+        GENERAL (str): Prefix for general non-phase-specific nodes.
+        SINGLEPHASE (str): Prefix for single-phase system nodes.
+    """
+
+    L1 = "l1_"
+    L2 = "l2_"
+    L3 = "l3_"
+    L1_L2 = "l1_l2_"
+    L1_L3 = "l1_l3_"
+    L2_L1 = "l2_l1_"
+    L2_L3 = "l2_l3_"
+    L3_L1 = "l3_l1_"
+    L3_L2 = "l3_l2_"
+    TOTAL = "total_"
+    GENERAL = ""
+    SINGLEPHASE = ""
+
+
 class NodeDirection(str, Enum):
     """
     Enumeration of supported directional measurements.
@@ -46,6 +80,7 @@ class NodeDirection(str, Enum):
     FORWARD = "Forward"
     REVERSE = "Reverse"
     TOTAL = "Total"
+
 
 class NodeType(str, Enum):
     """
@@ -62,6 +97,25 @@ class NodeType(str, Enum):
     FLOAT = "FLOAT"
     BOOL = "BOOL"
     STRING = "STRING"
+
+
+"""Mapping from NodePhase enum values to their corresponding NodePrefix values."""
+NODE_PHASE_TO_PREFIX_MAP = {
+    NodePhase.L1: NodePrefix.L1,
+    NodePhase.L2: NodePrefix.L2,
+    NodePhase.L3: NodePrefix.L3,
+    NodePhase.TOTAL: NodePrefix.TOTAL,
+    NodePhase.GENERAL: NodePrefix.GENERAL,
+    NodePhase.SINGLEPHASE: NodePrefix.SINGLEPHASE,
+}
+
+
+"""Mapping from NodeDirection enum values to their corresponding string prefixes."""
+NODE_DIRECTION_TO_STR_MAP = {
+    NodeDirection.FORWARD: "forward_",
+    NodeDirection.REVERSE: "reverse_",
+    NodeDirection.TOTAL: "",
+}
 
 
 @dataclass
@@ -172,6 +226,39 @@ class NodeRecord:
         """
 
         return hash((self.device_id, self.name))
+
+
+@dataclass
+class NodeLogs:
+    """Container for node log data with metadata and time-series points.
+
+    Attributes:
+        unit: Measurement unit for the node values (e.g., "kWh", "V", "A").
+        decimal_places: Number of decimal places for numeric formatting.
+        type: NodeType indicating the data type of the node.
+        incremental: Whether the node represents incremental/cumulative values.
+        points: List of time-series data points with timestamps and values.
+        time_step: Time interval step for formatted/aggregated logs.
+        global_metrics: Aggregated statistics across all data points (e.g., min, max, avg).
+    """
+
+    unit: Optional[str]
+    decimal_places: Optional[int]
+    type: NodeType
+    incremental: Optional[bool]
+    points: List[Dict[str, Any]]
+    time_step: Optional[FormattedTimeStep]
+    global_metrics: Optional[Dict[str, Any]]
+
+    def get_logs(self) -> Dict[str, Any]:
+        """
+        Returns the node logs as a dictionary.
+
+        Returns:
+            Dict[str, Any]: Dictionary containing all node logs attributes.
+        """
+
+        return asdict(self)
 
 
 @dataclass

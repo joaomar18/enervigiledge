@@ -15,7 +15,8 @@ from zoneinfo import ZoneInfo
 from util.debug import LoggerManager
 from controller.node.node import Node
 from controller.node.processor.numeric_processor import NumericNodeProcessor
-from model.date import FormattedTimeStep
+from model.controller.node import NodeLogs
+from model.date import FormattedTimeStep, TimeSpanParameters
 from model.db import QueryVariableLogs
 import util.functions.date as date
 import util.functions.calculation as calculation
@@ -635,8 +636,7 @@ class TimeDBClient:
             
             global_metrics["value"] = global_sum
 
-        return global_metrics
-                
+        return global_metrics      
 
     def __get_formatted_variable_logs(self, client: InfluxDBClient, variable: Node, start_time: datetime, end_time: datetime, time_step: FormattedTimeStep, time_zone: Optional[ZoneInfo] = None) -> List[Dict[str, Any]]:
         """
@@ -703,14 +703,9 @@ class TimeDBClient:
         device_name: str,
         device_id: int,
         variable: Node,
-        start_time: Optional[datetime] = None,
-        end_time: Optional[datetime] = None,
-        formatted: Optional[bool] = None,
-        time_step: Optional[FormattedTimeStep] = None,
-        time_zone: Optional[ZoneInfo] = None,
+        time_span: TimeSpanParameters
     ) -> Dict[str, Any]:
-        """
-        Retrieves variable logs from InfluxDB with optional time filtering and aggregation.
+        """Retrieves variable logs from InfluxDB with optional time filtering and aggregation.
 
         Fetches either raw or formatted (time-bucketed) logs for a specific variable.
         For formatted queries, fills gaps with None values and calculates global metrics.
@@ -720,11 +715,8 @@ class TimeDBClient:
             device_name: Name of the device containing the variable.
             device_id: Unique ID of the device.
             variable: Node configuration with variable name and processor settings.
-            start_time: Optional start time for filtering (inclusive).
-            end_time: Optional end time for filtering (exclusive).
-            formatted: If True, retrieves aggregated time-bucketed data.
-            time_step: Time bucket interval for formatted queries (e.g., hourly, daily).
-            time_zone: Optional timezone for bucket alignment and timestamp conversion.
+            time_span: TimeSpanParameters containing start_time, end_time, formatted flag,
+                time_step for bucketing, and timezone for alignment.
 
         Returns:
             Dict[str, Any]: Dictionary containing:
@@ -734,7 +726,7 @@ class TimeDBClient:
                 - incremental: Whether the variable is incremental
                 - points: List of data points
                 - time_step: Adjusted time step (for formatted queries)
-                - global_metrics: Aggregated statistics (for numeric variables)
+                - global_metrics: Aggregated statistics (for numeric variables, if applicable)
 
         Raises:
             ValueError: If only one of start_time/end_time is provided, or if end_time <= start_time.
@@ -746,35 +738,35 @@ class TimeDBClient:
         if not self.check_db_exists(db_name):
             client.create_database(db_name)
 
-        if (start_time and not end_time) or (end_time and not start_time):
+        if (time_span.start_time and not time_span.end_time) or (time_span.end_time and not time_span.start_time):
             raise ValueError("Both 'start_time' and 'end_time' must be provided together.")
 
-        if start_time and end_time and end_time <= start_time:
+        if time_span.start_time and time_span.end_time and time_span.end_time <= time_span.start_time:
             raise ValueError("'end_time' must be a later date than 'start_time'.")
 
         client.switch_database(db_name)
 
-        if formatted and start_time and end_time and time_step: # Logs are to be Formatted
-            points = self.__get_formatted_variable_logs(client, variable, start_time, end_time, time_step, time_zone)
+        if time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step: # Logs are to be Formatted
+            points = self.__get_formatted_variable_logs(client, variable, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone)
 
         else:
-            points = self.__get_raw_variable_logs(client, variable, start_time, end_time, time_zone)
+            points = self.__get_raw_variable_logs(client, variable, time_span.start_time, time_span.end_time, time_span.time_zone)
 
-        if formatted and start_time and end_time and time_step: # Apply post logs processing if logs are Formatted
-            time_step = self.__formatted_post_processing(variable, points, start_time, end_time, time_step, time_zone)
+        if time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step: # Apply post logs processing if logs are Formatted
+            time_span.time_step = self.__formatted_post_processing(variable, points, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone)
         global_metrics = self.__post_process_points(variable, points)
 
-        variable_logs: Dict[str, Any] = {}
-        variable_logs["unit"] = variable.config.unit
-        variable_logs["decimal_places"] = variable.config.decimal_places
-        variable_logs["type"] = variable.config.type
-        variable_logs["incremental"] = variable.config.incremental_node
-        variable_logs["points"] = points
-        variable_logs["time_step"] = time_step
-        if global_metrics:
-            variable_logs["global_metrics"] = global_metrics
+        variable_logs = NodeLogs(
+            unit=variable.config.unit,
+            decimal_places=variable.config.decimal_places,
+            type=variable.config.type,
+            incremental=variable.config.incremental_node,
+            points=points,
+            time_step=time_span.time_step,
+            global_metrics=global_metrics
+        )
 
-        return variable_logs
+        return variable_logs.get_logs()
 
     def delete_variable_data(self, device_name: str, device_id: int, variable: Node) -> bool:
         """

@@ -9,22 +9,34 @@ from typing import Dict, Tuple, Optional
 from controller.node.node import Node
 from controller.node.processor.processor import NodeProcessor
 from model.controller.device import EnergyMeterType
-from model.controller.node import NodePhase, NodeAttributes
+from model.controller.node import NodePhase, NodePrefix, NodeDirection, NodeAttributes, NODE_PHASE_TO_PREFIX_MAP, NODE_DIRECTION_TO_STR_MAP
 
 #######################################
 
+def get_node_prefix(node: Optional[Node] = None, phase: Optional[NodePhase] = None) -> str:
+    """Returns the phase-related prefix from a node's name or for a specific phase.
 
-def get_node_prefix(node: Node) -> str:
+    Checks if the node's name starts with a known NodePrefix value (e.g. "l1_", "l2_", 
+    "total_") and returns it. If a phase is provided instead, returns the corresponding 
+    prefix for that phase using NODE_PHASE_TO_PREFIX_MAP.
+
+    Args:
+        node: Optional Node object to extract the prefix from by checking its name.
+        phase: Optional NodePhase to get the corresponding prefix for directly.
+
+    Returns:
+        Phase-related prefix string (e.g., "l1_", "l2_", "total_") or empty string
+        if no match is found or no arguments are provided.
     """
-    Returns the phase-related prefix from a node's name.
 
-    Checks if the name starts with a known prefix (e.g. "l1_", "l2_", "total_")
-    and returns it, or an empty string if none match.
-    """
+    if node:
+        for prefix in NodePrefix:
+            if node.config.name.startswith(prefix.value):
+                return prefix.value
+    
+    if phase:
+        return NODE_PHASE_TO_PREFIX_MAP[phase].value
 
-    for prefix in ("l1_l2_", "l2_l3_", "l3_l1_", "l1_", "l2_", "l3_", "total_"):
-        if node.config.name.startswith(prefix):
-            return prefix
     return ""
 
 
@@ -49,6 +61,22 @@ def remove_phase_string(name: str) -> str:
         return "_".join(parts[1:])
 
     return name
+
+
+def create_node_name(base_name: str, phase: NodePhase, direction: NodeDirection) -> str:
+    """Constructs a node name by combining phase prefix, direction prefix, and base name.
+
+    Args:
+        base_name: The base name of the node.
+        phase: NodePhase enum value to determine the phase prefix.
+        direction: NodeDirection enum value to determine the direction prefix.
+
+    Returns:
+        Constructed node name in the format: "{phase_prefix}{direction_prefix}{base_name}"
+        (e.g., "l1_forward_active_energy" or "total_power").
+    """
+
+    return NODE_PHASE_TO_PREFIX_MAP[phase].value + NODE_DIRECTION_TO_STR_MAP[direction] + base_name
 
 
 def create_default_node_attributes(meter_type: EnergyMeterType) -> NodeAttributes:

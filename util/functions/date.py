@@ -9,7 +9,7 @@ import arrow
 
 #############LOCAL IMPORTS#############
 
-from model.date import FormattedTimeStep
+from model.date import FormattedTimeStep, TimeSpanParameters
 
 #######################################
 
@@ -187,32 +187,25 @@ def get_time_zone_info(time_zone_str: Optional[str]) -> ZoneInfo:
         raise ValueError(f"Couldn't parse the time_zone {time_zone_str}: {e}")
 
 
-def process_time_span(
-    start_time: datetime, end_time: datetime, formatted_time_step: Optional[FormattedTimeStep], time_zone: ZoneInfo
-) -> Tuple[datetime, datetime, FormattedTimeStep]:
-    """
-    Aligns time span boundaries to appropriate time step intervals.
+def process_time_span(time_span: TimeSpanParameters) -> None:
+    """Aligns time span boundaries to appropriate time step intervals.
 
     Determines optimal time step if not provided, then aligns start and end times
-    to time step boundaries in the specified timezone.
+    to time step boundaries in the specified timezone. Modifies the time_span object
+    in place. No-op if start_time, end_time, or formatted flag are not set.
 
     Args:
-        start_time: Original start time.
-        end_time: Original end time.
-        formatted_time_step: Optional time step for alignment.
-        time_zone: Timezone for alignment.
-
-    Returns:
-        Tuple[datetime, datetime, FormattedTimeStep]: Aligned start, aligned end, and time step.
+        time_span: TimeSpanParameters object to process and modify in place.
     """
 
-    if formatted_time_step is None:
-        formatted_time_step = get_formatted_time_step(start_time, end_time, time_zone)
+    if time_span.start_time is None or time_span.end_time is None or not time_span.formatted:
+        return
 
-    aligned_start_time = align_start_time(start_time, formatted_time_step).astimezone(time_zone)
-    aligned_end_time = align_end_time(end_time, formatted_time_step, time_zone).astimezone(time_zone)
+    if time_span.time_step is None:
+        time_span.time_step = get_formatted_time_step(time_span.start_time, time_span.end_time, time_span.time_zone)
 
-    return (aligned_start_time, aligned_end_time, formatted_time_step)
+    time_span.start_time = align_start_time(time_span.start_time, time_span.time_step).astimezone(time_span.time_zone)
+    time_span.end_time = align_end_time(time_span.end_time, time_span.time_step, time_span.time_zone).astimezone(time_span.time_zone)
 
 
 def get_formatted_time_step(start_time: datetime, end_time: datetime, time_zone: Optional[ZoneInfo] = None) -> FormattedTimeStep:
