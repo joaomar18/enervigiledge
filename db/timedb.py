@@ -578,18 +578,24 @@ class TimeDBClient:
 
         For non-incremental numeric variables:
             - Rounds individual point average_values to configured decimal places
-            - Calculates global average, min, and max across all points
+            - Calculates global average from accumulated mean_sum and mean_count
+            - Finds global min and max values with their corresponding time ranges
             - Removes internal mean_sum and mean_count fields from points
+            - Applies unit factor conversion to the global average
 
         For incremental numeric variables:
             - Sums all point values to calculate total
 
         Args:
-            variable: Node configuration with processor type and decimal settings.
-            points: List of data points (modified in-place for non-incremental nodes).
+            variable: Node configuration with processor type, decimal settings, and unit.
+            points: List of data points (modified in-place for non-incremental variables).
 
         Returns:
-            Optional[Dict[str, Any]]: Global metrics dictionary, or None for non-numeric variables.
+            Optional[Dict[str, Any]]: Global metrics dictionary containing:
+                - For non-incremental: average_value, min_value, max_value, and their
+                corresponding start_time/end_time iso strings
+                - For incremental: total value sum
+                - None for non-numeric variables
         """
 
         if not isinstance(variable.processor, NumericNodeProcessor): 
@@ -601,7 +607,12 @@ class TimeDBClient:
             global_mean_count = 0
             global_mean_value = None
             global_min_value = None
+            global_min_st: Optional[str] = None
+            global_min_et: Optional[str] = None
+
             global_max_value = None
+            global_max_st: Optional[str] = None
+            global_max_et: Optional[str] = None
 
             for point in points:
                 if point["average_value"] is not None and variable.config.decimal_places is not None:
@@ -609,11 +620,30 @@ class TimeDBClient:
                 
                 global_mean_sum += point.pop("mean_sum", 0)
                 global_mean_count += point.pop("mean_count", 0)
+
                 if point["min_value"] is not None:
-                    global_min_value = min(global_min_value, point["min_value"]) if global_min_value is not None else point["min_value"]
+                    if global_min_value is not None:
+                        if point["min_value"] < global_min_value:
+                            global_min_value = point["min_value"]
+                            global_min_st = point["start_time"]
+                            global_min_et = point["end_time"]
+
+                    else:
+                        global_min_value = point["min_value"]
+                        global_min_st = point["start_time"]
+                        global_min_et = point["end_time"]
                 
                 if point["max_value"] is not None:
-                    global_max_value = max(global_max_value, point["max_value"]) if global_max_value is not None else point["max_value"]
+                    if global_max_value is not None:
+                        if point["max_value"] > global_max_value:
+                            global_max_value = point["max_value"]
+                            global_max_st = point["start_time"]
+                            global_max_et = point["end_time"]
+
+                    else:
+                        global_max_value = point["max_value"]
+                        global_max_st = point["start_time"]
+                        global_max_et = point["end_time"]
 
             global_mean_value = (global_mean_sum / global_mean_count) if global_mean_count != 0 else None
             if global_mean_value is not None:
@@ -623,6 +653,10 @@ class TimeDBClient:
             global_metrics["average_value"] = global_mean_value
             global_metrics["min_value"] = global_min_value
             global_metrics["max_value"] = global_max_value
+            global_metrics["min_value_start_time"] = global_min_st
+            global_metrics["min_value_end_time"] = global_min_et
+            global_metrics["max_value_start_time"] = global_max_st
+            global_metrics["max_value_end_time"] = global_max_et
 
         else:
             global_metrics: Dict[str, Any] = {}

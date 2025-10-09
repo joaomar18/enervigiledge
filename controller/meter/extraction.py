@@ -124,16 +124,27 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
     return output
 
 ##########     T O     D O     ##########
-def get_meter_energy_efficiency(phase: NodePhase, meter_nodes: Dict[str, Node], timedb: TimeDBClient, time_span: TimeSpanParameters) -> Dict[str, Any]:
-    output: Dict[str, Any] = {}
-    return output
-
-##########     T O     D O     ##########
 def get_meter_peak_power(phase: NodePhase, meter_nodes: Dict[str, Node], timedb: TimeDBClient, time_span: TimeSpanParameters) -> Dict[str, Any]:
     output: Dict[str, Any] = {}
+    output["active_power_all_time"]
+    output["active_power"]
+    output["apparent_power_all_time"]
+    output["apparent_power"]    
+
+
+
     return output
 
 ##########     T O     D O     ##########
 def get_meter_phase_balance(meter_nodes: Dict[str, Node], timedb: TimeDBClient, time_span: TimeSpanParameters) -> Dict[str, Any]:
     output: Dict[str, Any] = {}
+    output["l1_voltage"]
+    output["l2_voltage"]
+    output["l3_voltage"]    
+    output["voltage_imbalance"]
+
+    output["l1_current"]
+    output["l2_current"]
+    output["l3_current"]
+    output["current_imbalance"]
     return output

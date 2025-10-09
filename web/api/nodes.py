@@ -30,18 +30,24 @@ router = APIRouter(prefix="/nodes", tags=["nodes"])
 ##########     P A R S E     M E T H O D S     ##########
 
 
-async def _parse_formatted_time_span(request: Request) -> TimeSpanParameters:
+async def _parse_formatted_time_span(request: Request, formatted: bool, force_aggregation: Optional[bool] = None) -> TimeSpanParameters:
     """Parse time span parameters from request query params.
     
     Extracts and converts start_time, end_time, time_step, formatted flag, and time_zone
     from query parameters. When formatted=true, start_time is required and end_time defaults
     to now. Returns datetime objects with second precision removed.
     
+    Args:
+        request: The HTTP request containing query parameters.
+        formatted: If True, enables formatted time span behavior with required start_time
+            and optional time_step. If False, all time parameters are optional.
+        force_aggregation: Optional flag to force aggregation of data when True.
+    
     Returns:
-        TimeSpanParameters containing the parsed time span configuration
+        TimeSpanParameters: Containing the parsed time span configuration with start_time,
+            end_time, time_step, formatted flag, time_zone, and force_aggregation settings.
     """
 
-    formatted = objects.check_bool_str(request.query_params.get("formatted"))
     time_zone = date.get_time_zone_info(request.query_params.get("time_zone"))
 
     if formatted:
@@ -58,7 +64,7 @@ async def _parse_formatted_time_span(request: Request) -> TimeSpanParameters:
     start_time = date.remove_sec_precision(date.convert_isostr_to_date(start_time)) if start_time else None
     end_time = date.remove_sec_precision(date.convert_isostr_to_date(end_time)) if end_time else None
 
-    return TimeSpanParameters(start_time, end_time, time_step, formatted, time_zone)
+    return TimeSpanParameters(start_time, end_time, time_step, formatted, time_zone, force_aggregation)
 
 
 #########################################################
@@ -157,7 +163,9 @@ async def get_logs_from_node(
 
     device_id = int(objects.require_field(request.query_params, "device_id", str))
     name = objects.require_field(request.query_params, "node_name", str)
-    time_span = await _parse_formatted_time_span(request)
+    formatted = objects.check_bool_str(request.query_params.get("formatted"))
+
+    time_span = await _parse_formatted_time_span(request, formatted)
 
     device = device_manager.get_device(device_id)
     if not device:
@@ -187,7 +195,8 @@ async def get_energy_consumption(
     device_id = int(objects.require_field(request.query_params, "device_id", str))
     phase = NodePhase(objects.require_field(request.query_params, "phase", str))
     direction = NodeDirection(objects.require_field(request.query_params, "direction", str))
-    time_span = await _parse_formatted_time_span(request)
+    formatted = objects.check_bool_str(request.query_params.get("formatted"))
+    time_span = await _parse_formatted_time_span(request, formatted)
 
     device = device_manager.get_device(device_id)
     if not device:
@@ -195,28 +204,6 @@ async def get_energy_consumption(
     
     response = meter_extraction.get_meter_energy_consumption(device, phase, direction, timedb, time_span)
     return JSONResponse(content=response)
-
-
-##########     T O     D O     ##########
-@router.get("/get_energy_efficiency")
-@auth_endpoint(AuthConfigs.PROTECTED)
-async def get_energy_efficiency(    
-    request: Request,
-    safety: HTTPSafety = Depends(services.get_safety),
-    device_manager: DeviceManager = Depends(services.get_device_manager),
-    timedb: TimeDBClient = Depends(services.get_timedb),
-) -> JSONResponse:
-
-    device_id = int(objects.require_field(request.query_params, "device_id", str))
-    phase = objects.require_field(request.query_params, "phase", str)
-    time_span = await _parse_formatted_time_span(request)
-
-    device = device_manager.get_device(device_id)
-    if not device:
-        raise ValueError(f"Device with id {device_id} does not exist.")    
-
-    message = ""
-    return JSONResponse(content={"result": message})
 
 
 ##########     T O     D O     ##########
@@ -231,7 +218,7 @@ async def get_peak_demand_power(
 
     device_id = int(objects.require_field(request.query_params, "device_id", str))
     phase = objects.require_field(request.query_params, "phase", str)
-    time_span = await _parse_formatted_time_span(request)
+    time_span = await _parse_formatted_time_span(request, False, True)
 
     device = device_manager.get_device(device_id)
     if not device:
@@ -252,7 +239,7 @@ async def get_phase_balance(
 ) -> JSONResponse:
 
     device_id = int(objects.require_field(request.query_params, "device_id", str))
-    time_span = await _parse_formatted_time_span(request)
+    time_span = await _parse_formatted_time_span(request, False, True)
 
     device = device_manager.get_device(device_id)
     if not device:
