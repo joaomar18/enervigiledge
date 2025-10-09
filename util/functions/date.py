@@ -146,33 +146,69 @@ def calculate_date_delta(start_time: datetime, formatted_time_step: FormattedTim
     return end_time
 
 
-def time_step_to_minutes(reference_date: datetime, formatted_time_step: FormattedTimeStep, time_zone: Optional[ZoneInfo] = None) -> int:
+def time_step_grouping(reference_date: datetime, formatted_time_step: FormattedTimeStep, time_zone: Optional[ZoneInfo] = None) -> str:
 
     if formatted_time_step is FormattedTimeStep._1m:
-        return 1
+        return "1m"
 
     elif formatted_time_step is FormattedTimeStep._15m:
-        return 15
+        return "15m"
 
     elif formatted_time_step is FormattedTimeStep._1h:
-        return 60
+        return "60m"
 
     elif formatted_time_step is FormattedTimeStep._1d:
-        return 60 * 24
+        return "1d"
 
     elif formatted_time_step is FormattedTimeStep._1M:
         start_of_month = reference_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         next_month = calculate_date_delta(start_of_month, formatted_time_step, time_zone)
         days_in_month = (next_month - start_of_month).days
-        return days_in_month * 60 * 24
+        return f"{days_in_month}d"
 
     elif formatted_time_step is FormattedTimeStep._1Y:
         start_of_year = reference_date.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         next_year = calculate_date_delta(start_of_year, formatted_time_step, time_zone)
         days_in_year = (next_year - start_of_year).days
-        return days_in_year * 60 * 24
+        return f"{days_in_year}d"
     else:
         raise ValueError(f"Unknown formatted time_step {formatted_time_step}.")
+
+
+def check_time_step(check: List[bool], time_step_01: FormattedTimeStep, time_step_02: FormattedTimeStep, current_time_step: FormattedTimeStep) -> bool:
+
+    if time_step_01 == current_time_step:
+        check[0] = True
+
+    if time_step_02 == current_time_step:
+        check[1] = True
+
+    if check[0] and check[1]:
+        return True
+    
+    return False
+
+
+def bigger_time_step(time_step_01: FormattedTimeStep, time_step_02: FormattedTimeStep) -> FormattedTimeStep:
+    if time_step_01 == time_step_02:
+        return time_step_01
+    
+    time_step_check: List[bool] = [False, False]
+
+    if check_time_step(time_step_check, time_step_01, time_step_02, FormattedTimeStep._1m):
+        return FormattedTimeStep._1m
+    elif check_time_step(time_step_check, time_step_01, time_step_02, FormattedTimeStep._15m):
+        return FormattedTimeStep._15m
+    elif check_time_step(time_step_check, time_step_01, time_step_02, FormattedTimeStep._1h):
+        return FormattedTimeStep._1h
+    elif check_time_step(time_step_check, time_step_01, time_step_02, FormattedTimeStep._1d):
+        return FormattedTimeStep._1d
+    elif check_time_step(time_step_check, time_step_01, time_step_02, FormattedTimeStep._1M):
+        return FormattedTimeStep._1M
+    elif check_time_step(time_step_check, time_step_01, time_step_02, FormattedTimeStep._1Y):
+        return FormattedTimeStep._1Y
+    
+    raise RuntimeError(f'One of the following time steps is invalid: {time_step_01}, {time_step_02}')
 
 
 def align_start_time(start_time: datetime, formatted_time_step: FormattedTimeStep) -> datetime:
@@ -238,18 +274,18 @@ def iterate_time_periods(
     end_time: datetime,
     formatted_time_step: FormattedTimeStep,
     time_zone: Optional[ZoneInfo] = None,
-) -> Optional[Iterator[Tuple[datetime, int]]]:
+) -> Optional[Iterator[Tuple[datetime, str]]]:
 
     if formatted_time_step not in (FormattedTimeStep._1M, FormattedTimeStep._1Y):
         return None
 
-    def _iterator() -> Iterator[Tuple[datetime, int]]:
+    def _iterator() -> Iterator[Tuple[datetime, str]]:
         current_time = align_start_time(start_time, formatted_time_step)
         aligned_end_time = align_end_time(end_time, formatted_time_step)
 
         while current_time < aligned_end_time:
-            current_minutes_period = time_step_to_minutes(current_time, formatted_time_step, time_zone)
-            yield (current_time, current_minutes_period)
+            group_by_time = time_step_grouping(current_time, formatted_time_step, time_zone)
+            yield (current_time, group_by_time)
             current_time = calculate_date_delta(current_time, formatted_time_step, time_zone)
 
     return _iterator()

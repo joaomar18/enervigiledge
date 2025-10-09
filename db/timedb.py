@@ -98,7 +98,7 @@ class TimeDBClient:
             Each returned dictionary contains:
             - "measurement": The series name
             - "fields": Dictionary of measurement values and formatted timestamps
-            - "time": Primary timestamp (end_time with second precision removed)
+            - "time": Primary timestamp (start_time with second precision removed)
         """
 
         formatted = []
@@ -114,8 +114,6 @@ class TimeDBClient:
             formatted_start = date.to_iso_minutes(start_time)
             formatted_end = date.to_iso_minutes(end_time)
 
-            end_time_trimmed = date.remove_sec_precision(end_time)
-
             fields: dict[str, Any] = {k: v for k, v in item.items() if k not in ("name", "start_time", "end_time") and v is not None}
             fields["start_time"] = formatted_start
             fields["end_time"] = formatted_end
@@ -129,7 +127,7 @@ class TimeDBClient:
             else:
                 return None
 
-            formatted.append({"measurement": name, "fields": fields, "time": end_time_trimmed})
+            formatted.append({"measurement": name, "fields": fields, "time": date.remove_sec_precision(start_time)})
 
         return formatted
 
@@ -250,6 +248,7 @@ class TimeDBClient:
         except Exception as e:
             logger.exception(f"Failed to write data to DB '{measurement.db}': {e}")
             return False
+        
 
     def __iter_points(self, res: ResultSet | Iterable[ResultSet]) -> Iterator[Dict[str, Any]]:
         """
@@ -283,12 +282,16 @@ class TimeDBClient:
                 query.where.append('"mean_count" > 0')
                 if formatted: # formatted/bucketed
                     query.fields.extend([
+                        f'SUM("mean_sum") AS mean_sum',
+                        f'SUM("mean_count") AS mean_count',
                         f'(SUM("mean_sum") / SUM("mean_count")) / {unit_factor} AS average_value',
                         f'MIN("min_value") / {unit_factor} AS min_value',
                         f'MAX("max_value") / {unit_factor} AS max_value',
                     ])
                 else: # raw/non-formatted
                     query.fields.extend([
+                        f'"mean_sum" AS mean_sum',
+                        f'"mean_count" AS mean_count',
                         f'("mean_sum" / "mean_count") / {unit_factor} AS average_value',
                         f'"min_value" / {unit_factor} AS min_value',
                         f'"max_value" / {unit_factor} AS max_value',
@@ -304,36 +307,33 @@ class TimeDBClient:
                 raise NotImplementedError("Can't get logs from non-numeric variables in formatted time spans")
             query.fields.extend(['"value"'])
 
-    def __build_query_without_time_span(self, variable: Node) -> str:
+    def __build_query_without_time_span(self, variable: Node, time_zone: Optional[ZoneInfo]) -> str:
 
-        query = QueryVariableLogs(variable=variable.config.name, fields=["start_time", "end_time"])
+        query = QueryVariableLogs(variable=variable.config.name, fields=["start_time", "end_time"], timezone=time_zone.key if time_zone else None)
         self.__extend_query(query, variable, False)
         return query.render()
 
-    def __build_query_with_time_span_non_formatted(self, variable: Node, start_time_str: str, end_time_str: str) -> str:
+    def __build_query_with_time_span_non_formatted(self, variable: Node, start_time_str: str, end_time_str: str, time_zone: Optional[ZoneInfo]) -> str:
 
-        query = QueryVariableLogs(variable=variable.config.name, fields=["start_time", "end_time"], where=[f"time >= '{start_time_str}'", f"time <= '{end_time_str}'"])
+        query = QueryVariableLogs(variable=variable.config.name, fields=["start_time", "end_time"], where=[f"time >= '{start_time_str}'", f"time < '{end_time_str}'"], timezone=time_zone.key if time_zone else None)
         self.__extend_query(query, variable, False)
         return query.render()
 
-    def __build_query_with_time_span_formatted(self, variable: Node, start_time_str: str, end_time_str: str, minutes_step: int) -> str:
+    def __build_query_with_time_span_formatted(self, variable: Node, start_time_str: str, end_time_str: str, group_by_time: str, time_zone: Optional[ZoneInfo]) -> str:
         
-        if minutes_step < 1:
-            raise ValueError("minutes_step must be >= 1")
-
-        query = QueryVariableLogs(variable=variable.config.name, fields=['FIRST("start_time") AS start_time', 'LAST("end_time") AS end_time'], where=[f"time >= '{start_time_str}'", f"time <= '{end_time_str}'"], group_by=[f"time({minutes_step}m)"], fill="null")
+        query = QueryVariableLogs(variable=variable.config.name, fields=['FIRST("start_time") AS start_time', 'LAST("end_time") AS end_time'], where=[f"time >= '{start_time_str}'", f"time < '{end_time_str}'"], group_by=[f"time({group_by_time})"], fill="null", timezone=time_zone.key if time_zone else None)
         self.__extend_query(query, variable, True)
         return query.render()
 
     def __build_query_with_time_span(
-        self, variable: Node, start_time_str: str, end_time_str: str, formatted: Optional[bool], minutes_step: Optional[int]
+        self, variable: Node, start_time_str: str, end_time_str: str, formatted: Optional[bool], group_by_time: Optional[str], time_zone: Optional[ZoneInfo]
     ) -> str:
 
         if not formatted:
-            query = self.__build_query_with_time_span_non_formatted(variable, start_time_str, end_time_str)
+            query = self.__build_query_with_time_span_non_formatted(variable, start_time_str, end_time_str, time_zone)
 
-        elif minutes_step:
-            query = self.__build_query_with_time_span_formatted(variable, start_time_str, end_time_str, minutes_step)
+        elif group_by_time:
+            query = self.__build_query_with_time_span_formatted(variable, start_time_str, end_time_str, group_by_time, time_zone)
 
         else:
             raise ValueError(f"Wrong parameters to get logs from node {variable.config.name}.")
@@ -341,28 +341,27 @@ class TimeDBClient:
         return query
 
     def __build_query(
-        self, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime], formatted: Optional[bool], minutes_step: Optional[int]
+        self, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime], formatted: Optional[bool], group_by_time: Optional[str], time_zone: Optional[ZoneInfo]
     ) -> str:
 
         if start_time and end_time:
-            start_time_str = start_time.isoformat()
-            end_time_str = end_time.isoformat()
-            query = self.__build_query_with_time_span(variable, start_time_str, end_time_str, formatted, minutes_step)
+            start_time_str = start_time.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
+            end_time_str = end_time.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
+            query = self.__build_query_with_time_span(variable, start_time_str, end_time_str, formatted, group_by_time, time_zone)
 
         else:
-            query = self.__build_query_without_time_span(variable)
+            query = self.__build_query_without_time_span(variable, time_zone)
 
         return query
 
-    def __adjust_time_step(self, points: List[Dict[str, Any]], time_step: FormattedTimeStep, time_zone: Optional[ZoneInfo]) -> FormattedTimeStep:
+    def __adjust_time_step(self, points: List[Dict[str, Any]], time_step: FormattedTimeStep) -> FormattedTimeStep:
 
         for point in points:
             if point["start_time"] is not None and point["end_time"] is not None:
                 st = date.convert_isostr_to_date(point["start_time"])
                 et = date.convert_isostr_to_date(point["end_time"])
                 current_time_step = date.get_formatted_time_step(st, et)
-                if date.time_step_to_minutes(st, time_step, time_zone) < date.time_step_to_minutes(st, current_time_step, time_zone):
-                    time_step = current_time_step
+                time_step = date.bigger_time_step(time_step, current_time_step)
 
         return time_step
 
@@ -422,53 +421,82 @@ class TimeDBClient:
         if not isinstance(variable.processor, NumericNodeProcessor):
             return None
 
-        time_step = self.__adjust_time_step(points, time_step, time_zone)
+        time_step = self.__adjust_time_step(points, time_step)
         aligned_time_buckets = date.get_aligned_time_buckets(start_time, end_time, time_step, time_zone)
         existing_data = self.__align_points_start_time(points, aligned_time_buckets)
         points.clear()
         self.__fill_formatted_time_buckets(variable, points, aligned_time_buckets, existing_data)
         return time_step
 
-    def __round_numeric_variables(self, variable: Node, points: List[Dict[str, Any]]) -> None:
-        """
-        Apply decimal precision rounding to numeric variable values.
+    def __post_process_points(self, variable: Node, points: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 
-        Only applies to non-incremental numeric variables with configured decimal places.
-        Rounds the 'average_value' field in-place for each data point.
+        if not isinstance(variable.processor, NumericNodeProcessor): 
+            return None
 
-        Args:
-            variable: Node configuration with decimal_places setting.
-            points: List of data points to modify (modified in-place).
-        """
+        if not variable.config.incremental_node:
+            global_metrics: Dict[str, Any] = {}
+            global_mean_sum = 0
+            global_mean_count = 0
+            global_mean_value = None
+            global_min_value = None
+            global_max_value = None
 
-        if not isinstance(variable.processor, NumericNodeProcessor) or variable.config.incremental_node:
-            return
+            for point in points:
+                if point["average_value"] is not None and variable.config.decimal_places is not None:
+                    point["average_value"] = round(point["average_value"], variable.config.decimal_places)
+                
+                global_mean_sum += point.pop("mean_sum", 0)
+                global_mean_count += point.pop("mean_count", 0)
+                if point["min_value"] is not None:
+                    global_min_value = min(global_min_value, point["min_value"]) if global_min_value is not None else point["min_value"]
+                
+                if point["max_value"] is not None:
+                    global_max_value = max(global_max_value, point["max_value"]) if global_max_value is not None else point["max_value"]
 
-        for point in points:
-            if point["average_value"] is not None and variable.config.decimal_places is not None:
-                point["average_value"] = round(point["average_value"], variable.config.decimal_places)
+            global_mean_value = (global_mean_sum / global_mean_count) if global_mean_count != 0 else None
+            if global_mean_value is not None:
+                global_mean_value /= calculation.get_unit_factor(variable.config.unit)
+                global_mean_value = round(global_mean_value, variable.config.decimal_places) if variable.config.decimal_places is not None else global_mean_value
+            
+            global_metrics["average_value"] = global_mean_value
+            global_metrics["min_value"] = global_min_value
+            global_metrics["max_value"] = global_max_value
+
+        else:
+            global_metrics: Dict[str, Any] = {}
+            global_sum = 0
+
+            for point in points:
+                global_sum += point["value"] if point["value"] is not None else 0
+            
+            global_metrics["value"] = global_sum
+
+        return global_metrics
+                
 
     def __get_formatted_variable_logs(self, client: InfluxDBClient, variable: Node, start_time: datetime, end_time: datetime, time_step: FormattedTimeStep, time_zone: Optional[ZoneInfo] = None) -> List[Dict[str, Any]]:
             
         variable_logs: List[Dict[str, Any]] = []
+
         query_iterator = date.iterate_time_periods(start_time, end_time, time_step, time_zone)
         if query_iterator:
-            for st, minutes_step in query_iterator:
-                query = self.__build_query(variable, st, date.calculate_date_delta(st, time_step, time_zone), True, minutes_step)
+            for st, group_by_time in query_iterator:
+                query = self.__build_query(variable, st, date.calculate_date_delta(st, time_step, time_zone), True, group_by_time, time_zone)
+
                 result = client.query(query)
                 points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
                 variable_logs.extend(points)
         else:
-            query = self.__build_query(variable, start_time, end_time, True, date.time_step_to_minutes(start_time, time_step, time_zone))
+            query = self.__build_query(variable, start_time, end_time, True, date.time_step_grouping(start_time, time_step, time_zone), time_zone)
             result = client.query(query)
             points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
             variable_logs.extend(points)
 
         return variable_logs
 
-    def __get_raw_variable_logs(self, client: InfluxDBClient, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime]) -> List[Dict[str, Any]]:
+    def __get_raw_variable_logs(self, client: InfluxDBClient, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime], time_zone: Optional[ZoneInfo]) -> List[Dict[str, Any]]:
         
-        query = self.__build_query(variable, start_time, end_time, False, None)
+        query = self.__build_query(variable, start_time, end_time, False, None, time_zone)
         result = client.query(query)
         return [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
 
@@ -502,18 +530,21 @@ class TimeDBClient:
             points = self.__get_formatted_variable_logs(client, variable, start_time, end_time, time_step, time_zone)
 
         else:
-            points = self.__get_raw_variable_logs(client, variable, start_time, end_time)
+            points = self.__get_raw_variable_logs(client, variable, start_time, end_time, time_zone)
 
         if formatted and start_time and end_time and time_step: # Apply post logs processing if logs are Formatted
             time_step = self.__formatted_post_processing(variable, points, start_time, end_time, time_step, time_zone)
-        self.__round_numeric_variables(variable, points)
+        global_metrics = self.__post_process_points(variable, points)
 
         variable_logs: Dict[str, Any] = {}
         variable_logs["unit"] = variable.config.unit
+        variable_logs["decimal_places"] = variable.config.decimal_places
         variable_logs["type"] = variable.config.type
         variable_logs["incremental"] = variable.config.incremental_node
         variable_logs["points"] = points
         variable_logs["time_step"] = time_step
+        if global_metrics:
+            variable_logs["global_metrics"] = global_metrics
 
         return variable_logs
 
