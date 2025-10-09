@@ -417,16 +417,17 @@ class TimeDBClient:
         end_time: datetime,
         time_step: FormattedTimeStep,
         time_zone: Optional[ZoneInfo],
-    ) -> None:
+    ) -> Optional[FormattedTimeStep]:
 
         if not isinstance(variable.processor, NumericNodeProcessor):
-            return
+            return None
 
         time_step = self.__adjust_time_step(points, time_step, time_zone)
         aligned_time_buckets = date.get_aligned_time_buckets(start_time, end_time, time_step, time_zone)
         existing_data = self.__align_points_start_time(points, aligned_time_buckets)
         points.clear()
         self.__fill_formatted_time_buckets(variable, points, aligned_time_buckets, existing_data)
+        return time_step
 
     def __round_numeric_variables(self, variable: Node, points: List[Dict[str, Any]]) -> None:
         """
@@ -504,7 +505,7 @@ class TimeDBClient:
             points = self.__get_raw_variable_logs(client, variable, start_time, end_time)
 
         if formatted and start_time and end_time and time_step: # Apply post logs processing if logs are Formatted
-            self.__formatted_post_processing(variable, points, start_time, end_time, time_step, time_zone)
+            time_step = self.__formatted_post_processing(variable, points, start_time, end_time, time_step, time_zone)
         self.__round_numeric_variables(variable, points)
 
         variable_logs: Dict[str, Any] = {}
@@ -512,6 +513,7 @@ class TimeDBClient:
         variable_logs["type"] = variable.config.type
         variable_logs["incremental"] = variable.config.incremental_node
         variable_logs["points"] = points
+        variable_logs["time_step"] = time_step
 
         return variable_logs
 
