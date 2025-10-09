@@ -481,7 +481,7 @@ class TimeDBClient:
         formatted: Optional[bool] = None,
         time_step: Optional[FormattedTimeStep] = None,
         time_zone: Optional[ZoneInfo] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
 
         client = self.__require_client()
         db_name = f"{device_name}_{device_id}"
@@ -498,14 +498,20 @@ class TimeDBClient:
         client.switch_database(db_name)
 
         if formatted and start_time and end_time and time_step: # Logs are to be Formatted
-            variable_logs = self.__get_formatted_variable_logs(client, variable, start_time, end_time, time_step, time_zone)
+            points = self.__get_formatted_variable_logs(client, variable, start_time, end_time, time_step, time_zone)
 
         else:
-            variable_logs = self.__get_raw_variable_logs(client, variable, start_time, end_time)
+            points = self.__get_raw_variable_logs(client, variable, start_time, end_time)
 
         if formatted and start_time and end_time and time_step: # Apply post logs processing if logs are Formatted
-            self.__formatted_post_processing(variable, variable_logs, start_time, end_time, time_step, time_zone)
-        self.__round_numeric_variables(variable, variable_logs)
+            self.__formatted_post_processing(variable, points, start_time, end_time, time_step, time_zone)
+        self.__round_numeric_variables(variable, points)
+
+        variable_logs: Dict[str, Any] = {}
+        variable_logs["unit"] = variable.config.unit
+        variable_logs["type"] = variable.config.type
+        variable_logs["incremental"] = variable.config.incremental_node
+        variable_logs["points"] = points
 
         return variable_logs
 
