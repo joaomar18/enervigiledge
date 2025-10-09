@@ -361,7 +361,7 @@ class TimeDBClient:
         self.__extend_query(query, variable, False)
         return query.render()
 
-    def __build_query_with_time_span_aggregated(self, variable: Node, start_time_str: str, end_time_str: str, group_by_time: str, time_zone: Optional[ZoneInfo]) -> str:
+    def __build_query_with_time_span_aggregated(self, variable: Node, start_time_str: str, end_time_str: str, group_by_time: Optional[str], time_zone: Optional[ZoneInfo]) -> str:
         """
         Builds an aggregated InfluxDB query to retrieve variable logs grouped into time buckets.
 
@@ -369,14 +369,17 @@ class TimeDBClient:
             variable: Node configuration with variable name and processor settings.
             start_time_str: ISO format start time (inclusive).
             end_time_str: ISO format end time (exclusive).
-            group_by_time: Time bucket interval (e.g., "1h", "15m").
+            group_by_time: Optional time bucket interval (e.g., "1h", "15m"). If not provided,
+                no time-based grouping is applied.
             time_zone: Optional timezone for timestamp conversion.
 
         Returns:
-            str: Rendered InfluxDB query string with time bucketing and aggregations.
+            str: Rendered InfluxDB query string with aggregations and optional time bucketing.
         """ 
 
-        query = QueryVariableLogs(variable=variable.config.name, fields=['FIRST("start_time") AS start_time', 'LAST("end_time") AS end_time'], where=[f"time >= '{start_time_str}'", f"time < '{end_time_str}'"], group_by=[f"time({group_by_time})"], fill="null", timezone=time_zone.key if time_zone else None)
+        query = QueryVariableLogs(variable=variable.config.name, fields=['FIRST("start_time") AS start_time', 'LAST("end_time") AS end_time'], where=[f"time >= '{start_time_str}'", f"time < '{end_time_str}'"], fill="null", timezone=time_zone.key if time_zone else None)
+        if group_by_time:
+            query.group_by = [f"time({group_by_time})"]
         self.__extend_query(query, variable, True)
         return query.render()
 
@@ -390,25 +393,19 @@ class TimeDBClient:
             variable: Node configuration with variable name and processor settings.
             start_time_str: ISO format start time (inclusive).
             end_time_str: ISO format end time (exclusive).
-            aggregated: If True, builds aggregated query; if False, builds raw query.
-            group_by_time: Time bucket interval for formatted queries (e.g., "1h", "15m").
+            aggregated: If True, builds aggregated query; if False or None, builds raw query.
+            group_by_time: Optional time bucket interval for aggregated queries (e.g., "1h", "15m").
             time_zone: Optional timezone for timestamp conversion.
 
         Returns:
             str: Rendered InfluxDB query string.
-
-        Raises:
-            ValueError: If formatted=True but group_by_time is not provided.
         """
 
         if not aggregated:
             query = self.__build_query_with_time_span_non_aggregated(variable, start_time_str, end_time_str, time_zone)
 
-        elif group_by_time:
-            query = self.__build_query_with_time_span_aggregated(variable, start_time_str, end_time_str, group_by_time, time_zone)
-
         else:
-            raise ValueError(f"Wrong parameters to get logs from node {variable.config.name}.")
+            query = self.__build_query_with_time_span_aggregated(variable, start_time_str, end_time_str, group_by_time, time_zone)
 
         return query
 
