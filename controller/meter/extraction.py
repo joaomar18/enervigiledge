@@ -96,7 +96,10 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
     reactive_energy_value: Optional[int | float] = reactive_energy_metrics.get("value") if reactive_energy_metrics is not None else None
 
     if active_energy_value is not None and reactive_energy_value is not None:
-        output["power_factor"] = active_energy_value / math.sqrt(math.pow(active_energy_value, 2) + math.pow(reactive_energy_value, 2))
+        if active_energy_value != 0 or reactive_energy_value != 0:
+            output["power_factor"] = active_energy_value / math.sqrt(math.pow(active_energy_value, 2) + math.pow(reactive_energy_value, 2))
+        else:
+            output["power_factor"] = None
 
         if active_energy_value == 0 and reactive_energy_value == 0:
             output["power_factor_direction"] = PowerFactorDirection.UNKNOWN

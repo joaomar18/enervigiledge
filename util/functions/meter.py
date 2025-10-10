@@ -75,7 +75,7 @@ def create_node_name(base_name: str, phase: NodePhase, direction: Optional[NodeD
         str: Node name like "l1_forward_active_energy" or "total_power".
     """
 
-    return NODE_PHASE_TO_PREFIX_MAP[phase].value + NODE_DIRECTION_TO_STR_MAP[direction] if direction else "" + base_name
+    return NODE_PHASE_TO_PREFIX_MAP[phase].value + (NODE_DIRECTION_TO_STR_MAP[direction] if direction else "") + base_name
 
 
 def create_default_node_attributes(meter_type: EnergyMeterType) -> NodeAttributes:

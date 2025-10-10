@@ -164,7 +164,6 @@ async def get_logs_from_node(
     device_id = int(objects.require_field(request.query_params, "device_id", str))
     name = objects.require_field(request.query_params, "node_name", str)
     formatted = objects.check_bool_str(request.query_params.get("formatted"))
-
     time_span = await _parse_formatted_time_span(request, formatted)
 
     device = device_manager.get_device(device_id)
@@ -176,7 +175,6 @@ async def get_logs_from_node(
         raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
 
     date.process_time_span(time_span)
-
     response = timedb.get_variable_logs(device.name, device_id, node, time_span)
     return JSONResponse(content=response)
 
@@ -202,6 +200,7 @@ async def get_energy_consumption(
     if not device:
         raise ValueError(f"Device with id {device_id} does not exist.")
     
+    date.process_time_span(time_span)
     response = meter_extraction.get_meter_energy_consumption(device, phase, direction, timedb, time_span)
     return JSONResponse(content=response)
 
@@ -225,6 +224,7 @@ async def get_peak_demand_power(
     if not device:
         raise ValueError(f"Device with id {device_id} does not exist.")
 
+    date.process_time_span(time_span)
     response = meter_extraction.get_meter_peak_power(device, phase, timedb, time_span)
     return JSONResponse(content=response)
 
@@ -247,6 +247,7 @@ async def get_phase_balance(
     if not device:
         raise ValueError(f"Device with id {device_id} does not exist.")
 
+    date.process_time_span(time_span)
     response = meter_extraction.get_meter_phase_balance(device, timedb, time_span)
     return JSONResponse(content=response)
     
