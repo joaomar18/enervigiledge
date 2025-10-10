@@ -1,7 +1,6 @@
 ###########EXERTNAL IMPORTS############
 
-from typing import Dict, Any, Optional, Set, Callable
-from datetime import datetime
+from typing import List, Dict, Any, Optional
 import math
 
 #######################################
@@ -9,18 +8,11 @@ import math
 #############LOCAL IMPORTS#############
 
 from controller.device import Device
-from controller.node.node import Node
-from model.controller.general import Protocol
 from model.controller.device import PowerFactorDirection
 from model.controller.node import NodePhase, NodeType, NodeDirection, NodeLogs
 from model.date import TimeSpanParameters
-from controller.meter.nodes import EnergyMeterNodes
-import controller.meter.calculation as calculation
-from mqtt.client import MQTTMessage
 from db.timedb import TimeDBClient
-import util.functions.date as date
 import util.functions.meter as meter_util
-from util.debug import LoggerManager
 
 #######################################
 
@@ -123,28 +115,129 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
 
     return output
 
-##########     T O     D O     ##########
-def get_meter_peak_power(phase: NodePhase, meter_nodes: Dict[str, Node], timedb: TimeDBClient, time_span: TimeSpanParameters) -> Dict[str, Any]:
+
+def get_meter_peak_power(device: Device, phase: NodePhase, timedb: TimeDBClient, time_span: TimeSpanParameters) -> Dict[str, Any]:
+    """
+    Get peak power metrics (min, max, avg) for active and apparent power.
+    
+    Returns global metrics for both all-time and the specified time span. If a power node
+    doesn't exist on the device, returns None for that power type.
+    
+    Args:
+        device: Meter device to query
+        phase: Phase to query (PHASE_1, PHASE_2, PHASE_3, or TOTAL)
+        timedb: TimeDB client for querying data
+        time_span: Time span parameters (start, end, timezone)
+        
+    Returns:
+        Dictionary with keys: active_power_all_time, active_power, 
+        apparent_power_all_time, apparent_power. Values are metric dicts or None.
+    """
+
     output: Dict[str, Any] = {}
-    output["active_power_all_time"]
-    output["active_power"]
-    output["apparent_power_all_time"]
-    output["apparent_power"]    
+    active_power_node_name = meter_util.create_node_name("active_energy", phase, None)
+    apparent_power_node_name = meter_util.create_node_name("reactive_energy", phase, None)
 
+    active_power_node = next((n for n in device.nodes if n.config.name == active_power_node_name), None)
+    apparent_power_node = next((n for n in device.nodes if n.config.name == apparent_power_node_name), None)
 
+    if active_power_node:
+        output["active_power_all_time"] = timedb.get_variable_logs(device.name, device.id, active_power_node, TimeSpanParameters(None, None, None, False, time_span.time_zone, time_span.force_aggregation)).get("global_metrics")
+        output["active_power"] = timedb.get_variable_logs(device.name, device.id, active_power_node, time_span).get("global_metrics")
+    else:
+        output["active_power_all_time"] = None
+        output["active_power"] = None
+
+    if apparent_power_node:
+        output["apparent_power_all_time"] = timedb.get_variable_logs(device.name, device.id, apparent_power_node, TimeSpanParameters(None, None, None, False, time_span.time_zone, time_span.force_aggregation)).get("global_metrics")
+        output["apparent_power"] = timedb.get_variable_logs(device.name, device.id, apparent_power_node, time_span).get("global_metrics")
+    else:
+        output["apparent_power_all_time"] = None
+        output["apparent_power"] = None
 
     return output
 
-##########     T O     D O     ##########
-def get_meter_phase_balance(meter_nodes: Dict[str, Node], timedb: TimeDBClient, time_span: TimeSpanParameters) -> Dict[str, Any]:
-    output: Dict[str, Any] = {}
-    output["l1_voltage"]
-    output["l2_voltage"]
-    output["l3_voltage"]    
-    output["voltage_imbalance"]
 
-    output["l1_current"]
-    output["l2_current"]
-    output["l3_current"]
-    output["current_imbalance"]
+def _calculate_phase_imbalance(phase_balance_dict: Dict[str, Optional[Dict[str, Any]]], node_base_name: str) -> Optional[float]:
+    """
+    Calculate phase imbalance percentage using maximum deviation from average.
+    
+    Requires at least 2 phases with data. Returns None if insufficient data.
+    
+    Args:
+        phase_balance_dict: Node names mapped to their metrics (with average_value)
+        node_base_name: Node type to filter (e.g., "voltage", "current")
+        
+    Returns:
+        Imbalance percentage or None
+    """
+
+    average_sum = 0.0
+    average_count = 0
+    average_values: List[int | float] = []
+
+    for node_name, metrics in phase_balance_dict.items():
+        if metrics is not None and node_base_name in node_name:
+            average_value = metrics.get("average_value")
+            if average_value is not None:
+                average_values.append(float(average_value))
+                average_sum += average_value
+                average_count += 1
+
+    global_average = average_sum / average_count if average_count > 1 else None
+    
+
+    max_deviation = max(abs(value - average_sum) for value in average_values) if global_average is not None else None 
+    
+    if max_deviation is None or global_average is None:
+        return None
+
+    return (max_deviation / global_average) * 100
+
+
+def get_meter_phase_balance(device: Device, timedb: TimeDBClient, time_span: TimeSpanParameters) -> Dict[str, Any]:
+    """
+    Get phase balance metrics for voltage and current across all three phases.
+    
+    Retrieves global metrics (min, max, avg) for each phase's voltage and current,
+    then calculates voltage and current imbalance percentages.
+    
+    Args:
+        device: Meter device to query
+        timedb: TimeDB client for querying data
+        time_span: Time span parameters (start, end, timezone)
+        
+    Returns:
+        Dictionary with l1/l2/l3 voltage/current metrics, voltage_imbalance,
+        and current_imbalance percentages. Missing nodes return None.
+    """
+
+    output: Dict[str, Any] = {}
+    l1_voltage_node_name = meter_util.create_node_name("voltage", NodePhase.L1, None)
+    l2_voltage_node_name = meter_util.create_node_name("voltage", NodePhase.L2, None)
+    l3_voltage_node_name = meter_util.create_node_name("voltage", NodePhase.L3, None)
+
+    l1_current_node_name = meter_util.create_node_name("current", NodePhase.L1, None)
+    l2_current_node_name = meter_util.create_node_name("current", NodePhase.L2, None)
+    l3_current_node_name = meter_util.create_node_name("current", NodePhase.L3, None)
+
+    l1_voltage_node = next((n for n in device.nodes if n.config.name == l1_voltage_node_name), None)
+    l2_voltage_node = next((n for n in device.nodes if n.config.name == l2_voltage_node_name), None)
+    l3_voltage_node = next((n for n in device.nodes if n.config.name == l3_voltage_node_name), None)
+
+    l1_current_node = next((n for n in device.nodes if n.config.name == l1_current_node_name), None)
+    l2_current_node = next((n for n in device.nodes if n.config.name == l2_current_node_name), None)
+    l3_current_node = next((n for n in device.nodes if n.config.name == l3_current_node_name), None)
+
+    output["l1_voltage"] = timedb.get_variable_logs(device.name, device.id, l1_voltage_node, time_span).get("global_metrics") if l1_voltage_node else None
+    output["l2_voltage"] = timedb.get_variable_logs(device.name, device.id, l2_voltage_node, time_span).get("global_metrics") if l2_voltage_node else None
+    output["l3_voltage"] = timedb.get_variable_logs(device.name, device.id, l3_voltage_node, time_span).get("global_metrics") if l3_voltage_node else None
+
+    output["l1_current"] = timedb.get_variable_logs(device.name, device.id, l1_current_node, time_span).get("global_metrics") if l1_current_node else None
+    output["l2_current"] = timedb.get_variable_logs(device.name, device.id, l2_current_node, time_span).get("global_metrics") if l2_current_node else None
+    output["l3_current"] = timedb.get_variable_logs(device.name, device.id, l3_current_node, time_span).get("global_metrics") if l3_current_node else None
+    
+    output["voltage_imbalance"] = _calculate_phase_imbalance(output, "voltage")
+    output["current_imbalance"] = _calculate_phase_imbalance(output, "current")
+
     return output

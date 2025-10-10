@@ -63,20 +63,19 @@ def remove_phase_string(name: str) -> str:
     return name
 
 
-def create_node_name(base_name: str, phase: NodePhase, direction: NodeDirection) -> str:
-    """Constructs a node name by combining phase prefix, direction prefix, and base name.
+def create_node_name(base_name: str, phase: NodePhase, direction: Optional[NodeDirection]) -> str:
+    """Constructs a node name by combining phase, direction, and base name.
 
     Args:
         base_name: The base name of the node.
-        phase: NodePhase enum value to determine the phase prefix.
-        direction: NodeDirection enum value to determine the direction prefix.
+        phase: NodePhase enum for the phase prefix (e.g., "l1_", "total_").
+        direction: Optional NodeDirection enum for direction prefix (e.g., "forward_").
 
     Returns:
-        Constructed node name in the format: "{phase_prefix}{direction_prefix}{base_name}"
-        (e.g., "l1_forward_active_energy" or "total_power").
+        str: Node name like "l1_forward_active_energy" or "total_power".
     """
 
-    return NODE_PHASE_TO_PREFIX_MAP[phase].value + NODE_DIRECTION_TO_STR_MAP[direction] + base_name
+    return NODE_PHASE_TO_PREFIX_MAP[phase].value + NODE_DIRECTION_TO_STR_MAP[direction] if direction else "" + base_name
 
 
 def create_default_node_attributes(meter_type: EnergyMeterType) -> NodeAttributes:

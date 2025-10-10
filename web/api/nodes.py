@@ -206,7 +206,6 @@ async def get_energy_consumption(
     return JSONResponse(content=response)
 
 
-##########     T O     D O     ##########
 @router.get("/get_peak_demand_power")
 @auth_endpoint(AuthConfigs.PROTECTED)
 async def get_peak_demand_power(    
@@ -215,20 +214,21 @@ async def get_peak_demand_power(
     device_manager: DeviceManager = Depends(services.get_device_manager),
     timedb: TimeDBClient = Depends(services.get_timedb),
 ) -> JSONResponse:
+    """Retrieves peak power metrics (min, max, avg) for active and apparent power
+    of a specific device phase within the selected time range."""
 
     device_id = int(objects.require_field(request.query_params, "device_id", str))
-    phase = objects.require_field(request.query_params, "phase", str)
+    phase = NodePhase(objects.require_field(request.query_params, "phase", str))
     time_span = await _parse_formatted_time_span(request, False, True)
 
     device = device_manager.get_device(device_id)
     if not device:
         raise ValueError(f"Device with id {device_id} does not exist.")
 
-    message = ""
-    return JSONResponse(content={"result": message})
+    response = meter_extraction.get_meter_peak_power(device, phase, timedb, time_span)
+    return JSONResponse(content=response)
 
 
-##########     T O     D O     ##########
 @router.get("/get_phase_balance")
 @auth_endpoint(AuthConfigs.PROTECTED)
 async def get_phase_balance(    
@@ -237,6 +237,8 @@ async def get_phase_balance(
     device_manager: DeviceManager = Depends(services.get_device_manager),
     timedb: TimeDBClient = Depends(services.get_timedb),
 ) -> JSONResponse:
+    """Retrieves voltage and current metrics for all three phases and calculates
+    voltage and current imbalance percentages within the selected time range."""
 
     device_id = int(objects.require_field(request.query_params, "device_id", str))
     time_span = await _parse_formatted_time_span(request, False, True)
@@ -245,8 +247,8 @@ async def get_phase_balance(
     if not device:
         raise ValueError(f"Device with id {device_id} does not exist.")
 
-    message = ""
-    return JSONResponse(content={"result": message})
+    response = meter_extraction.get_meter_phase_balance(device, timedb, time_span)
+    return JSONResponse(content=response)
     
 
 @router.delete("/delete_logs_from_node")
