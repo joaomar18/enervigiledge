@@ -741,32 +741,36 @@ class TimeDBClient:
         device_id: int,
         variable: Node,
         time_span: TimeSpanParameters
-    ) -> Dict[str, Any]:
-        """Retrieves variable logs from InfluxDB with optional time filtering and aggregation.
+    ) -> NodeLogs:
+        """
+        Retrieve logs for a specific variable from InfluxDB, supporting optional time filtering, aggregation, and formatting.
 
-        Fetches either raw or formatted (time-bucketed) logs for a specific variable.
-        For formatted queries, fills gaps with None values and calculates global metrics.
-        Creates the device database if it doesn't exist.
+        This method fetches historical logs for a variable associated with a device, returning either raw time series points or time-bucketed (formatted) results. Formatted queries fill missing time buckets with None values and compute global metrics for numeric variables. Ensures the device database exists before querying.
 
         Args:
-            device_name: Name of the device containing the variable.
-            device_id: Unique ID of the device.
-            variable: Node configuration with variable name and processor settings.
-            time_span: TimeSpanParameters containing start_time, end_time, formatted flag,
-                time_step for bucketing, and timezone for alignment.
+            device_name (str): Name of the device containing the variable.
+            device_id (int): Unique ID of the device.
+            variable (Node): Node instance specifying variable configuration and processor settings.
+            time_span (TimeSpanParameters): Time window and query configuration. Expected attributes include:
+                - start_time (Optional[datetime]): Start time for log retrieval (inclusive).
+                - end_time (Optional[datetime]): End time for log retrieval (exclusive).
+                - formatted (bool): Whether to bucket data into intervals.
+                - time_step (Optional[str|timedelta]): Interval for bucketing/log aggregation if formatted.
+                - time_zone (Optional[str]): Time zone for aligning bucket edges.
+                - force_aggregation (Optional[bool]): Force aggregation even for raw queries (optional).
 
         Returns:
-            Dict[str, Any]: Dictionary containing:
-                - unit: Variable measurement unit
-                - decimal_places: Precision for numeric values
-                - type: Variable data type
-                - incremental: Whether the variable is incremental
-                - points: List of data points
-                - time_step: Adjusted time step (for formatted queries)
-                - global_metrics: Aggregated statistics (for numeric variables, if applicable)
+            NodeLogs: An object containing variable log details with the following attributes:
+                - unit (str): Measurement unit of the variable.
+                - decimal_places (int): Decimal precision for values.
+                - type (str): Data type of the variable (e.g., "numeric", "boolean").
+                - incremental (bool): Indicates if the variable is incremental (cumulative).
+                - points (List[Any]): List of data points or time-bucketed values.
+                - time_step (Optional[str|timedelta]): Actual time step used for bucketing (if formatted).
+                - global_metrics (Optional[dict]): Computed statistics for numeric variables (if applicable).
 
         Raises:
-            ValueError: If only one of start_time/end_time is provided, or if end_time <= start_time.
+            ValueError: If only one of start_time or end_time is provided, or if end_time is not after start_time.
         """
 
         client = self.__require_client()
@@ -803,7 +807,7 @@ class TimeDBClient:
             global_metrics=global_metrics
         )
 
-        return variable_logs.get_logs()
+        return variable_logs
 
     def delete_variable_data(self, device_name: str, device_id: int, variable: Node) -> bool:
         """

@@ -1,17 +1,16 @@
 ###########EXERTNAL IMPORTS############
 
-from typing import List, Dict, Any, Optional
-import math
+from typing import Dict, Any, Optional
 
 #######################################
 
 #############LOCAL IMPORTS#############
 
 from controller.device import Device
-from model.controller.device import PowerFactorDirection
 from model.controller.node import NodePhase, NodeType, NodeDirection, NodeLogs
 from model.date import TimeSpanParameters
 from db.timedb import TimeDBClient
+import controller.meter.calculation as meter_calc
 import util.functions.meter as meter_util
 
 #######################################
@@ -19,49 +18,43 @@ import util.functions.meter as meter_util
 
 def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: NodeDirection, timedb: TimeDBClient, time_span: TimeSpanParameters) -> Dict[str, Any]:
     """
-    Fetches active and reactive energy logs for a device, computes their average power
-    factor, and determines its direction.
+    Retrieve energy consumption metrics and calculated power factor information for a meter.
 
-    The function retrieves both active and reactive energy logs for the given phase and
-    direction from the time-series database. If either node is missing, it returns an
-    empty log for that variable. It then ensures both logs share the same time step and,
-    if valid metrics exist, calculates the mean power factor:
-
-        PF = E_active / sqrt(E_active² + E_reactive²)
-
-    The sign of the reactive energy determines whether the power factor is lagging,
-    leading, unitary, or unknown.
+    This function gathers the active and reactive energy logs for a specified device/phase/direction combination
+    over a given time span. It also calculates the power factor and power factor direction, both per-point
+    (when a formatted query is requested) and as a global aggregate value. If nodes for any variable are missing,
+    empty log structures are used. Data from active and reactive energy logs are expected to be aligned. Raises
+    a ValueError if their time-steps differ.
 
     Args:
-        device: The target device containing energy measurement nodes.
-        phase: The phase to retrieve data for (e.g., L1, L2, L3, or TOTAL).
-        direction: The measurement direction (import or export).
-        timedb: Time-series database client used to retrieve variable logs.
-        time_span: Time range and resolution of the requested data.
+        device (Device): The meter device containing the nodes for measurement.
+        phase (NodePhase): The phase for which to retrieve energy data.
+        direction (NodeDirection): The current direction (e.g., import/export).
+        timedb (TimeDBClient): Database client for querying logs.
+        time_span (TimeSpanParameters): Time parameters (start/end, step, format) for retrieval.
 
     Returns:
-        dict: {
-            "active_energy": NodeLogs,
-            "reactive_energy": NodeLogs,
-            "power_factor": float | None,
-            "power_factor_direction": PowerFactorDirection | None
-        }
+        Dict[str, Any]: A dictionary with energy and power factor logs, each structured as:
+            - 'active_energy': NodeLogs dict with energy log details
+            - 'reactive_energy': NodeLogs dict with reactive energy log details
+            - 'power_factor': NodeLogs dict with calculated per-point/global power factor(s)
+            - 'power_factor_direction': NodeLogs dict with calculated per-point/global power factor direction(s)
 
     Raises:
-        ValueError: If active and reactive energy logs have different time steps.
+        ValueError: If the time_step of active and reactive energy logs do not match.
     """
-        
-    output: Dict[str, Any] = {}
+
     active_energy_node_name = meter_util.create_node_name("active_energy", phase, direction)
     reactive_energy_node_name = meter_util.create_node_name("reactive_energy", phase, direction)
-
+    pf_node_name = meter_util.create_node_name("power_factor", phase, None)
     active_energy_node = next((n for n in device.nodes if n.config.name == active_energy_node_name), None)
     reactive_energy_node = next((n for n in device.nodes if n.config.name == reactive_energy_node_name), None)
+    pf_node = next((n for n in device.nodes if n.config.name == pf_node_name), None)
 
     if active_energy_node:
-        output["active_energy"] = timedb.get_variable_logs(device.name, device.id, active_energy_node, time_span)
+        active_energy_logs = timedb.get_variable_logs(device.name, device.id, active_energy_node, time_span)
     else:
-        output["active_energy"] = NodeLogs(
+        active_energy_logs = NodeLogs(
             unit=None,
             decimal_places=None,
             type=NodeType.FLOAT,
@@ -69,12 +62,12 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
             points=[],
             time_step=time_span.time_step,
             global_metrics=None
-        ).get_logs()
+        )
 
     if reactive_energy_node:
-        output["reactive_energy"] = timedb.get_variable_logs(device.name, device.id, reactive_energy_node, time_span) 
+        reactive_energy_logs = timedb.get_variable_logs(device.name, device.id, reactive_energy_node, time_span) 
     else:
-        output["reactive_energy"] = NodeLogs(
+        reactive_energy_logs = NodeLogs(
             unit=None,
             decimal_places=None,
             type=NodeType.FLOAT,
@@ -82,40 +75,58 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
             points=[],
             time_step=time_span.time_step,
             global_metrics=None
-        ).get_logs()
+        )
 
-    active_energy_time_step = output["active_energy"].get("time_step")
-    reactive_energy_time_step = output["reactive_energy"].get("time_step")
-
-    if active_energy_time_step != reactive_energy_time_step:
+    if active_energy_logs.time_step != reactive_energy_logs.time_step:
         raise ValueError(f"Active Energy and Reactive Energy time steps can't be different")
 
-    active_energy_metrics: Optional[Dict[str, Any]] = output["active_energy"].get("global_metrics") 
-    reactive_energy_metrics: Optional[Dict[str, Any]] = output["reactive_energy"].get("global_metrics")
-    active_energy_value: Optional[int | float] = active_energy_metrics.get("value") if active_energy_metrics is not None else None
-    reactive_energy_value: Optional[int | float] = reactive_energy_metrics.get("value") if reactive_energy_metrics is not None else None
-
-    if active_energy_value is not None and reactive_energy_value is not None:
-        if active_energy_value != 0 or reactive_energy_value != 0:
-            output["power_factor"] = active_energy_value / math.sqrt(math.pow(active_energy_value, 2) + math.pow(reactive_energy_value, 2))
-        else:
-            output["power_factor"] = None
-
-        if active_energy_value == 0 and reactive_energy_value == 0:
-            output["power_factor_direction"] = PowerFactorDirection.UNKNOWN
-        elif active_energy_value != 0 and reactive_energy_value == 0:
-            output["power_factor_direction"] = PowerFactorDirection.UNITARY
-        elif reactive_energy_value > 0:
-            output["power_factor_direction"] = PowerFactorDirection.LAGGING
-        elif reactive_energy_value < 0: 
-            output["power_factor_direction"] = PowerFactorDirection.LEADING
-        else:
-            output["power_factor_direction"] = PowerFactorDirection.UNKNOWN
-
+    if pf_node:
+        pf_dp = pf_node.config.decimal_places
     else:
-        output["power_factor"] = None
-        output["power_factor_direction"] = None
+        pf_dp = 2 # Default to two decimal places if there is no known configuration for the power factor
 
+    pf_logs = NodeLogs(
+        unit=None,
+        decimal_places=pf_dp,
+        type=NodeType.FLOAT,
+        incremental=None,
+        points=[],
+        time_step=active_energy_logs.time_step,
+        global_metrics={"unit": None, "value": None}
+    )
+
+    pf_direction_logs = NodeLogs(
+        unit=None,
+        decimal_places=None,
+        type=NodeType.STRING,
+        incremental=None,
+        points=[],
+        time_step=active_energy_logs.time_step,
+        global_metrics={"unit": None, "value": None}
+    )
+
+    if time_span.formatted:
+        for active_point, reactive_point in zip(active_energy_logs.points, reactive_energy_logs.points):
+            active_value: Optional[int | float] = active_point.get("value")
+            reactive_value: Optional[int | float] = reactive_point.get("value")
+            (pf, pf_direction) = meter_calc.calculate_pf_and_dir_with_energy(active_value, reactive_value)
+            pf_logs.points.append({"value": pf})
+            pf_direction_logs.points.append({"value": pf_direction})
+
+    global_active_value: Optional[int | float] = active_energy_logs.global_metrics.get("value") if active_energy_logs.global_metrics else None
+    global_reactive_value: Optional[int | float] = reactive_energy_logs.global_metrics.get("value") if reactive_energy_logs.global_metrics else None
+    (global_pf, global_pf_direction) = meter_calc.calculate_pf_and_dir_with_energy(global_active_value, global_reactive_value)
+    if pf_logs.global_metrics:
+        pf_logs.global_metrics["value"] = global_pf
+    if pf_direction_logs.global_metrics:
+        pf_direction_logs.global_metrics["value"] = global_pf_direction
+        
+    output: Dict[str, Any] = {}
+    output["active_energy"] = active_energy_logs.get_logs()
+    output["reactive_energy"] = reactive_energy_logs.get_logs()
+    output["power_factor"] = pf_logs.get_logs()
+    output["power_factor_direction"] = pf_direction_logs.get_logs()
+    
     return output
 
 
@@ -145,57 +156,20 @@ def get_meter_peak_power(device: Device, phase: NodePhase, timedb: TimeDBClient,
     apparent_power_node = next((n for n in device.nodes if n.config.name == apparent_power_node_name), None)
 
     if active_power_node:
-        output["active_power_all_time"] = timedb.get_variable_logs(device.name, device.id, active_power_node, TimeSpanParameters(None, None, None, False, time_span.time_zone, time_span.force_aggregation)).get("global_metrics")
-        output["active_power"] = timedb.get_variable_logs(device.name, device.id, active_power_node, time_span).get("global_metrics")
+        output["active_power_all_time"] = timedb.get_variable_logs(device.name, device.id, active_power_node, TimeSpanParameters(None, None, None, False, time_span.time_zone, time_span.force_aggregation)).global_metrics
+        output["active_power"] = timedb.get_variable_logs(device.name, device.id, active_power_node, time_span).global_metrics
     else:
         output["active_power_all_time"] = None
         output["active_power"] = None
 
     if apparent_power_node:
-        output["apparent_power_all_time"] = timedb.get_variable_logs(device.name, device.id, apparent_power_node, TimeSpanParameters(None, None, None, False, time_span.time_zone, time_span.force_aggregation)).get("global_metrics")
-        output["apparent_power"] = timedb.get_variable_logs(device.name, device.id, apparent_power_node, time_span).get("global_metrics")
+        output["apparent_power_all_time"] = timedb.get_variable_logs(device.name, device.id, apparent_power_node, TimeSpanParameters(None, None, None, False, time_span.time_zone, time_span.force_aggregation)).global_metrics
+        output["apparent_power"] = timedb.get_variable_logs(device.name, device.id, apparent_power_node, time_span).global_metrics
     else:
         output["apparent_power_all_time"] = None
         output["apparent_power"] = None
 
     return output
-
-
-def _calculate_phase_imbalance(phase_balance_dict: Dict[str, Optional[Dict[str, Any]]], node_base_name: str) -> Optional[float]:
-    """
-    Calculate phase imbalance percentage using maximum deviation from average.
-    
-    Requires at least 2 phases with data. Returns None if insufficient data.
-    
-    Args:
-        phase_balance_dict: Node names mapped to their metrics (with average_value)
-        node_base_name: Node type to filter (e.g., "voltage", "current")
-        
-    Returns:
-        Imbalance percentage or None
-    """
-
-    average_sum = 0.0
-    average_count = 0
-    average_values: List[int | float] = []
-
-    for node_name, metrics in phase_balance_dict.items():
-        if metrics is not None and node_base_name in node_name:
-            average_value = metrics.get("average_value")
-            if average_value is not None:
-                average_values.append(float(average_value))
-                average_sum += average_value
-                average_count += 1
-
-    global_average = average_sum / average_count if average_count > 1 else None
-    
-
-    max_deviation = max(abs(value - average_sum) for value in average_values) if global_average is not None else None 
-    
-    if max_deviation is None or global_average is None:
-        return None
-
-    return (max_deviation / global_average) * 100
 
 
 def get_meter_phase_balance(device: Device, timedb: TimeDBClient, time_span: TimeSpanParameters) -> Dict[str, Any]:
@@ -232,15 +206,15 @@ def get_meter_phase_balance(device: Device, timedb: TimeDBClient, time_span: Tim
     l2_current_node = next((n for n in device.nodes if n.config.name == l2_current_node_name), None)
     l3_current_node = next((n for n in device.nodes if n.config.name == l3_current_node_name), None)
 
-    output["l1_voltage"] = timedb.get_variable_logs(device.name, device.id, l1_voltage_node, time_span).get("global_metrics") if l1_voltage_node else None
-    output["l2_voltage"] = timedb.get_variable_logs(device.name, device.id, l2_voltage_node, time_span).get("global_metrics") if l2_voltage_node else None
-    output["l3_voltage"] = timedb.get_variable_logs(device.name, device.id, l3_voltage_node, time_span).get("global_metrics") if l3_voltage_node else None
+    output["l1_voltage"] = timedb.get_variable_logs(device.name, device.id, l1_voltage_node, time_span).global_metrics if l1_voltage_node else None
+    output["l2_voltage"] = timedb.get_variable_logs(device.name, device.id, l2_voltage_node, time_span).global_metrics if l2_voltage_node else None
+    output["l3_voltage"] = timedb.get_variable_logs(device.name, device.id, l3_voltage_node, time_span).global_metrics if l3_voltage_node else None
 
-    output["l1_current"] = timedb.get_variable_logs(device.name, device.id, l1_current_node, time_span).get("global_metrics") if l1_current_node else None
-    output["l2_current"] = timedb.get_variable_logs(device.name, device.id, l2_current_node, time_span).get("global_metrics") if l2_current_node else None
-    output["l3_current"] = timedb.get_variable_logs(device.name, device.id, l3_current_node, time_span).get("global_metrics") if l3_current_node else None
+    output["l1_current"] = timedb.get_variable_logs(device.name, device.id, l1_current_node, time_span).global_metrics if l1_current_node else None
+    output["l2_current"] = timedb.get_variable_logs(device.name, device.id, l2_current_node, time_span).global_metrics if l2_current_node else None
+    output["l3_current"] = timedb.get_variable_logs(device.name, device.id, l3_current_node, time_span).global_metrics if l3_current_node else None
     
-    output["voltage_imbalance"] = _calculate_phase_imbalance(output, "voltage")
-    output["current_imbalance"] = _calculate_phase_imbalance(output, "current")
+    output["voltage_imbalance"] = meter_calc.calculate_phase_imbalance(output, "voltage")
+    output["current_imbalance"] = meter_calc.calculate_phase_imbalance(output, "current")
 
     return output

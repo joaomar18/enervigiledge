@@ -175,7 +175,7 @@ async def get_logs_from_node(
         raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
 
     date.process_time_span(time_span)
-    response = timedb.get_variable_logs(device.name, device_id, node, time_span)
+    response = timedb.get_variable_logs(device.name, device_id, node, time_span).get_logs()
     return JSONResponse(content=response)
 
 
