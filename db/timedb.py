@@ -574,35 +574,40 @@ class TimeDBClient:
 
     def __post_process_points(self, variable: Node, points: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """
-        Calculates global metrics across all points and applies decimal rounding.
+        Post-processes a list of point dictionaries to compute and format global metrics for numeric variables.
 
         For non-incremental numeric variables:
-            - Rounds individual point average_values to configured decimal places
-            - Calculates global average from accumulated mean_sum and mean_count
-            - Finds global min and max values with their corresponding time ranges
-            - Removes internal mean_sum and mean_count fields from points
-            - Applies unit factor conversion to the global average
+            - Rounds each point's "average_value" to the specified number of decimal places.
+            - Computes the global average ("average_value") using the sum of means ("mean_sum") and the count ("mean_count") across all points.
+            - Determines the global minimum and maximum ("min_value", "max_value") and their corresponding "start_time" and "end_time".
+            - Removes internal fields "mean_sum" and "mean_count" from each point.
+            - Applies unit scaling (using a unit factor) to the global average value, if applicable.
 
         For incremental numeric variables:
-            - Sums all point values to calculate total
+            - Aggregates all "value" entries to yield a global total ("value").
 
         Args:
-            variable: Node configuration with processor type, decimal settings, and unit.
-            points: List of data points (modified in-place for non-incremental variables).
+            variable (Node): The variable's configuration, including processor type, whether the node is incremental,
+                decimal precision, and unit scaling information.
+            points (List[Dict[str, Any]]): List of point data dictionaries. For non-incremental variables, certain
+                keys in each point are modified or removed in-place.
 
         Returns:
-            Optional[Dict[str, Any]]: Global metrics dictionary containing:
-                - For non-incremental: average_value, min_value, max_value, and their
-                corresponding start_time/end_time iso strings
-                - For incremental: total value sum
-                - None for non-numeric variables
+            Optional[Dict[str, Any]]: 
+                - For non-incremental numeric variables: a dictionary containing 
+                  "average_value", "min_value", "max_value", "min_value_start_time", "min_value_end_time", 
+                  "max_value_start_time", "max_value_end_time", and "unit".
+                - For incremental numeric variables: a dictionary with "value" (total sum) and "unit".
+                - Returns None for non-numeric variables.
         """
 
         if not isinstance(variable.processor, NumericNodeProcessor): 
             return None
 
+        global_metrics: Dict[str, Any] = {}
+        global_metrics["unit"] = variable.config.unit
+
         if not variable.config.incremental_node:
-            global_metrics: Dict[str, Any] = {}
             global_mean_sum = 0
             global_mean_count = 0
             global_mean_value = None
@@ -659,7 +664,6 @@ class TimeDBClient:
             global_metrics["max_value_end_time"] = global_max_et
 
         else:
-            global_metrics: Dict[str, Any] = {}
             global_sum = 0
 
             for point in points:
