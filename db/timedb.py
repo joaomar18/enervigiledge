@@ -606,6 +606,7 @@ class TimeDBClient:
 
         global_metrics: Dict[str, Any] = {}
         global_metrics["unit"] = variable.config.unit
+        global_metrics["decimal_places"] = variable.config.decimal_places
 
         if not variable.config.incremental_node:
             global_mean_sum = 0
