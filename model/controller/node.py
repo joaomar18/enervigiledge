@@ -230,16 +230,20 @@ class NodeRecord:
 
 @dataclass
 class NodeLogs:
-    """Container for node log data with metadata and time-series points.
+    """Container for node log data with metadata, time-series points, and computed metrics.
+
+    Encapsulates the complete result of a node logs query, including raw data points,
+    formatting configuration, and aggregate statistics. Used for both raw time-series
+    data and time-bucketed (formatted) results with gap-filling.
 
     Attributes:
-        unit: Measurement unit for the node values (e.g., "kWh", "V", "A").
-        decimal_places: Number of decimal places for numeric formatting.
-        type: NodeType indicating the data type of the node.
-        incremental: Whether the node represents incremental/cumulative values.
-        points: List of time-series data points with timestamps and values.
-        time_step: Time interval step for formatted/aggregated logs.
-        global_metrics: Aggregated statistics across all data points (e.g., min, max, avg).
+        unit: Measurement unit for the node values (e.g., "kWh", "V", "A", "°C").
+        decimal_places: Number of decimal places for value precision, or None for no rounding.
+        type: NodeType indicating the data type classification of the node.
+        incremental: Whether the node represents cumulative values that increase over time.
+        points: List of time-series data points, each containing timestamps and measured values.
+        time_step: Time interval for bucketed data (e.g., hourly, daily), None for raw data.
+        global_metrics: Computed statistics across all points (min/max values, averages, totals).
     """
 
     unit: Optional[str]

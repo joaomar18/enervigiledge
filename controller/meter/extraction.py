@@ -92,7 +92,7 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
         incremental=None,
         points=[],
         time_step=active_energy_logs.time_step,
-        global_metrics={"unit": None, "value": None}
+        global_metrics={"value": None}
     )
 
     pf_direction_logs = NodeLogs(
@@ -102,7 +102,7 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
         incremental=None,
         points=[],
         time_step=active_energy_logs.time_step,
-        global_metrics={"unit": None, "value": None}
+        global_metrics={"value": None}
     )
 
     if time_span.formatted:

@@ -574,39 +574,38 @@ class TimeDBClient:
 
     def __post_process_points(self, variable: Node, points: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """
-        Post-processes a list of point dictionaries to compute and format global metrics for numeric variables.
+        Computes global metrics and applies post-processing to numeric variable data points.
 
-        For non-incremental numeric variables:
-            - Rounds each point's "average_value" to the specified number of decimal places.
-            - Computes the global average ("average_value") using the sum of means ("mean_sum") and the count ("mean_count") across all points.
-            - Determines the global minimum and maximum ("min_value", "max_value") and their corresponding "start_time" and "end_time".
-            - Removes internal fields "mean_sum" and "mean_count" from each point.
-            - Applies unit scaling (using a unit factor) to the global average value, if applicable.
-
-        For incremental numeric variables:
-            - Aggregates all "value" entries to yield a global total ("value").
+        Calculates aggregate statistics across all data points and performs cleanup operations.
+        For non-incremental variables: computes global weighted averages using mean_sum/mean_count,
+        tracks global min/max values with their corresponding timestamps, applies decimal rounding,
+        and removes internal calculation fields. For incremental variables: sums all values to
+        produce a global total.
 
         Args:
-            variable (Node): The variable's configuration, including processor type, whether the node is incremental,
-                decimal precision, and unit scaling information.
-            points (List[Dict[str, Any]]): List of point data dictionaries. For non-incremental variables, certain
-                keys in each point are modified or removed in-place.
+            variable: Node configuration with processor type, unit, and decimal precision settings.
+            points: List of data point dictionaries. Internal fields are removed in-place during processing.
 
         Returns:
-            Optional[Dict[str, Any]]: 
-                - For non-incremental numeric variables: a dictionary containing 
-                  "average_value", "min_value", "max_value", "min_value_start_time", "min_value_end_time", 
-                  "max_value_start_time", "max_value_end_time", and "unit".
-                - For incremental numeric variables: a dictionary with "value" (total sum) and "unit".
-                - Returns None for non-numeric variables.
+            For non-incremental numeric variables, returns dict with:
+                - average_value: Weighted average across all points
+                - min_value: Global minimum value
+                - max_value: Global maximum value
+                - min_value_start_time: Start timestamp of minimum value occurrence
+                - min_value_end_time: End timestamp of minimum value occurrence
+                - max_value_start_time: Start timestamp of maximum value occurrence
+                - max_value_end_time: End timestamp of maximum value occurrence
+
+            For incremental numeric variables, returns dict with:
+                - value: Sum of all point values
+
+            Returns None for non-numeric variables (no processing applied).
         """
 
         if not isinstance(variable.processor, NumericNodeProcessor): 
             return None
 
         global_metrics: Dict[str, Any] = {}
-        global_metrics["unit"] = variable.config.unit
-        global_metrics["decimal_places"] = variable.config.decimal_places
 
         if not variable.config.incremental_node:
             global_mean_sum = 0
@@ -762,8 +761,8 @@ class TimeDBClient:
 
         Returns:
             NodeLogs: An object containing variable log details with the following attributes:
-                - unit (str): Measurement unit of the variable.
-                - decimal_places (int): Decimal precision for values.
+                - unit (Optional[str]): Measurement unit of the variable.
+                - decimal_places (Optional[int]): Decimal precision for values.
                 - type (str): Data type of the variable (e.g., "numeric", "boolean").
                 - incremental (bool): Indicates if the variable is incremental (cumulative).
                 - points (List[Any]): List of data points or time-bucketed values.
