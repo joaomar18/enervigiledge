@@ -107,12 +107,16 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
     )
 
     if time_span.formatted:
+        
+        pf_logs.points.clear()
+        pf_direction_logs.points.clear()
+        
         for active_point, reactive_point in zip(active_energy_logs.points, reactive_energy_logs.points):
             active_value: Optional[int | float] = active_point.get("value")
             reactive_value: Optional[int | float] = reactive_point.get("value")
             (pf, pf_direction) = meter_calc.calculate_pf_and_dir_with_energy(active_value, reactive_value)
-            pf_logs.points.append({"value": pf})
-            pf_direction_logs.points.append({"value": pf_direction})
+            pf_logs.points.append({"start_time": active_point.get("start_time"), "end_time": active_point.get("end_time"), "value": pf})
+            pf_direction_logs.points.append({"start_time": active_point.get("start_time"), "end_time": active_point.get("end_time"), "value": pf_direction})
 
     global_active_value: Optional[int | float] = active_energy_logs.global_metrics.get("value") if active_energy_logs.global_metrics else None
     global_reactive_value: Optional[int | float] = reactive_energy_logs.global_metrics.get("value") if reactive_energy_logs.global_metrics else None
