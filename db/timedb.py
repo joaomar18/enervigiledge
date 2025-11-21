@@ -740,37 +740,43 @@ class TimeDBClient:
         device_name: str,
         device_id: int,
         variable: Node,
-        time_span: TimeSpanParameters
+        time_span: TimeSpanParameters,
+        remove_points: bool = False,
     ) -> NodeLogs:
         """
-        Retrieve logs for a specific variable from InfluxDB, supporting optional time filtering, aggregation, and formatting.
+        Retrieve historical logs for a specific variable from a device's InfluxDB, with optional 
+        time filtering, aggregation, and formatting.
 
-        This method fetches historical logs for a variable associated with a device, returning either raw time series points or time-bucketed (formatted) results. Formatted queries fill missing time buckets with None values and compute global metrics for numeric variables. Ensures the device database exists before querying.
+        The method ensures the device's database exists, then fetches variable logs either as raw 
+        time series points or as time-bucketed (formatted) results. Formatted logs fill missing 
+        buckets with `None` and compute global statistics for numeric variables.
 
         Args:
             device_name (str): Name of the device containing the variable.
-            device_id (int): Unique ID of the device.
-            variable (Node): Node instance specifying variable configuration and processor settings.
-            time_span (TimeSpanParameters): Time window and query configuration. Expected attributes include:
-                - start_time (Optional[datetime]): Start time for log retrieval (inclusive).
-                - end_time (Optional[datetime]): End time for log retrieval (exclusive).
+            device_id (int): Unique identifier for the device.
+            variable (Node): Node instance describing the variable's configuration and processing rules.
+            time_span (TimeSpanParameters): Defines the time window and query options, including:
+                - start_time (Optional[datetime]): Inclusive start of the time range.
+                - end_time (Optional[datetime]): Exclusive end of the time range.
                 - formatted (bool): Whether to bucket data into intervals.
-                - time_step (Optional[str|timedelta]): Interval for bucketing/log aggregation if formatted.
+                - time_step (Optional[str|timedelta]): Interval for bucketing/aggregation (used if formatted).
                 - time_zone (Optional[str]): Time zone for aligning bucket edges.
-                - force_aggregation (Optional[bool]): Force aggregation even for raw queries (optional).
+                - force_aggregation (Optional[bool]): Force aggregation even for raw logs.
+            remove_points (bool, default=False): If True, the returned NodeLogs will omit the points list.
 
         Returns:
-            NodeLogs: An object containing variable log details with the following attributes:
+            NodeLogs: Object containing the variable's log data and metadata:
                 - unit (Optional[str]): Measurement unit of the variable.
-                - decimal_places (Optional[int]): Decimal precision for values.
-                - type (str): Data type of the variable (e.g., "numeric", "boolean").
-                - incremental (bool): Indicates if the variable is incremental (cumulative).
-                - points (List[Any]): List of data points or time-bucketed values.
-                - time_step (Optional[str|timedelta]): Actual time step used for bucketing (if formatted).
-                - global_metrics (Optional[dict]): Computed statistics for numeric variables (if applicable).
+                - decimal_places (Optional[int]): Precision of numeric values.
+                - type (str): Variable type, e.g., "numeric" or "boolean".
+                - incremental (bool): True if the variable is cumulative.
+                - points (List[Any]): Raw or bucketed data points (empty if `remove_points=True`).
+                - time_step (Optional[str|timedelta]): Actual bucket interval used (if formatted).
+                - global_metrics (Optional[dict]): Computed statistics for numeric variables.
 
         Raises:
-            ValueError: If only one of start_time or end_time is provided, or if end_time is not after start_time.
+            ValueError: If only one of `start_time` or `end_time` is provided, or if `end_time` 
+                        is not after `start_time`.
         """
 
         client = self.__require_client()
@@ -802,7 +808,7 @@ class TimeDBClient:
             decimal_places=variable.config.decimal_places,
             type=variable.config.type,
             incremental=variable.config.incremental_node,
-            points=points,
+            points=points if not remove_points else [],
             time_step=time_span.time_step,
             global_metrics=global_metrics
         )

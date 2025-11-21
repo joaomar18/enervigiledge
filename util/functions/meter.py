@@ -159,7 +159,7 @@ def get_numeric_node_with_value(key: str, dictionary: Dict[str, Node]) -> Tuple[
     return (node, numeric_value)
 
 
-def get_empty_logs(numeric: bool, incremental: bool, time_span: TimeSpanParameters):
+def get_empty_log_points(numeric: bool, incremental: bool, time_span: TimeSpanParameters):
     """Generates empty placeholder log points with null values for aligned time buckets.
 
     Args:
@@ -203,5 +203,33 @@ def get_empty_logs(numeric: bool, incremental: bool, time_span: TimeSpanParamete
                 
             empty_points.append(point)
     
-    return empty_points        
-        
+    return empty_points    
+
+def get_empty_log_global_metrics(numeric: bool, incremental: bool) -> Dict[str, Any]:
+    """Generates an empty placeholder dictionary for global log metrics.
+
+    Args:
+        numeric: If True, uses numeric metric fields; otherwise uses a generic value field.
+        incremental: If True with numeric, returns a single 'value' field; if False, 
+            returns aggregated numeric fields including averages and extrema.
+
+    Returns:
+        Dict[str, Any]: Dictionary containing global metric fields initialized to None.
+    """
+    
+    if numeric and incremental:
+        return {'value': None}
+    
+    elif numeric:
+        return {
+            'average_value': None,
+            'min_value': None,
+            'max_value': None,
+            'min_value_start_time': None,
+            'min_value_end_time': None,
+            'max_value_start_time': None,
+            'max_value_end_time': None,
+        }
+    
+    else: 
+        return {'value': None}

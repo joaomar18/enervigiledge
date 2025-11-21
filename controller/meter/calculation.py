@@ -377,43 +377,7 @@ def calculate_pf_direction(prefix: str, node: Node, meter_nodes: Dict[str, Node]
         return
 
     node.processor.set_value(PowerFactorDirection.UNKNOWN.value)
-
-
-def calculate_phase_imbalance(phase_balance_dict: Dict[str, Optional[Dict[str, Any]]], node_base_name: str) -> Optional[float]:
-    """
-    Calculate phase imbalance percentage using maximum deviation from average.
     
-    Requires at least 2 phases with data. Returns None if insufficient data.
-    
-    Args:
-        phase_balance_dict: Node names mapped to their metrics (with average_value)
-        node_base_name: Node type to filter (e.g., "voltage", "current")
-        
-    Returns:
-        Imbalance percentage or None
-    """
-
-    average_sum = 0.0
-    average_count = 0
-    average_values: List[int | float] = []
-
-    for node_name, metrics in phase_balance_dict.items():
-        if metrics is not None and node_base_name in node_name:
-            average_value = metrics.get("average_value")
-            if average_value is not None:
-                average_values.append(float(average_value))
-                average_sum += average_value
-                average_count += 1
-
-    global_average = average_sum / average_count if average_count > 1 else None
-    
-
-    max_deviation = max(abs(value - average_sum) for value in average_values) if global_average is not None else None 
-    
-    if max_deviation is None or global_average is None:
-        return None
-
-    return (max_deviation / global_average) * 100
 
 def calculate_pf_and_dir_with_energy(active_energy_value: Optional[int | float], reactive_energy_value: Optional[int | float]) -> Tuple[Optional[float], Optional[PowerFactorDirection]]:
     """
