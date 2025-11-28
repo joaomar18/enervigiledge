@@ -58,6 +58,7 @@ class EnergyMeter(Device):
         communication_options (BaseCommunicationOptions): Protocol-specific communication configuration (e.g., ModbusRTUOptions, OPCUAOptions).
         meter_nodes (EnergyMeterNodes): Manager for validating and handling node configurations and relationships.
         calculation_methods (Dict[str, Tuple[Callable, Dict[str, Any]]]): Map of suffixes to calculation methods.
+        disconnected_calculation (bool): Flag to make the device make one and only calculation of nodes on disconnection.
     """
 
     def __init__(
@@ -99,9 +100,10 @@ class EnergyMeter(Device):
             "_active_power": (self.calculate_power, {"power_type": "active"}),
             "_reactive_power": (self.calculate_power, {"power_type": "reactive"}),
             "_apparent_power": (self.calculate_power, {"power_type": "apparent"}),
-            "_power_factor_direction": (self.calculate_pf_direction, {}),
             "_power_factor": (self.calculate_pf, {}),
         }
+
+        self.disconnected_calculation = False
 
     @abstractmethod
     async def start(self) -> None:
@@ -127,11 +129,19 @@ class EnergyMeter(Device):
             - Clears disconnected flag
             - Calculates all nodes
             - Logs and publishes values concurrently
+
+        If the meter is disconnected and hasn't been processed since disconnection:
+            - Runs one calculation pass to set the calculated nodes to None values
+            - Sets disconnected flag to avoid repeated unnecessary processing
         """
 
         if self.connected:
+            self.disconnected_calculation = False
             await self.calculate_nodes()
             await asyncio.gather(self.log_nodes(), self.publish_nodes())
+        elif not self.disconnected_calculation:
+            await self.calculate_nodes()
+            self.disconnected_calculation = True
 
     async def log_nodes(self) -> None:
         """
@@ -281,17 +291,6 @@ class EnergyMeter(Device):
         """
 
         calculation.calculate_pf(prefix, node, self.meter_nodes.nodes)
-
-    def calculate_pf_direction(self, prefix: str, node: Node) -> None:
-        """
-        Calculates power factor direction values for the specified node using meter configuration.
-
-        Args:
-            prefix (str): Phase prefix ("l1_", "l2_", "l3_", "total_") for node identification.
-            node (Node): Target node to store the calculated power factor direction value.
-        """
-
-        calculation.calculate_pf_direction(prefix, node, self.meter_nodes.nodes, self.meter_options)
 
     async def publish_nodes(self):
         """

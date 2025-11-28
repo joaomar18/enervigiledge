@@ -123,12 +123,14 @@ class NodeProcessor(ABC, Generic[V]):
 
     def reset_value(self) -> None:
         """
-        Resets the processor value and updates timestamp, clearing elapsed time.
+        Resets the processor state. 
+        
+        This method is defined in the base class and should be overridden by
+        subclasses to clear stored values, internal state, and timestamps as
+        appropriate for each specific processor type.
         """
-
-        self.value = None
-        self.timestamp = date.get_timestamp(date.get_current_utc_datetime())
-        self.elapsed_time = None
+        
+        pass
 
     def create_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
 

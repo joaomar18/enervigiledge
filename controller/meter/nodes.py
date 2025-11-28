@@ -30,7 +30,6 @@ class EnergyMeterNodes:
         "reactive_power",
         "apparent_power",
         "power_factor",
-        "power_factor_direction",
         "frequency",
         "active_energy",
         "reactive_energy",
@@ -47,7 +46,6 @@ class EnergyMeterNodes:
         "reactive_power": {"VAr", "kVAr"},
         "apparent_power": {"VA", "kVA"},
         "power_factor": {""},
-        "power_factor_direction": {""},
         "frequency": {"Hz"},
         "active_energy": {"Wh", "kWh"},
         "reactive_energy": {"VArh", "kVArh"},
@@ -132,7 +130,6 @@ class EnergyMeterNodes:
                 self.validate_power_nodes("", power_type)
 
             self.validate_pf_nodes("")
-            self.validate_pf_direction_nodes("")
 
         elif self.meter_type is EnergyMeterType.THREE_PHASE:
             for phase in ("l1_", "l2_", "l3_", "total_"):
@@ -143,7 +140,6 @@ class EnergyMeterNodes:
                     self.validate_power_nodes(phase, power_type)
 
                 self.validate_pf_nodes(phase)
-                self.validate_pf_direction_nodes(phase)
         else:
             raise MeterError(f"Meter type is not valid")
 
@@ -189,16 +185,3 @@ class EnergyMeterNodes:
         """
 
         validation.validate_pf_nodes(phase, self.nodes, self.meter_type)
-
-    def validate_pf_direction_nodes(self, phase: str) -> None:
-        """
-        Validates power factor direction nodes for the specified phase configuration.
-
-        Args:
-            phase (str): Phase prefix ("l1_", "l2_", "l3_", "total_", or "" for single-phase).
-
-        Raises:
-            NodeMissingError: If required power factor direction nodes are missing for the configuration.
-        """
-
-        validation.validate_pf_direction_nodes(phase, self.nodes, self.meter_type, self.meter_options)

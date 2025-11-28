@@ -141,7 +141,7 @@ def _calculate_apparent_power(prefix: str, node: Node, meter_nodes: Dict[str, No
     if p_node is not None and q_node is not None:
 
         p_value = meter_util.get_numeric_value(p_node)
-        q_value = meter_util.get_numeric_value(p_node)
+        q_value = meter_util.get_numeric_value(q_node)
 
         if p_value is not None and q_value is not None:
 
@@ -319,64 +319,6 @@ def calculate_pf(prefix: str, node: Node, meter_nodes: Dict[str, Node]) -> None:
         node.processor.set_value(0.0)
     else:
         node.processor.set_value(math.cos(math.atan(q_val / p_val)))
-
-
-def calculate_pf_direction(prefix: str, node: Node, meter_nodes: Dict[str, Node], meter_options: EnergyMeterOptions) -> None:
-    """
-    Calculates power factor direction for a node based on meter configuration and power measurements.
-
-    Determines whether the power factor is leading, lagging, unitary, or unknown based on:
-    - Unity power factor (1.00) results in UNITARY direction
-    - Negative reactive power configuration uses reactive power sign to determine direction
-    - Forward/reverse energy configuration uses reactive energy direction
-    - Falls back to UNKNOWN when insufficient data is available
-
-    The direction affects energy accounting and power quality analysis.
-
-    Args:
-        prefix (str): Phase prefix ("l1_", "l2_", "l3_", "total_") or line-to-line prefix
-        node (Node): Target node to store the calculated power factor direction
-        meter_nodes (Dict[str, Node]): Dictionary containing all meter nodes
-        meter_options (EnergyMeterOptions): Configuration options for direction calculation
-    """
-
-    pf_node = meter_util.find_node(f"{prefix}power_factor", meter_nodes)
-    er_node = meter_util.find_node(f"{prefix}reactive_energy", meter_nodes)
-
-    if pf_node is not None and pf_node.processor.value == 1.00:
-        node.processor.set_value(PowerFactorDirection.UNITARY.value)
-        if er_node and isinstance(er_node.processor, NumericNodeProcessor):
-            er_node.processor.reset_direction()
-        return
-
-    if meter_options.negative_reactive_power:
-        q_node = meter_util.find_node(f"{prefix}reactive_power", meter_nodes)
-
-        if q_node:
-
-            q_value = meter_util.get_numeric_value(q_node)
-            if q_value is not None:
-                node.processor.set_value(PowerFactorDirection.LAGGING.value if q_value > 0.0 else PowerFactorDirection.LEADING.value)
-            else:
-                node.processor.set_value(PowerFactorDirection.UNKNOWN.value)
-
-        else:
-            node.processor.set_value(PowerFactorDirection.UNKNOWN.value)
-        return
-
-    elif meter_options.read_separate_forward_reverse_energy:
-        if er_node and isinstance(er_node.processor, NumericNodeProcessor):
-            if er_node.processor.positive_direction:
-                node.processor.set_value(PowerFactorDirection.LAGGING.value)
-            elif er_node.processor.negative_direction:
-                node.processor.set_value(PowerFactorDirection.LEADING.value)
-            else:
-                node.processor.set_value(PowerFactorDirection.UNKNOWN.value)
-        else:
-            node.processor.set_value(PowerFactorDirection.UNKNOWN.value)
-        return
-
-    node.processor.set_value(PowerFactorDirection.UNKNOWN.value)
     
 
 def calculate_pf_and_dir_with_energy(active_energy_value: Optional[int | float], reactive_energy_value: Optional[int | float]) -> Tuple[Optional[float], Optional[PowerFactorDirection]]:
