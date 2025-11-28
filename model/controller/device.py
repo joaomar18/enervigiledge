@@ -54,13 +54,11 @@ class EnergyMeterOptions:
         read_energy_from_meter (bool): Whether to read energy directly from the meter.
         read_separate_forward_reverse_energy (bool): Whether to track forward and reverse energy separately.
         negative_reactive_power (bool): Whether the meter reads negative (leading) reactive power.
-        frequency_reading (bool): Whether the meter provides frequency readings.
     """
 
     read_energy_from_meter: bool
     read_separate_forward_reverse_energy: bool
     negative_reactive_power: bool
-    frequency_reading: bool
 
     def get_meter_options(self) -> Dict[str, Any]:
         """

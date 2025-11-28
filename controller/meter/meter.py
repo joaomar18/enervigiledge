@@ -58,7 +58,6 @@ class EnergyMeter(Device):
         communication_options (BaseCommunicationOptions): Protocol-specific communication configuration (e.g., ModbusRTUOptions, OPCUAOptions).
         meter_nodes (EnergyMeterNodes): Manager for validating and handling node configurations and relationships.
         calculation_methods (Dict[str, Tuple[Callable, Dict[str, Any]]]): Map of suffixes to calculation methods.
-        disconnected_calculation (bool): Flag to make the device make one and only calculation of nodes on disconnection
     """
 
     def __init__(
@@ -104,8 +103,6 @@ class EnergyMeter(Device):
             "_power_factor": (self.calculate_pf, {}),
         }
 
-        self.disconnected_calculation = False
-
     @abstractmethod
     async def start(self) -> None:
         """
@@ -130,19 +127,11 @@ class EnergyMeter(Device):
             - Clears disconnected flag
             - Calculates all nodes
             - Logs and publishes values concurrently
-
-        If the meter is disconnected and hasn't been processed since disconnection:
-            - Runs one calculation pass
-            - Sets disconnected flag to avoid repeated unnecessary processing
         """
 
         if self.connected:
-            self.disconnected_calculation = False
             await self.calculate_nodes()
             await asyncio.gather(self.log_nodes(), self.publish_nodes())
-        elif not self.disconnected_calculation:
-            await self.calculate_nodes()
-            self.disconnected_calculation = True
 
     async def log_nodes(self) -> None:
         """
