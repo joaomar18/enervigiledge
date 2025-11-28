@@ -89,7 +89,7 @@ async def get_nodes_state(
     else:
         nodes_state = {node.config.name: node.get_publish_format() for node in device.nodes if node.config.publish}
 
-    return JSONResponse(content=nodes_state)
+    return JSONResponse(content={"meter_type": device.get_device().get("type", None), "nodes_state": nodes_state})
 
 
 @router.get("/get_node_additional_info")
