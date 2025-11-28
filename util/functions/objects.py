@@ -31,12 +31,8 @@ def check_required_keys(
         Tuple[Tuple[dataclasses.Field, ...], List[str]]: Dataclass fields and optional fields.
 
     Raises:
-        ValueError: If the input dictionary is missing.
         KeyError: If required fields are missing.
     """
-
-    if not input_dict:
-        raise ValueError(f"Missing input dataclass {dataclass_type.__name__}")
 
     # Get required fields from the class
     dataclass_fields = dataclasses.fields(dataclass_type)

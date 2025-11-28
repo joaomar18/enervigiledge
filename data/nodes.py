@@ -9,7 +9,7 @@ from typing import Set
 from controller.node.node import Node
 from model.controller.general import Protocol
 from model.controller.device import EnergyMeterRecord, EnergyMeterType, EnergyMeterOptions
-from model.controller.node import NodeRecord, NodeConfig, NodeAttributes, NodePhase, NodeType
+from model.controller.node import NodeRecord, NodeConfig, NodeAttributes, NodePhase, NodeType, CounterMode
 from protocol.modbus_rtu.rtu_device import ModbusRTUOptions, ModbusRTUNode
 from protocol.opcua.opcua_device import OPCUAOptions, OPCUANode
 
@@ -17,20 +17,16 @@ from protocol.opcua.opcua_device import OPCUAOptions, OPCUANode
 
 
 def get_orno_we_516_db() -> EnergyMeterRecord:
-    meter_options = EnergyMeterOptions(
-        read_energy_from_meter=True,
-        read_separate_forward_reverse_energy=True,
-        negative_reactive_power=False,
-        frequency_reading=True,
-    ).get_meter_options()
+    meter_options = EnergyMeterOptions().get_meter_options()
 
     communication_options = ModbusRTUOptions(
         slave_id=1, port="/dev/ttyAMA0", baudrate=9600, stopbits=1, parity="E", bytesize=8, read_period=5, timeout=1, retries=0
     ).get_communication_options()
 
     def cfg(name: str, type: NodeType, unit: str, *, phase: NodePhase, logging: bool = False, logging_period: int = 15, **extra) -> NodeConfig:
+        protocol = Protocol.MODBUS_RTU if not extra.get("calculated", None) else Protocol.NONE
         return NodeConfig(
-            name=name, type=type, unit=unit, logging=logging, logging_period=logging_period, attributes=NodeAttributes(phase=phase), **extra
+            name=name, type=type, unit=unit, protocol=protocol, logging=logging, logging_period=logging_period, attributes=NodeAttributes(phase=phase), **extra
         )
 
     nodes: Set[Node] = set()
@@ -42,10 +38,10 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
     nodes.add(ModbusRTUNode(configuration=cfg("l1_current", NodeType.FLOAT, "A", phase=NodePhase.L1), register=0x0016))
     nodes.add(ModbusRTUNode(configuration=cfg("l1_active_power", NodeType.FLOAT, "kW", phase=NodePhase.L1), register=0x001E))
     nodes.add(ModbusRTUNode(configuration=cfg("l1_reactive_power", NodeType.FLOAT, "kVAr", phase=NodePhase.L1), register=0x0026))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_forward_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L1), register=0x010A))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_reverse_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L1), register=0x0112))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_forward_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L1), register=0x0122))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_reverse_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L1), register=0x012A))
+    nodes.add(ModbusRTUNode(configuration=cfg("l1_forward_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), register=0x010A))
+    nodes.add(ModbusRTUNode(configuration=cfg("l1_reverse_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), register=0x0112))
+    nodes.add(ModbusRTUNode(configuration=cfg("l1_forward_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), register=0x0122))
+    nodes.add(ModbusRTUNode(configuration=cfg("l1_reverse_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), register=0x012A))
     nodes.add(
         Node(
             cfg(
@@ -53,8 +49,8 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
                 NodeType.FLOAT,
                 "kWh",
                 phase=NodePhase.L1,
-                incremental_node=True,
-                calculate_increment=False,
+                is_counter=True,
+                counter_mode=CounterMode.CUMULATIVE,
                 calculated=True,
                 logging=False,
                 logging_period=5,
@@ -68,8 +64,8 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
                 NodeType.FLOAT,
                 "kVArh",
                 phase=NodePhase.L1,
-                incremental_node=True,
-                calculate_increment=False,
+                is_counter=True,
+                counter_mode=CounterMode.CUMULATIVE,
                 calculated=True,
                 logging=False,
                 logging_period=5,
@@ -78,7 +74,6 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
     )
     nodes.add(Node(cfg("l1_apparent_power", NodeType.FLOAT, "kVA", phase=NodePhase.L1, calculated=True)))
     nodes.add(Node(cfg("l1_power_factor", NodeType.FLOAT, "", phase=NodePhase.L1, calculated=True)))
-    nodes.add(Node(cfg("l1_power_factor_direction", NodeType.STRING, "", phase=NodePhase.L1, calculated=True)))
 
     # L2
     nodes.add(
@@ -87,21 +82,19 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
     nodes.add(ModbusRTUNode(configuration=cfg("l2_current", NodeType.FLOAT, "A", phase=NodePhase.L2), register=0x0018))
     nodes.add(ModbusRTUNode(configuration=cfg("l2_active_power", NodeType.FLOAT, "kW", phase=NodePhase.L2), register=0x0020))
     nodes.add(ModbusRTUNode(configuration=cfg("l2_reactive_power", NodeType.FLOAT, "kVAr", phase=NodePhase.L2), register=0x0028))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_forward_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L2), register=0x010C))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_reverse_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L2), register=0x0114))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_forward_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L2), register=0x0124))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_reverse_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L2), register=0x012C))
+    nodes.add(ModbusRTUNode(configuration=cfg("l2_forward_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), register=0x010C))
+    nodes.add(ModbusRTUNode(configuration=cfg("l2_reverse_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), register=0x0114))
+    nodes.add(ModbusRTUNode(configuration=cfg("l2_forward_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), register=0x0124))
+    nodes.add(ModbusRTUNode(configuration=cfg("l2_reverse_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), register=0x012C))
     nodes.add(
-        Node(cfg("l2_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L2, incremental_node=True, calculate_increment=False, calculated=True))
-    )
+        Node(cfg("l2_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True)))
     nodes.add(
         Node(
-            cfg("l2_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L2, incremental_node=True, calculate_increment=False, calculated=True)
+            cfg("l2_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True)
         )
     )
     nodes.add(Node(cfg("l2_apparent_power", NodeType.FLOAT, "kVA", phase=NodePhase.L2, calculated=True)))
     nodes.add(Node(cfg("l2_power_factor", NodeType.FLOAT, "", phase=NodePhase.L2, calculated=True)))
-    nodes.add(Node(cfg("l2_power_factor_direction", NodeType.STRING, "", phase=NodePhase.L2, calculated=True)))
 
     # L3
     nodes.add(
@@ -110,24 +103,23 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
     nodes.add(ModbusRTUNode(configuration=cfg("l3_current", NodeType.FLOAT, "A", phase=NodePhase.L3), register=0x001A))
     nodes.add(ModbusRTUNode(configuration=cfg("l3_active_power", NodeType.FLOAT, "kW", phase=NodePhase.L3), register=0x0022))
     nodes.add(ModbusRTUNode(configuration=cfg("l3_reactive_power", NodeType.FLOAT, "kVAr", phase=NodePhase.L3), register=0x002A))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_forward_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L3), register=0x010E))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_reverse_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L3), register=0x0116))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_forward_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L3), register=0x0126))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_reverse_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L3), register=0x012E))
+    nodes.add(ModbusRTUNode(configuration=cfg("l3_forward_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), register=0x010E))
+    nodes.add(ModbusRTUNode(configuration=cfg("l3_reverse_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), register=0x0116))
+    nodes.add(ModbusRTUNode(configuration=cfg("l3_forward_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), register=0x0126))
+    nodes.add(ModbusRTUNode(configuration=cfg("l3_reverse_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), register=0x012E))
     nodes.add(
         ModbusRTUNode(configuration=cfg("frequency", NodeType.FLOAT, "Hz", phase=NodePhase.L3, logging=True, logging_period=1), register=0x0014)
     )
     nodes.add(
-        Node(cfg("l3_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L3, incremental_node=True, calculate_increment=False, calculated=True))
+        Node(cfg("l3_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True))
     )
     nodes.add(
         Node(
-            cfg("l3_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L3, incremental_node=True, calculate_increment=False, calculated=True)
+            cfg("l3_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True)
         )
     )
     nodes.add(Node(cfg("l3_apparent_power", NodeType.FLOAT, "kVA", phase=NodePhase.L3, calculated=True)))
     nodes.add(Node(cfg("l3_power_factor", NodeType.FLOAT, "", phase=NodePhase.L3, calculated=True)))
-    nodes.add(Node(cfg("l3_power_factor_direction", NodeType.STRING, "", phase=NodePhase.L3, calculated=True)))
 
     # Totals
     nodes.add(
@@ -137,8 +129,8 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
                 NodeType.FLOAT,
                 "kWh",
                 phase=NodePhase.TOTAL,
-                incremental_node=True,
-                calculate_increment=False,
+                is_counter=True,
+                counter_mode=CounterMode.CUMULATIVE,
                 calculated=True,
                 logging=False,
                 logging_period=5,
@@ -152,8 +144,8 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
                 NodeType.FLOAT,
                 "kVArh",
                 phase=NodePhase.TOTAL,
-                incremental_node=True,
-                calculate_increment=False,
+                is_counter=True,
+                counter_mode=CounterMode.CUMULATIVE,
                 calculated=True,
                 logging=False,
                 logging_period=5,
@@ -161,7 +153,6 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
         )
     )
     nodes.add(Node(cfg("total_power_factor", NodeType.FLOAT, "", phase=NodePhase.TOTAL, calculated=True, logging=True, logging_period=1)))
-    nodes.add(Node(cfg("total_power_factor_direction", NodeType.STRING, "", phase=NodePhase.TOTAL, calculated=True, logging=True, logging_period=1)))
     nodes.add(Node(cfg("total_active_power", NodeType.FLOAT, "kW", phase=NodePhase.TOTAL, calculated=True, logging=True, logging_period=1)))
     nodes.add(Node(cfg("total_reactive_power", NodeType.FLOAT, "kVAr", phase=NodePhase.TOTAL, calculated=True, logging=True, logging_period=1)))
     nodes.add(Node(cfg("total_apparent_power", NodeType.FLOAT, "kVA", phase=NodePhase.TOTAL, calculated=True, logging=True, logging_period=1)))
@@ -179,18 +170,14 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
 
 
 def get_sm1238_db() -> EnergyMeterRecord:
-    meter_options = EnergyMeterOptions(
-        read_energy_from_meter=False,
-        read_separate_forward_reverse_energy=False,
-        negative_reactive_power=True,
-        frequency_reading=True,
-    ).get_meter_options()
+    meter_options = EnergyMeterOptions().get_meter_options()
 
     communication_options = OPCUAOptions(url="opc.tcp://192.168.10.10:4840").get_communication_options()
 
-    def cfg(name: str, type: NodeType, unit: str, *, phase: NodePhase, logging: bool = False, logging_period: int = 15, **extra) -> NodeConfig:
+    def cfg(name: str, type: NodeType, unit: str, phase: NodePhase, logging: bool = False, logging_period: int = 15, **extra) -> NodeConfig:
+        protocol = Protocol.OPC_UA if not extra.get("calculated", None) else Protocol.NONE
         return NodeConfig(
-            name=name, type=type, unit=unit, logging=logging, logging_period=logging_period, attributes=NodeAttributes(phase=phase), **extra
+            name=name, type=type, protocol=protocol, unit=unit, logging=logging, logging_period=logging_period, attributes=NodeAttributes(phase=phase), **extra
         )
 
     nodes: Set[Node] = set()
@@ -211,8 +198,8 @@ def get_sm1238_db() -> EnergyMeterRecord:
                 NodeType.FLOAT,
                 "kWh",
                 phase=NodePhase.L1,
-                incremental_node=True,
-                positive_incremental=True,
+                is_counter=True,
+                counter_mode=CounterMode.DELTA,
                 calculated=True,
                 logging=True,
                 logging_period=5,
@@ -226,15 +213,14 @@ def get_sm1238_db() -> EnergyMeterRecord:
                 NodeType.FLOAT,
                 "kVArh",
                 phase=NodePhase.L1,
-                incremental_node=True,
-                positive_incremental=True,
+                is_counter=True,
+                counter_mode=CounterMode.DELTA,
                 calculated=True,
                 logging=True,
                 logging_period=5,
             )
         )
     )
-    nodes.add(Node(cfg("l1_power_factor_direction", NodeType.STRING, "", phase=NodePhase.L1, calculated=True)))
 
     # L2
     nodes.add(
@@ -246,14 +232,13 @@ def get_sm1238_db() -> EnergyMeterRecord:
     nodes.add(OPCUANode(configuration=cfg("l2_apparent_power", NodeType.FLOAT, "VA", phase=NodePhase.L2), node_id="ns=4;i=17"))
     nodes.add(OPCUANode(configuration=cfg("l2_power_factor", NodeType.FLOAT, "", phase=NodePhase.L2), node_id="ns=4;i=18"))
     nodes.add(
-        Node(cfg("l2_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L2, incremental_node=True, positive_incremental=True, calculated=True))
+        Node(cfg("l2_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True))
     )
     nodes.add(
         Node(
-            cfg("l2_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L2, incremental_node=True, positive_incremental=True, calculated=True)
+            cfg("l2_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True)
         )
     )
-    nodes.add(Node(cfg("l2_power_factor_direction", NodeType.STRING, "", phase=NodePhase.L2, calculated=True)))
 
     # L3
     nodes.add(
@@ -265,14 +250,13 @@ def get_sm1238_db() -> EnergyMeterRecord:
     nodes.add(OPCUANode(configuration=cfg("l3_apparent_power", NodeType.FLOAT, "VA", phase=NodePhase.L3), node_id="ns=4;i=24"))
     nodes.add(OPCUANode(configuration=cfg("l3_power_factor", NodeType.FLOAT, "", phase=NodePhase.L3), node_id="ns=4;i=25"))
     nodes.add(
-        Node(cfg("l3_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L3, incremental_node=True, positive_incremental=True, calculated=True))
+        Node(cfg("l3_active_energy", NodeType.FLOAT, "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True))
     )
     nodes.add(
         Node(
-            cfg("l3_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L3, incremental_node=True, positive_incremental=True, calculated=True)
+            cfg("l3_reactive_energy", NodeType.FLOAT, "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True)
         )
     )
-    nodes.add(Node(cfg("l3_power_factor_direction", NodeType.STRING, "", phase=NodePhase.L3, calculated=True)))
 
     # General & Totals
     nodes.add(OPCUANode(configuration=cfg("frequency", NodeType.FLOAT, "Hz", phase=NodePhase.GENERAL), node_id="ns=4;i=33"))
@@ -288,8 +272,8 @@ def get_sm1238_db() -> EnergyMeterRecord:
                 NodeType.FLOAT,
                 "kWh",
                 phase=NodePhase.TOTAL,
-                incremental_node=True,
-                calculate_increment=False,
+                is_counter=True,
+                counter_mode=CounterMode.DELTA,
                 calculated=True,
                 logging=True,
                 logging_period=5,
@@ -303,15 +287,14 @@ def get_sm1238_db() -> EnergyMeterRecord:
                 NodeType.FLOAT,
                 "kVArh",
                 phase=NodePhase.TOTAL,
-                incremental_node=True,
-                calculate_increment=False,
+                is_counter=True,
+                counter_mode=CounterMode.DELTA,
                 calculated=True,
                 logging=True,
                 logging_period=5,
             )
         )
     )
-    nodes.add(Node(cfg("total_power_factor_direction", NodeType.STRING, "", phase=NodePhase.TOTAL, calculated=True)))
     nodes.add(Node(cfg("total_active_power", NodeType.FLOAT, "kW", phase=NodePhase.TOTAL, calculated=True, logging=True)))
     nodes.add(Node(cfg("total_reactive_power", NodeType.FLOAT, "kVAr", phase=NodePhase.TOTAL, calculated=True, logging=True)))
     nodes.add(Node(cfg("total_apparent_power", NodeType.FLOAT, "kVA", phase=NodePhase.TOTAL, calculated=True, logging=True)))

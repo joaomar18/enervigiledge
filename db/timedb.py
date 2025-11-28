@@ -279,8 +279,8 @@ class TimeDBClient:
         Extends an InfluxDB query with field selections based on variable type and query mode.
 
         Adds appropriate SELECT fields and filters to the query object in-place:
-        - Numeric non-incremental: mean_sum, mean_count, average_value, min_value, max_value
-        - Numeric incremental: value (with unit conversion)
+        - Numeric non-counter: mean_sum, mean_count, average_value, min_value, max_value
+        - Numeric counter: value (with unit conversion)
         - Non-numeric: raw value only (formatted mode not supported)
 
         For formatted queries, applies aggregation functions (SUM/MIN/MAX).
@@ -298,7 +298,7 @@ class TimeDBClient:
         if isinstance(variable.processor, NumericNodeProcessor):
             unit_factor = f"{calculation.get_unit_factor(variable.config.unit)}"
 
-            if not variable.config.incremental_node:
+            if not variable.config.is_counter:
                 query.where.append('"mean_count" > 0')
                 if aggregated: # aggregated/bucketed
                     query.fields.extend([
@@ -502,7 +502,7 @@ class TimeDBClient:
 
         For each time bucket, either uses existing data or creates a placeholder point with
         None values. Updates bucket start/end times to align with the bucket boundaries.
-        The structure of placeholder points depends on whether the variable is incremental.
+        The structure of placeholder points depends on whether the variable is a counter or not.
 
         Args:
             variable: Node configuration to determine point structure.
@@ -517,7 +517,7 @@ class TimeDBClient:
                 point['start_time'] = date.to_iso_minutes(bucket_start)
                 point['end_time'] = date.to_iso_minutes(bucket_end)
             else:
-                if not variable.config.incremental_node:
+                if not variable.config.is_counter:
                     point = {
                         'start_time': date.to_iso_minutes(bucket_start),
                         'end_time': date.to_iso_minutes(bucket_end),
@@ -577,9 +577,9 @@ class TimeDBClient:
         Computes global metrics and applies post-processing to numeric variable data points.
 
         Calculates aggregate statistics across all data points and performs cleanup operations.
-        For non-incremental variables: computes global weighted averages using mean_sum/mean_count,
+        For non-counter variables: computes global weighted averages using mean_sum/mean_count,
         tracks global min/max values with their corresponding timestamps, applies decimal rounding,
-        and removes internal calculation fields. For incremental variables: sums all values to
+        and removes internal calculation fields. For counter variables: sums all values to
         produce a global total.
 
         Args:
@@ -587,7 +587,7 @@ class TimeDBClient:
             points: List of data point dictionaries. Internal fields are removed in-place during processing.
 
         Returns:
-            For non-incremental numeric variables, returns dict with:
+            For non-counter numeric variables, returns dict with:
                 - average_value: Weighted average across all points
                 - min_value: Global minimum value
                 - max_value: Global maximum value
@@ -596,7 +596,7 @@ class TimeDBClient:
                 - max_value_start_time: Start timestamp of maximum value occurrence
                 - max_value_end_time: End timestamp of maximum value occurrence
 
-            For incremental numeric variables, returns dict with:
+            For counter numeric variables, returns dict with:
                 - value: Sum of all point values
 
             Returns None for non-numeric variables (no processing applied).
@@ -607,7 +607,7 @@ class TimeDBClient:
 
         global_metrics: Dict[str, Any] = {}
 
-        if not variable.config.incremental_node:
+        if not variable.config.is_counter:
             global_mean_sum = 0
             global_mean_count = 0
             global_mean_value = None
@@ -769,7 +769,7 @@ class TimeDBClient:
                 - unit (Optional[str]): Measurement unit of the variable.
                 - decimal_places (Optional[int]): Precision of numeric values.
                 - type (str): Variable type, e.g., "numeric" or "boolean".
-                - incremental (bool): True if the variable is cumulative.
+                - is_counter (bool): True if the variable is a counter.
                 - points (List[Any]): Raw or bucketed data points (empty if `remove_points=True`).
                 - time_step (Optional[str|timedelta]): Actual bucket interval used (if formatted).
                 - global_metrics (Optional[dict]): Computed statistics for numeric variables.
@@ -807,7 +807,7 @@ class TimeDBClient:
             unit=variable.config.unit,
             decimal_places=variable.config.decimal_places,
             type=variable.config.type,
-            incremental=variable.config.incremental_node,
+            is_counter=variable.config.is_counter,
             points=points if not remove_points else [],
             time_step=time_span.time_step,
             global_metrics=global_metrics

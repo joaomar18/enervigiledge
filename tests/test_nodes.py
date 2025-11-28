@@ -7,7 +7,7 @@ import pytest
 #############LOCAL IMPORTS#############
 
 from controller.node.node import Node
-from model.controller.node import NodeType, NodeConfig
+from model.controller.node import NodeType, NodeConfig, CounterMode
 from controller.node.processor.float_processor import FloatNodeProcessor
 
 #######################################
@@ -26,7 +26,7 @@ def test_node_updates_direction_and_stats():
 
 
 def test_incremental_node_logic():
-    node = Node(NodeConfig("energy", NodeType.FLOAT, "kWh", incremental_node=True))
+    node = Node(NodeConfig("energy", NodeType.FLOAT, "kWh", is_counter=True, counter_mode=CounterMode.CUMULATIVE))
     assert isinstance(node.processor, FloatNodeProcessor)
     node.processor.set_value(100)
     assert node.processor.value == 0

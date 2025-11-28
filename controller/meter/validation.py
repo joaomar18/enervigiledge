@@ -7,8 +7,8 @@ from typing import Dict, Set, Optional
 #############LOCAL IMPORTS#############
 
 from model.controller.device import EnergyMeterOptions, EnergyMeterType
-from model.controller.node import NodeType
-from controller.exceptions import UnitError, NodeUnknownError, NodeMissingError, LoggingPeriodError
+from model.controller.node import CounterMode, NodeDirection, NODE_DIRECTION_TO_STR_MAP
+from controller.exceptions import UnitError, NodeUnknownError, NodeMissingError, LoggingPeriodError, NodeInvalidOptionError
 from controller.node.node import Node
 import util.functions.meter as meter_util
 
@@ -29,7 +29,6 @@ def validate_node(node: Node, valid_nodes: Set[str], valid_units: Optional[Set[s
 
     Raises:
         NodeUnknownError: If the node's base name is not recognized
-        UnitError: If unit validation fails
     """
 
     if not node.config.custom:
@@ -37,12 +36,6 @@ def validate_node(node: Node, valid_nodes: Set[str], valid_units: Optional[Set[s
 
         if base_name not in valid_nodes:
             raise NodeUnknownError(f"Invalid node {node.config.name} with type {node.config.type}")
-
-        if node.config.type is not NodeType.FLOAT and node.config.type is not NodeType.INT:
-            if node.config.unit is None:
-                return
-            else:
-                raise UnitError(f"Invalid unit '{node.config.unit}' for node '{node.config.name}'. Non numeric nodes can't have units")
 
         if valid_units is None:
             raise UnitError(f"Could not find valid units for node '{node.config.name}'")
@@ -111,17 +104,18 @@ def validate_logging_consistency(nodes: Dict[str, Node], node_to_check: Optional
 
 
 def validate_energy_nodes(
-    phase: str, energy_type: str, nodes: Dict[str, Node], meter_type: EnergyMeterType, meter_options: EnergyMeterOptions
+    phase: str, energy_type: str, energy_direction: NodeDirection, nodes: Dict[str, Node], meter_type: EnergyMeterType, meter_options: EnergyMeterOptions
 ) -> None:
     """
-    Validates that calculated energy nodes have required dependency nodes based on meter configuration.
-
+    Validates that calculated energy nodes have required dependency nodes based on meter configuration. Verifies that all energy nodes are of counter type
+    and not custom variables as well.
     Checks different calculation methods: three-phase total summation, forward/reverse energy
     difference, or power-based energy integration.
 
     Args:
         phase (str): Phase prefix ("l1_", "l2_", "l3_", "total_", or "")
         energy_type (str): Energy type ("active" or "reactive")
+        energy_direction (NodeDirection): Direction to validate ("forward", "reverse" or "total").
         nodes (Dict[str, Node]): Dictionary of all available nodes
         meter_type (EnergyMeterType): Meter type (SINGLE_PHASE or THREE_PHASE)
         meter_options (EnergyMeterOptions): Configuration options
@@ -130,11 +124,20 @@ def validate_energy_nodes(
         NodeMissingError: If required dependency nodes are missing
     """
 
-    node_name = f"{phase}{energy_type}_energy"
-    node = nodes.get(node_name)
+    node_name = f"{phase}{NODE_DIRECTION_TO_STR_MAP[energy_direction]}{energy_type}_energy"
+    node = nodes.get(node_name, None)
 
-    if not node or not node.config.calculated or node.config.custom:
+    if not node:
         return
+    
+    if not node.config.is_counter or node.config.custom:
+        raise NodeInvalidOptionError(f"Energy node {node_name} needs to be of counter type and not a custom variable.")
+    
+    if not node.config.calculated:
+        return
+    
+    if energy_direction is not NodeDirection.TOTAL:
+        raise NodeInvalidOptionError(f"Node {node_name} with direction of type {energy_direction} cannot be a calculated variable.")
 
     if meter_type is EnergyMeterType.THREE_PHASE and phase == "total_":
         missing_phases = []
@@ -146,17 +149,20 @@ def validate_energy_nodes(
             raise NodeMissingError(f"Missing phase energy nodes for {node_name} calculation: {', '.join(missing_phases)}.")
         return
 
-    if meter_options.read_separate_forward_reverse_energy:
+    if node.config.counter_mode is CounterMode.CUMULATIVE:
         forward = nodes.get(f"{phase}forward_{energy_type}_energy")
         reverse = nodes.get(f"{phase}reverse_{energy_type}_energy")
 
         if not (forward and reverse):
             raise NodeMissingError(f"Missing nodes for {node_name} calculation: expected forward and reverse energy nodes.")
 
-    elif not meter_options.read_energy_from_meter:
+    elif node.config.counter_mode is CounterMode.DELTA:
         power_node = nodes.get(f"{phase}{energy_type}_power")
         if not power_node:
             raise NodeMissingError(f"Missing node for {node_name} calculation: expected {phase}{energy_type}_power.")
+    else:
+        raise NodeInvalidOptionError(f"Invalid counter mode {node.config.counter_mode} for node {node_name}. Not supported for calculation.")
+
 
 
 def validate_power_nodes(phase: str, power_type: str, nodes: Dict[str, Node], meter_type: EnergyMeterType) -> None:

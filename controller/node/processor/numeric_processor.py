@@ -9,7 +9,7 @@ from datetime import datetime
 #############LOCAL IMPORTS#############
 
 from controller.node.processor.processor import NodeProcessor, N
-from model.controller.node import NodeConfig
+from model.controller.node import NodeConfig, CounterMode
 import util.functions.calculation as calculation
 
 #######################################
@@ -135,7 +135,7 @@ class NumericNodeProcessor(NodeProcessor[N]):
 
     def set_value(self, value: Optional[N]) -> None:
         """
-        Sets the processor value, handling both incremental and non-incremental modes.
+        Sets the processor value, handling both counter and normal modes.
 
         Args:
             value (Optional[N]): The value to set, or None to clear the value.
@@ -144,41 +144,41 @@ class NumericNodeProcessor(NodeProcessor[N]):
         if not super().prepare_set_value(value) or value is None:  # Node disabled or value is None
             return
 
-        if self.config.incremental_node:
-            self.__set_value_incremental(value)
+        if self.config.is_counter:
+            self.__set_value_counter(value)
         else:
-            self.__set_value_non_incremental(value)
+            self.__set_value_normal(value)
 
-    def __set_value_incremental(self, value: N) -> None:
+    def __set_value_counter(self, value: N) -> None:
         """
-        Handles value setting for incremental nodes (counters, energy meters).
+        Handles value setting for counter nodes (counters, energy meters).
 
         Args:
-            value (N): The raw incremental value from the device.
+            value (N): The raw value from the device.
         """
 
         if self.initial_value is None:
             self.initial_value = value
-            self.value = self.ZERO
-            return
-
+            
         current_value = self.value if self.value is not None else self.ZERO
 
-        if not self.config.calculate_increment:
+        if self.config.counter_mode is CounterMode.DIRECT:
             new_value = value
             delta = new_value - current_value
 
-        elif self.config.positive_incremental:
+        elif self.config.counter_mode is CounterMode.DELTA:
             delta = value
             new_value = current_value + delta
-        else:
+        elif self.config.counter_mode is CounterMode.CUMULATIVE:
             new_value = value - self.initial_value
             delta = new_value - current_value
+        else:
+            raise ValueError(f"Counter mode is not valid: {self.config.counter_mode}")
 
         self.update_direction(delta)
         self.value = new_value
 
-    def __set_value_non_incremental(self, value: N) -> None:
+    def __set_value_normal(self, value: N) -> None:
         """
         Handles value setting for standard measurement nodes.
 
@@ -226,7 +226,7 @@ class NumericNodeProcessor(NodeProcessor[N]):
 
         output = additional_data.copy()
 
-        if self.config.incremental_node:
+        if self.config.is_counter:
             output["value"] = calculation.get_scaled_value(self.value, self.config.unit) if self.value is not None else None
 
         else:

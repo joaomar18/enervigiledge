@@ -70,9 +70,8 @@ class Node:
             max_alarm=self.config.max_alarm,
             min_alarm_value=self.config.min_alarm_value,
             max_alarm_value=self.config.max_alarm_value,
-            incremental_node=self.config.incremental_node,
-            positive_incremental=self.config.positive_incremental,
-            calculate_increment=self.config.calculate_increment,
+            is_counter=self.config.is_counter,
+            counter_mode=self.config.counter_mode,
         )
 
         configuration = base_config.get_config()

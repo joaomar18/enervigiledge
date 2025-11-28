@@ -33,6 +33,14 @@ class NodeMissingError(Exception):
     pass
 
 
+class NodeInvalidOptionError(Exception):
+    """
+    Raised when a node is configured with an invalid or unsupported option.
+    """
+    
+    pass
+
+
 class LoggingPeriodError(Exception):
     """Raised when at least two nodes of the same type have different logging periods."""
 

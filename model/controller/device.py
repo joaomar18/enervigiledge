@@ -48,25 +48,20 @@ class PowerFactorDirection(str, Enum):
 @dataclass
 class EnergyMeterOptions:
     """
-    Configuration options for how an energy meter should behave.
+    Placeholder for future meter-level configuration options.
 
-    Attributes:
-        read_energy_from_meter (bool): Whether to read energy directly from the meter.
-        read_separate_forward_reverse_energy (bool): Whether to track forward and reverse energy separately.
-        negative_reactive_power (bool): Whether the meter reads negative (leading) reactive power.
+    This class provides a structured container for energy meter settings and will
+    be expanded in later versions to support protocol- or device-specific behavior.
     """
-
-    read_energy_from_meter: bool
-    read_separate_forward_reverse_energy: bool
-    negative_reactive_power: bool
 
     def get_meter_options(self) -> Dict[str, Any]:
         """
-        Returns a dictionary representation of the current energy meter options.
+        Returns a dictionary representation of the current meter options.
 
         Returns:
-            Dict[str, Any]: A dictionary with all configuration flags and their values.
+            Dict[str, Any]: All configuration flags and values.
         """
+        
         return asdict(self)
 
 

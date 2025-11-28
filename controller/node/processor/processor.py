@@ -137,7 +137,7 @@ class NodeProcessor(ABC, Generic[V]):
         output = additional_data.copy()
         output["type"] = self.config.type.value
         output["unit"] = self.config.unit
-        output["incremental"] = self.config.incremental_node
+        output["is_counter"] = self.config.is_counter
 
         if self.config.min_alarm:
             output["min_alarm_state"] = self.min_alarm_state

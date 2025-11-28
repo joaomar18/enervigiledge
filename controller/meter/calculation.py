@@ -1,6 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
-from typing import List, Dict, Tuple, Optional, Any
+from typing import Dict, Tuple, Optional
 import math
 
 #######################################
@@ -8,8 +8,8 @@ import math
 #############LOCAL IMPORTS#############
 
 from model.controller.device import EnergyMeterOptions, PowerFactorDirection
+from model.controller.node import CounterMode
 from controller.node.node import Node
-from controller.node.processor.numeric_processor import NumericNodeProcessor
 import util.functions.meter as meter_util
 import util.functions.calculation as calculation
 
@@ -48,7 +48,7 @@ def calculate_energy(prefix: str, energy_type: str, node: Node, meter_nodes: Dic
         node.processor.set_value(scaled_total)
         return
 
-    if meter_options.read_separate_forward_reverse_energy:
+    if node.config.counter_mode is CounterMode.CUMULATIVE:
 
         (forward_node, forward_value) = meter_util.get_numeric_node_with_value(f"{prefix}forward_{energy_type}_energy", meter_nodes)
         (reverse_node, reverse_value) = meter_util.get_numeric_node_with_value(f"{prefix}reverse_{energy_type}_energy", meter_nodes)
@@ -61,7 +61,7 @@ def calculate_energy(prefix: str, energy_type: str, node: Node, meter_nodes: Dic
         scaled_value = calculation.apply_output_scaling(scaled_forward - scaled_reverse, node.config.unit)
         node.processor.set_value(scaled_value)
 
-    elif not meter_options.read_energy_from_meter:
+    elif node.config.counter_mode is CounterMode.DELTA:
 
         (power_node, power_value) = meter_util.get_numeric_node_with_value(f"{prefix}{energy_type}_power", meter_nodes)
 

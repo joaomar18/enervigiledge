@@ -97,6 +97,21 @@ class NodeType(str, Enum):
     FLOAT = "FLOAT"
     BOOL = "BOOL"
     STRING = "STRING"
+    
+
+class CounterMode(str, Enum):
+    """
+    Enumeration of supported counter processing modes.
+
+    Attributes:
+        DIRECT (str): Uses the incoming value as-is with no additional processing.
+        DELTA (str): Treats the incoming value as an incremental change to be accumulated.
+        CUMULATIVE (str): Treats the incoming value as a growing total from which deltas are derived.
+    """
+
+    DIRECT = "DIRECT"
+    DELTA = "DELTA"
+    CUMULATIVE = "CUMULATIVE"
 
 
 """Mapping from NodePhase enum values to their corresponding NodePrefix values."""
@@ -140,9 +155,8 @@ class BaseNodeRecordConfig:
     max_alarm: bool
     min_alarm_value: float | None
     max_alarm_value: float | None
-    incremental_node: bool | None
-    positive_incremental: bool | None
-    calculate_increment: bool | None
+    is_counter: bool | None
+    counter_mode: CounterMode | None = None
 
     def get_config(self) -> Dict[str, Any]:
         """
@@ -240,7 +254,7 @@ class NodeLogs:
         unit: Measurement unit for the node values (e.g., "kWh", "V", "A", "°C").
         decimal_places: Number of decimal places for value precision, or None for no rounding.
         type: NodeType indicating the data type classification of the node.
-        incremental: Whether the node represents cumulative values that increase over time.
+        counter: Whether the node represents a counter value that increase over time.
         points: List of time-series data points, each containing timestamps and measured values.
         time_step: Time interval for bucketed data (e.g., hourly, daily), None for raw data.
         global_metrics: Computed statistics across all points (min/max values, averages, totals).
@@ -249,7 +263,7 @@ class NodeLogs:
     unit: Optional[str]
     decimal_places: Optional[int]
     type: NodeType
-    incremental: Optional[bool]
+    is_counter: Optional[bool]
     points: List[Dict[str, Any]]
     time_step: Optional[FormattedTimeStep]
     global_metrics: Optional[Dict[str, Any]]
@@ -276,26 +290,27 @@ class NodeConfig:
 
     Attributes:
         name (str): Unique node identifier within the device.
-        type (NodeType): The data type of the node (FLOAT, BOOL, STRING, etc.).
-        unit (str | None): Measurement unit (e.g. "V", "A", "W") or None.
-        protocol (Protocol): Communication protocol for the node (default NONE).
+        type (NodeType): Data type of the node (INT, FLOAT, BOOL, STRING, etc.).
+        unit (str | None): Measurement unit (e.g., "V", "A", "kWh") or None.
+        protocol (Protocol): Communication protocol used to read this node.
         enabled (bool): Whether the node is active and should be polled.
-        incremental_node (bool | None): Marks if the node represents a cumulative counter.
-        positive_incremental (bool | None): If True, only positive increments are allowed.
-        calculate_increment (bool | None): Whether to calculate incremental deltas from values.
-        publish (bool): Whether to publish the node's values externally (e.g. MQTT).
-        calculated (bool): True if this node is derived from other nodes instead of hardware.
-        custom (bool): Whether the node is user-defined.
-        logging (bool): Whether to log values periodically to the database.
-        logging_period (int): Period in seconds for logging when enabled.
-        min_alarm (bool): Whether to trigger an alarm if value drops below min_alarm_value.
-        max_alarm (bool): Whether to trigger an alarm if value exceeds max_alarm_value.
-        min_alarm_value (float | None): Minimum threshold for alarm triggering.
-        max_alarm_value (float | None): Maximum threshold for alarm triggering.
-        min_warning_value (float | None): Minimum treshold for warning triggering.
-        max_warning_value (float | None): Maximum treshold for warning triggering.
-        decimal_places (int | None): Number of decimal places to display (FLOAT only).
-        attributes (NodeAttributes): Domain-specific metadata (e.g. phase).
+        is_counter (bool | None): Marks the node as a counter-type measurement.
+        counter_mode (CounterMode | None): Defines how counter values are interpreted
+            (DIRECT, DELTA, or CUMULATIVE).
+        publish (bool): Whether the node values should be published externally.
+        calculated (bool): True if the node is derived in software instead of read
+            from hardware.
+        custom (bool): Whether the node was user-defined.
+        logging (bool): Enables periodic logging of the node values.
+        logging_period (int): Logging interval in seconds when logging is enabled.
+        min_alarm (bool): Enable alarm when value drops below `min_alarm_value`.
+        max_alarm (bool): Enable alarm when value exceeds `max_alarm_value`.
+        min_alarm_value (float | None): Minimum value threshold for alarms.
+        max_alarm_value (float | None): Maximum value threshold for alarms.
+        min_warning_value (float | None): Minimum threshold for warnings.
+        max_warning_value (float | None): Maximum threshold for warnings.
+        decimal_places (int | None): Number of decimal places to display.
+        attributes (NodeAttributes): Domain-specific metadata (e.g., phase, line).
 
     Methods:
         validate(): Validates configuration values and enforces type-dependent rules.
@@ -306,9 +321,8 @@ class NodeConfig:
     unit: str | None
     protocol: Protocol = Protocol.NONE
     enabled: bool = True
-    incremental_node: bool | None = False
-    positive_incremental: bool | None = False
-    calculate_increment: bool | None = True
+    is_counter: bool | None = False
+    counter_mode: CounterMode | None = None
     publish: bool = True
     calculated: bool = False
     custom: bool = False
@@ -340,13 +354,14 @@ class NodeConfig:
 
         config = record.config
         valid_fields = set(NodeConfig.__dataclass_fields__.keys())
-        filtered_config = {k: v for k, v in config.items() if k in valid_fields and k not in ["type", "unit", "name", "attributes", "protocol"]}
+        filtered_config = {k: v for k, v in config.items() if k in valid_fields and k not in ["type", "unit", "name", "attributes", "protocol", "counter_mode"]}
 
         return NodeConfig(
             name=record.name,
             type=NodeType(config["type"]),
             unit=config["unit"],
             protocol=Protocol(record.protocol),
+            counter_mode=CounterMode(config["counter_mode"]) if config["counter_mode"] else None,
             attributes=NodeAttributes(**record.attributes),
             **filtered_config,
         )
@@ -378,9 +393,8 @@ class NodeConfig:
 
         # Auto-fix for non numeric types
         if self.type in {NodeType.BOOL, NodeType.STRING}:
-            self.incremental_node = False
-            self.positive_incremental = None
-            self.calculate_increment = None
+            self.is_counter = False
+            self.counter_mode = None
             self.min_alarm = False
             self.max_alarm = False
             self.min_alarm_value = None
@@ -388,18 +402,18 @@ class NodeConfig:
             self.unit = None
 
         if self.type in {NodeType.BOOL, NodeType.STRING}:
-            if self.incremental_node:
-                raise ValueError(f"incremental_node is not valid for {self.type.name} nodes.")
-            if self.positive_incremental is not None or self.calculate_increment is not None:
-                raise ValueError("Incremental node options are not applicable to non incremental nodes.")
+            if self.is_counter:
+                raise ValueError(f"counter node is not valid for {self.type.name} nodes.")
+            if self.counter_mode is not None:
+                raise ValueError("Counter mode is not applicable to non counter nodes.")
             if self.min_alarm or self.max_alarm or self.min_alarm_value is not None or self.max_alarm_value is not None:
                 raise ValueError(f"Alarms are not supported for {self.type.name} nodes.")
             if self.unit is not None:
                 raise ValueError(f"Non null unit is not applicable to {self.type.name} nodes.")
 
-        if self.incremental_node:
+        if self.is_counter:
             if self.min_alarm or self.max_alarm:
-                raise ValueError("Alarms are not applicable to incremental nodes.")
+                raise ValueError("Alarms are not applicable to counter nodes.")
 
         if self.min_alarm and self.min_alarm_value is None:
             raise ValueError("min_alarm is enabled but min_alarm_value is None.")

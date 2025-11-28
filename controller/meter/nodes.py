@@ -8,6 +8,7 @@ from typing import Dict, Set, Optional
 
 from controller.node.node import Node
 from model.controller.device import EnergyMeterType, EnergyMeterOptions
+from model.controller.node import NodeDirection
 from controller.exceptions import *
 import controller.meter.validation as validation
 import util.functions.meter as meter_util
@@ -124,7 +125,8 @@ class EnergyMeterNodes:
 
         if self.meter_type is EnergyMeterType.SINGLE_PHASE:
             for energy_type in ("active", "reactive"):
-                self.validate_energy_nodes("", energy_type)
+                for direction in NodeDirection:
+                    self.validate_energy_nodes("", energy_type, direction)
 
             for power_type in ("active", "reactive", "apparent"):
                 self.validate_power_nodes("", power_type)
@@ -134,30 +136,32 @@ class EnergyMeterNodes:
         elif self.meter_type is EnergyMeterType.THREE_PHASE:
             for phase in ("l1_", "l2_", "l3_", "total_"):
                 for energy_type in ("active", "reactive"):
-                    self.validate_energy_nodes(phase, energy_type)
+                    for direction in NodeDirection:
+                        self.validate_energy_nodes(phase, energy_type, direction)
 
                 for power_type in ("active", "reactive", "apparent"):
                     self.validate_power_nodes(phase, power_type)
 
                 self.validate_pf_nodes(phase)
         else:
-            raise MeterError(f"Meter type is not valid")
+            raise MeterError(f"Meter type {self.meter_type} is not valid")
 
         EnergyMeterNodes.validate_logging_consistency(self.nodes)
 
-    def validate_energy_nodes(self, phase: str, energy_type: str) -> None:
+    def validate_energy_nodes(self, phase: str, energy_type: str, energy_direction: NodeDirection) -> None:
         """
         Validates energy nodes for the specified phase and energy type configuration.
 
         Args:
             phase (str): Phase prefix ("l1_", "l2_", "l3_", "total_", or "" for single-phase).
             energy_type (str): Type of energy to validate ("active" or "reactive").
+            energy_direction (NodeDirection): Direction to validate ("forward", "reverse" or "total").
 
         Raises:
             NodeMissingError: If required energy nodes are missing for the configuration.
         """
 
-        validation.validate_energy_nodes(phase, energy_type, self.nodes, self.meter_type, self.meter_options)
+        validation.validate_energy_nodes(phase, energy_type, energy_direction, self.nodes, self.meter_type, self.meter_options)
 
     def validate_power_nodes(self, phase: str, power_type: str) -> None:
         """

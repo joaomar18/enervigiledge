@@ -12,8 +12,7 @@ from mqtt.client import MQTTClient
 from controller.manager import DeviceManager
 from web.server import HTTPServer
 from util.debug import LoggerManager
-
-# from data.nodes import get_orno_we_516_db, get_sm1238_db
+#from data.nodes import get_orno_we_516_db, get_sm1238_db
 
 #######################################
 
@@ -40,8 +39,8 @@ async def async_main():
 
     await timedb_client.init_connection()
     await sqlitedb_client.init_connection()
-    # sqlitedb_client.insert_energy_meter(get_orno_we_516_db())
-    # sqlitedb_client.insert_energy_meter(get_sm1238_db())
+    #sqlitedb_client.insert_energy_meter(get_orno_we_516_db())
+    #sqlitedb_client.insert_energy_meter(get_sm1238_db())
 
     await device_manager.start()
     await mqtt_client.start()
