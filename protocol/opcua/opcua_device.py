@@ -2,7 +2,6 @@
 
 import asyncio
 from asyncua import Client
-from dataclasses import dataclass, asdict
 from typing import Set, Optional, Callable
 import logging
 
@@ -11,26 +10,14 @@ import logging
 from util.debug import LoggerManager
 from controller.node.node import Node, OPCUANode
 from model.controller.general import Protocol
-from model.controller.device import EnergyMeterType, EnergyMeterOptions, BaseCommunicationOptions
+from model.controller.device import EnergyMeterType, EnergyMeterOptions
+from model.controller.protocol.opcua import OPCUAOptions
 from controller.meter.meter import EnergyMeter
 
+#######################################
+
+
 LoggerManager.get_logger(__name__).setLevel(logging.ERROR)
-
-
-@dataclass(kw_only=True)
-class OPCUAOptions(BaseCommunicationOptions):
-    """
-    Configuration options for OPC UA communication.
-
-    Attributes:
-        url (str): Endpoint URL of the OPC UA server.
-        username (Optional[str]): Username for authentication. Defaults to None.
-        password (Optional[str]): Password for authentication. Defaults to None.
-    """
-
-    url: str
-    username: Optional[str] = None
-    password: Optional[str] = None
 
 
 class OPCUAEnergyMeter(EnergyMeter):

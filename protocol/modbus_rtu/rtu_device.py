@@ -7,7 +7,6 @@ from pymodbus import ModbusException
 from typing import Optional, Set, Callable
 import logging
 from typing import Set, Optional
-from dataclasses import dataclass
 
 #######################################
 
@@ -16,36 +15,14 @@ from dataclasses import dataclass
 from util.debug import LoggerManager
 from controller.node.node import Node, ModbusRTUNode
 from model.controller.general import Protocol
-from model.controller.device import EnergyMeterType, EnergyMeterOptions, BaseCommunicationOptions
+from model.controller.device import EnergyMeterType, EnergyMeterOptions
+from model.controller.protocol.modbus_rtu import ModbusRTUOptions
 from controller.meter.meter import EnergyMeter
 
 #######################################
 
+
 LoggerManager.get_logger(__name__).setLevel(logging.ERROR)
-
-
-@dataclass(kw_only=True)
-class ModbusRTUOptions(BaseCommunicationOptions):
-    """
-    Configuration options for Modbus RTU communication.
-
-    Attributes:
-        slave_id (int): Modbus slave device ID.
-        port (str): Serial port used for communication.
-        baudrate (int): Baud rate of the serial connection.
-        stopbits (int): Number of stop bits.
-        parity (str): Parity mode (e.g., 'N', 'E', 'O').
-        bytesize (int): Number of data bits.
-        retries (int): Number of retry attempts on failure. Defaults to 3.
-    """
-
-    slave_id: int
-    port: str
-    baudrate: int
-    stopbits: int
-    parity: str
-    bytesize: int
-    retries: int = 3
 
 
 class ModbusRTUEnergyMeter(EnergyMeter):
