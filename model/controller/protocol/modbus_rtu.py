@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 #############LOCAL IMPORTS#############
 
+from model.controller.node import BaseNodeProtocolOptions, NodeType
 from model.controller.device import BaseCommunicationOptions
 
 #######################################
@@ -38,6 +39,20 @@ class ModbusRTUNodeType(str, Enum):
     UINT_64 = "UINT_64"
     FLOAT_64 = "FLOAT_64"
     
+    
+"""Mapping from ModbusRTUNodeType enum values to their corresponding internal type NodeType."""
+MODBUS_RTU_TO_INTERAL_TYPE_MAP = {
+    ModbusRTUNodeType.BOOL: NodeType.BOOL,
+    ModbusRTUNodeType.INT_16: NodeType.INT,
+    ModbusRTUNodeType.UINT_16: NodeType.INT,
+    ModbusRTUNodeType.INT_32: NodeType.INT,
+    ModbusRTUNodeType.UINT_32: NodeType.INT,
+    ModbusRTUNodeType.FLOAT_32: NodeType.FLOAT,
+    ModbusRTUNodeType.INT_64: NodeType.INT,
+    ModbusRTUNodeType.UINT_64: NodeType.INT,
+    ModbusRTUNodeType.FLOAT_64: NodeType.FLOAT,
+}
+    
 
 class ModbusRTUNodeMode(str, Enum):
     """
@@ -57,7 +72,7 @@ class ModbusRTUNodeMode(str, Enum):
     
 
 @dataclass
-class ModbusRTUNodeOptions():
+class ModbusRTUNodeOptions(BaseNodeProtocolOptions):
     """
     Protocol-specific configuration for a Modbus RTU node.
 

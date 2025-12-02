@@ -132,6 +132,7 @@ class SQLiteDBClient:
                     name TEXT NOT NULL,
                     protocol TEXT NOT NULL,
                     config TEXT NOT NULL,
+                    protocol_options TEXT NOT NULL,
                     attributes TEXT NOT NULL,
                     FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
                 )
@@ -192,10 +193,10 @@ class SQLiteDBClient:
                 node.device_id = device_id
                 cursor.execute(
                     """
-                    INSERT INTO nodes (device_id, name, protocol, config, attributes)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO nodes (device_id, name, protocol, config, protocol_options, attributes)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (device_id, node.name, node.protocol, json.dumps(node.config), json.dumps(node.attributes)),
+                    (device_id, node.name, node.protocol, json.dumps(node.config), json.dumps(node.protocol_options), json.dumps(node.attributes)),
                 )
 
             # Create initial device status entry
@@ -285,10 +286,10 @@ class SQLiteDBClient:
                 node.device_id = record.id
                 cursor.execute(
                     """
-                    INSERT INTO nodes (device_id, name, protocol, config, attributes)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO nodes (device_id, name, protocol, config, protocol_options, attributes)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (record.id, node.name, node.protocol, json.dumps(node.config), json.dumps(node.attributes)),
+                    (record.id, node.name, node.protocol, json.dumps(node.config), json.dumps(node.protocol_options), json.dumps(node.attributes)),
                 )
 
             # Restore device status with preserved created_at and updated updated_at
@@ -394,19 +395,20 @@ class SQLiteDBClient:
 
                 cursor.execute(
                     """
-                    SELECT name, protocol, config, attributes FROM nodes WHERE device_id = ?
+                    SELECT name, protocol, config, protocol_options, attributes FROM nodes WHERE device_id = ?
                 """,
                     (device_id,),
                 )
                 node_rows = cursor.fetchall()
 
                 nodes = set()
-                for node_name, node_protocol, config_str, attributes_str in node_rows:
+                for node_name, node_protocol, config_str, protocol_options_str, attributes_str in node_rows:
                     node = NodeRecord(
                         device_id=device_id,
                         name=node_name,
                         protocol=node_protocol,
                         config=json.loads(config_str),
+                        protocol_options=json.loads(protocol_options_str),
                         attributes=json.loads(attributes_str),
                     )
                     nodes.add(node)

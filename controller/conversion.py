@@ -88,6 +88,7 @@ def convert_dict_to_node(dict_node: Dict[str, Any], meter_type: EnergyMeterType)
 
     objects.check_required_keys(dict_node, NodeRecord)
     node_dict_config: Dict[str, Any] = objects.require_field(dict_node, "config", Dict[str, Any])
+    node_dict_protocol_options: Dict[str, Any] = objects.require_field(dict_node, "protocol_options", Dict[str, Any])
     node_dict_attributes: Optional[Dict[str, Any]] = dict_node.get("attributes")
     objects.check_required_keys(node_dict_config, BaseNodeRecordConfig)
     if node_dict_attributes is None:
@@ -97,13 +98,14 @@ def convert_dict_to_node(dict_node: Dict[str, Any], meter_type: EnergyMeterType)
     protocol = objects.convert_str_to_enum(objects.require_field(dict_node, "protocol", str), Protocol)
 
     if protocol is Protocol.NONE:
-        node_record = NodeRecord(name=name, protocol=protocol, config=node_dict_config, attributes=node_dict_attributes)
+        objects.check_required_keys(node_dict_protocol_options, ProtocolRegistry.no_protocol_options)
+        node_record = NodeRecord(name=name, protocol=protocol, config=node_dict_config, protocol_options=node_dict_protocol_options, attributes=node_dict_attributes)
         node_factory = ProtocolRegistry.get_base_node_factory()
         return node_factory(node_record)
 
     plugin = ProtocolRegistry.get_protocol_plugin(protocol)
-
-    node_record = NodeRecord(name=name, protocol=protocol, config=node_dict_config, attributes=node_dict_attributes)
+    objects.check_required_keys(node_dict_protocol_options, plugin.node_protocol_options)
+    node_record = NodeRecord(name=name, protocol=protocol, config=node_dict_config, protocol_options=node_dict_protocol_options, attributes=node_dict_attributes)
     return plugin.node_factory(node_record)
 
 

@@ -6,7 +6,9 @@ from typing import Dict, Any
 
 #############LOCAL IMPORTS#############
 
-from model.controller.node import NodeConfig, BaseNodeRecordConfig, NodeRecord
+from model.controller.node import NodeConfig, BaseNodeRecordConfig, NodeRecord, BaseNodeProtocolOptions
+from model.controller.protocol.modbus_rtu import ModbusRTUNodeOptions
+from model.controller.protocol.opcua import OPCUANodeOptions
 from controller.registry.node_type import TypeRegistry
 
 #######################################
@@ -14,42 +16,53 @@ from controller.registry.node_type import TypeRegistry
 
 class Node:
     """
-    Represents a data point or measurement within a device.
+    Represents a single data point within a device.
 
-    A node encapsulates both the configuration (metadata, units, alarms) and
-    the processor (value handling, statistics, formatting) for a single data point.
-    Each node can represent measurements like voltage, current, power, or status indicators.
+    A node holds its configuration, protocol-specific communication options,
+    and a type-specific processor responsible for handling value decoding,
+    formatting, alarms, and statistics.
 
-    The processor is automatically created based on the node's type
-    and handles type-specific value processing, alarm checking, and data formatting.
+    The processor is created automatically based on the node's internal type.
 
     Args:
-        configuration (NodeConfig): The node's configuration including name, type, units, and processing options.
+        configuration (NodeConfig): Node configuration including metadata,
+            alarms, logging options, and internal type.
+        protocol_options (BaseNodeProtocolOptions): Protocol-specific options
+            required to read or compute the node's value.
 
     Attributes:
-        config (NodeConfig): The node's configuration settings.
-        processor (NodeProcessor): Type-specific processor for value handling (created automatically based on node type).
+        config (NodeConfig): The node's configuration.
+        protocol_options (BaseNodeProtocolOptions): Communication or calculation
+            settings tied to the node's protocol.
+        processor (NodeProcessor): Type-specific processor created from the
+            internal node type.
     """
 
-    def __init__(self, configuration: NodeConfig):
+    def __init__(self, configuration: NodeConfig, protocol_options: BaseNodeProtocolOptions):
 
         configuration.validate()
         self.config = configuration
+        self.protocol_options = protocol_options
         self.processor = TypeRegistry.get_type_plugin(configuration.type).node_processor_factory(configuration)
 
     def get_publish_format(self) -> Dict[str, Any]:
+        """Returns the formatted value payload for publishing."""
 
         return self.processor.create_publish_format()
 
     def get_additional_info(self) -> Dict[str, Any]:
+        """Returns merged processor and protocol-specific metadata."""
 
-        return self.processor.create_additional_info()
+        return {
+            **self.processor.create_additional_info(),
+            **self.protocol_options.get_options(),
+        }
 
     def get_node_record(self) -> NodeRecord:
         """
         Converts the node instance into a serializable NodeRecord object for database storage.
 
-        Creates a record containing all node configuration, attributes, and metadata
+        Creates a record containing all node configuration, protocol options, attributes, and metadata
         that can be persisted to the database and later reconstructed.
 
         Returns:
@@ -58,7 +71,6 @@ class Node:
 
         base_config = BaseNodeRecordConfig(
             enabled=self.config.enabled,
-            type=self.config.type,
             unit=self.config.unit,
             publish=self.config.publish,
             calculated=self.config.calculated,
@@ -75,8 +87,9 @@ class Node:
         )
 
         configuration = base_config.get_config()
+        protocol_options = self.protocol_options.get_options()
         attributes = self.config.attributes.get_attributes()
-        return NodeRecord(device_id=None, name=self.config.name, protocol=self.config.protocol, config=configuration, attributes=attributes)
+        return NodeRecord(device_id=None, name=self.config.name, protocol=self.config.protocol, config=configuration, protocol_options=protocol_options, attributes=attributes)
 
 
 ###########     P R O T O C O L     S P E C I F I C     N O D E S     ###########
@@ -85,19 +98,23 @@ class Node:
 # Modbus RTU Node
 class ModbusRTUNode(Node):
     """
-    Specialized node for Modbus RTU communication protocol.
+    Node implementation for the Modbus RTU protocol.
 
-    Extends the base Node class to include Modbus-specific functionality
-    such as register addressing and connection state tracking.
+    Extends the base Node with Modbus-specific communication options, such as
+    register addressing, data type decoding, and connection state tracking.
+    The protocol options are also exposed as `self.options` for convenient
+    access to Modbus-specific fields.
 
     Args:
-        configuration (NodeConfig): The node's configuration including name, type, units, and processing options.
-        register (int): The Modbus register address for this data point.
+        configuration (NodeConfig): Runtime configuration for the node.
+        options (ModbusRTUNodeOptions): Modbus-specific options
+            including register address, data type, and endianness.
     """
 
-    def __init__(self, configuration: NodeConfig, register: int):
-        super().__init__(configuration=configuration)
-        self.register = register
+
+    def __init__(self, configuration: NodeConfig, protocol_options: ModbusRTUNodeOptions):
+        super().__init__(configuration=configuration, protocol_options=protocol_options)
+        self.options = protocol_options
         self.connected = False
 
     def set_connection_state(self, state: bool):
@@ -109,44 +126,25 @@ class ModbusRTUNode(Node):
         """
         self.connected = state
 
-    def get_additional_info(self) -> Dict[str, Any]:
-
-        additional_info = self.processor.create_additional_info()
-        additional_info["register"] = self.register
-        return additional_info
-
-    def get_node_record(self) -> NodeRecord:
-        """
-        Converts the Modbus RTU node instance into a serializable NodeRecord object.
-
-        Extends the base implementation to include Modbus-specific register attribute.
-
-        Returns:
-            NodeRecord: A representation of the current node for database storage.
-        """
-
-        node_record = super().get_node_record()
-        node_record.config["register"] = self.register
-
-        return node_record
-
 
 # OPC UA Node
 class OPCUANode(Node):
     """
-    Specialized node for OPC UA communication protocol.
+    Node implementation for the OPC UA protocol.
 
-    Extends the base Node class to include OPC UA-specific functionality
-    such as node ID addressing and connection state tracking.
+    Extends the base Node with OPC UA-specific communication options, such as
+    NodeId addressing and connection state tracking. The protocol options are
+    also exposed as `self.options` for convenient access to OPC UA–specific fields.
 
     Args:
-        configuration (NodeConfig): The node's configuration including name, type, units, and processing options.
-        node_id (str): The OPC UA node identifier for this data point.
+        configuration (NodeConfig): Runtime configuration for the node.
+        protocol_options (OPCUANodeOptions): OPC UA–specific options including
+            the NodeId and expected data type.
     """
 
-    def __init__(self, configuration: NodeConfig, node_id: str):
-        super().__init__(configuration=configuration)
-        self.node_id = node_id
+    def __init__(self, configuration: NodeConfig, protocol_options: OPCUANodeOptions):
+        super().__init__(configuration=configuration, protocol_options=protocol_options)
+        self.options = protocol_options
         self.connected = False
 
     def set_connection_state(self, state: bool):
@@ -157,27 +155,6 @@ class OPCUANode(Node):
             state (bool): True if the node is connected and communicating, False otherwise.
         """
         self.connected = state
-
-    def get_additional_info(self) -> Dict[str, Any]:
-
-        additional_info = self.processor.create_additional_info()
-        additional_info["node_id"] = self.node_id
-        return additional_info
-
-    def get_node_record(self) -> NodeRecord:
-        """
-        Converts the OPC UA node instance into a serializable NodeRecord object.
-
-        Extends the base implementation to include OPC UA-specific node_id attribute.
-
-        Returns:
-            NodeRecord: A representation of the current node for database storage.
-        """
-
-        node_record = super().get_node_record()
-        node_record.config["node_id"] = self.node_id
-
-        return node_record
 
 
 #################################################################################

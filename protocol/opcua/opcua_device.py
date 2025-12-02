@@ -236,7 +236,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         """
 
         try:
-            opc_node = client.get_node(node.node_id)
+            opc_node = client.get_node(node.options.node_id)
             value = await opc_node.read_value()
             node.set_connection_state(True)
             return float(value)

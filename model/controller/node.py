@@ -84,13 +84,17 @@ class NodeDirection(str, Enum):
 
 class NodeType(str, Enum):
     """
-    Enumeration of supported node data types.
+    Internal enumeration of protocol-agnostic node data types.
+
+    These types represent the normalized data categories used by the system
+    after protocol-specific values (Modbus registers, OPC UA typed nodes, etc.)
+    are decoded and mapped into a unified internal model.
 
     Attributes:
-        INT (str): Integer data type.
-        FLOAT (str): Floating point number.
+        INT (str): Integer value (signed or unsigned, any bit-width).
+        FLOAT (str): Floating-point number (32-bit or 64-bit).
         BOOL (str): Boolean value.
-        STRING (str): String/text value.
+        STRING (str): Text/string value.
     """
 
     INT = "INT"
@@ -134,16 +138,41 @@ NODE_DIRECTION_TO_STR_MAP = {
 
 
 @dataclass
+class BaseNodeProtocolOptions:
+    """
+    Base class for protocol-specific node communication options.
+
+    Serves as a common parent for all protocol option classes
+    (e.g., ModbusRTUNodeOptions, OPCUANodeOptions), allowing the
+    system to treat protocol-specific configurations in a unified way.
+
+    This class intentionally contains no attributes and acts solely as a
+    structural and typing anchor for protocol option subclasses.
+    """
+    
+    pass
+
+    def get_options(self) -> Dict[str, Any]:
+        """
+        Returns a dictionary representation of the current node protocol options
+
+        Returns:
+            Dict[str, Any]: A dictionary with all protocol options and it's values
+        """
+
+        return asdict(self)
+
+
+@dataclass
 class BaseNodeRecordConfig:
     """
     Base configuration for node records containing common attributes shared across all protocols.
 
-    Defines core node behavior including data type, publishing, alarms, logging, and incremental features.
+    Defines core node behavior including publishing, alarms, logging, and counter features.
     Extended by protocol-specific configurations to add protocol-dependent attributes.
     """
 
     enabled: bool
-    type: NodeType
     unit: str | None
     publish: bool
     calculated: bool
@@ -194,25 +223,28 @@ class NodeAttributes:
 @dataclass
 class NodeRecord:
     """
-    Database record for a node configuration with protocol-specific attributes.
+    Database record representing a node and its configuration, including both
+    protocol-independent settings and protocol-specific communication options.
 
-    Stores all configuration data needed to recreate a Node instance, including
-    base configuration (BaseNodeRecordConfig) and protocol-specific attributes.
-    Used for database persistence and Node factory methods.
+    Used for persisting node definitions in the database and for reconstructing
+    Node instances through protocol-specific factory methods.
 
     Attributes:
         name (str): Unique node identifier within the device.
-        protocol (str): Communication protocol (MODBUS_RTU, OPC_UA, NONE, etc.).
-        config (Dict[str, Any]): Complete configuration dictionary containing:
-        attributes (Dict[str, Any]): Domain-specific attributes (e.g. {"phase": "L1"}).
-            - Base attributes: type, unit, enabled, publish, alarms, logging, etc.
-            - Protocol-specific: register (Modbus), node_id (OPC UA), etc.
-        device_id (Optional[int]): Database ID of the parent device.
+        protocol (str): Communication protocol used by the node
+            (e.g., "MODBUS_RTU", "OPC_UA", "NONE").
+        config (Dict[str, Any]): Base configuration containing protocol-independent
+            attributes such as type, unit, alarms, logging, counters, and display settings.
+        protocol_options (Dict[str, Any]): Protocol-specific communication settings,
+            such as Modbus register information or OPC UA NodeId.
+        attributes (Dict[str, Any]): Domain-level metadata (e.g., {"phase": "L1"}).
+        device_id (Optional[int]): ID of the parent device in the database, if assigned.
     """
 
     name: str
     protocol: str
     config: Dict[str, Any]
+    protocol_options: Dict[str, Any]
     attributes: Dict[str, Any]
     device_id: Optional[int] = None
 
@@ -282,38 +314,34 @@ class NodeLogs:
 @dataclass
 class NodeConfig:
     """
-    Configuration for a node within a device.
+    Runtime configuration for a node, defining how its value is interpreted,
+    displayed, logged, published, and monitored during device operation.
 
-    Defines both functional behavior (type, unit, protocol, alarms, logging) and
-    domain-specific attributes (e.g. phase) used to manage and validate node data.
-    This configuration is used when creating and initializing Node instances.
+    Contains all internal settings required by the node processor, including
+    type information, alarms, logging behavior, counter modes, and
+    domain-specific attributes.
 
     Attributes:
-        name (str): Unique node identifier within the device.
-        type (NodeType): Data type of the node (INT, FLOAT, BOOL, STRING, etc.).
-        unit (str | None): Measurement unit (e.g., "V", "A", "kWh") or None.
-        protocol (Protocol): Communication protocol used to read this node.
-        enabled (bool): Whether the node is active and should be polled.
-        is_counter (bool | None): Marks the node as a counter-type measurement.
-        counter_mode (CounterMode | None): Defines how counter values are interpreted
-            (DIRECT, DELTA, or CUMULATIVE).
-        publish (bool): Whether the node values should be published externally.
-        calculated (bool): True if the node is derived in software instead of read
-            from hardware.
-        custom (bool): Whether the node was user-defined.
-        logging (bool): Enables periodic logging of the node values.
-        logging_period (int): Logging interval in seconds when logging is enabled.
-        min_alarm (bool): Enable alarm when value drops below `min_alarm_value`.
-        max_alarm (bool): Enable alarm when value exceeds `max_alarm_value`.
-        min_alarm_value (float | None): Minimum value threshold for alarms.
-        max_alarm_value (float | None): Maximum value threshold for alarms.
-        min_warning_value (float | None): Minimum threshold for warnings.
-        max_warning_value (float | None): Maximum threshold for warnings.
-        decimal_places (int | None): Number of decimal places to display.
-        attributes (NodeAttributes): Domain-specific metadata (e.g., phase, line).
-
-    Methods:
-        validate(): Validates configuration values and enforces type-dependent rules.
+        name: Node identifier within the device.
+        type: Internal node type (INT, FLOAT, BOOL, STRING).
+        unit: Measurement unit or None.
+        protocol: Communication protocol used to read the node.
+        enabled: Whether the node is active.
+        is_counter: Marks the node as a counter-type measurement.
+        counter_mode: Interpretation mode for counter values.
+        publish: Whether the node's value should be published externally.
+        calculated: True if the node is computed internally.
+        custom: True if defined by the user.
+        logging: Enables periodic logging.
+        logging_period: Logging interval in seconds.
+        min_alarm: Enable minimum-value alarm.
+        max_alarm: Enable maximum-value alarm.
+        min_alarm_value: Minimum threshold for alarms.
+        max_alarm_value: Maximum threshold for alarms.
+        min_warning_value: Minimum threshold for warnings.
+        max_warning_value: Maximum threshold for warnings.
+        decimal_places: Number of decimals for FLOAT display.
+        attributes: Domain-specific attributes (e.g., electrical phase).
     """
 
     name: str
@@ -338,27 +366,28 @@ class NodeConfig:
     attributes: NodeAttributes = field(default_factory=NodeAttributes)
 
     @staticmethod
-    def create_from_node_record(record: NodeRecord) -> "NodeConfig":
+    def create_config_from_record(record: NodeRecord, internal_type: NodeType) -> "NodeConfig":
         """
-        Creates a NodeConfig instance from a NodeRecord database record.
+        Builds a runtime NodeConfig from a stored NodeRecord.
 
-        Extracts configuration data from the record and filters valid fields
-        to construct a properly typed NodeConfig instance with enum conversions.
+        Applies field filtering, restores enums, assigns the inferred internal type,
+        and reconstructs node attributes for use at runtime.
 
         Args:
-            record: Database record containing node configuration data.
+            record: Persisted node record loaded from the database.
+            internal_type: Internal node type inferred from protocol-specific options.
 
         Returns:
-            NodeConfig: Configured node instance ready for use.
+            NodeConfig: Fully initialized runtime configuration.
         """
 
         config = record.config
         valid_fields = set(NodeConfig.__dataclass_fields__.keys())
-        filtered_config = {k: v for k, v in config.items() if k in valid_fields and k not in ["type", "unit", "name", "attributes", "protocol", "counter_mode"]}
+        filtered_config = {k: v for k, v in config.items() if k in valid_fields and k not in ["unit", "name", "attributes", "protocol", "counter_mode"]}
 
         return NodeConfig(
             name=record.name,
-            type=NodeType(config["type"]),
+            type=internal_type,
             unit=config["unit"],
             protocol=Protocol(record.protocol),
             counter_mode=CounterMode(config["counter_mode"]) if config["counter_mode"] else None,
@@ -367,6 +396,12 @@ class NodeConfig:
         )
 
     def __post_init__(self):
+        """
+        Applies automatic adjustments to warning thresholds.
+
+        If warning limits are undefined but alarm limits exist, they are initialized
+        to slightly relaxed values relative to the alarm thresholds.
+        """
 
         DEFAULT_WARNING_PERCENT = 0.02
 

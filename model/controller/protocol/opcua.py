@@ -8,6 +8,7 @@ from typing import Optional
 
 #############LOCAL IMPORTS#############
 
+from model.controller.node import BaseNodeProtocolOptions, NodeType
 from model.controller.device import BaseCommunicationOptions
 
 #######################################
@@ -29,9 +30,18 @@ class OPCUANodeType(str, Enum):
     FLOAT = "FLOAT"
     STRING = "STRING"
     
+    
+"""Mapping from OPCUANodeType enum values to their corresponding internal type NodeType."""
+OPCUA_TO_INTERAL_TYPE_MAP = {
+    OPCUANodeType.BOOL: NodeType.BOOL,
+    OPCUANodeType.INT: NodeType.INT,
+    OPCUANodeType.FLOAT: NodeType.FLOAT,
+    OPCUANodeType.STRING: NodeType.STRING,
+}
+    
 
 @dataclass
-class OPCUANodeOptions():
+class OPCUANodeOptions(BaseNodeProtocolOptions):
     """
     Protocol-specific configuration for an OPC UA node.
 
