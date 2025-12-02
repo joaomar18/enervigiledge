@@ -10,8 +10,8 @@ from controller.node.node import Node
 from model.controller.general import Protocol
 from model.controller.device import EnergyMeterRecord, EnergyMeterType, EnergyMeterOptions
 from model.controller.node import NodeRecord, NodeConfig, NodeAttributes, NodePhase, NodeType, CounterMode
-from model.controller.protocol.no_protocol import NoProtocolNodeOptions, NoProtocolType, NONE_TO_INTERAL_TYPE_MAP
-from model.controller.protocol.modbus_rtu import ModbusRTUNodeOptions, ModbusRTUNodeType, ModbusRTUNodeMode, MODBUS_RTU_TO_INTERAL_TYPE_MAP
+from model.controller.protocol.no_protocol import NoProtocolNodeOptions, NoProtocolType
+from model.controller.protocol.modbus_rtu import ModbusRTUNodeOptions, ModbusRTUNodeType, ModbusRTUNodeMode, ModbusRTUFunction
 from model.controller.protocol.opcua import OPCUANodeOptions, OPCUANodeType
 from protocol.modbus_rtu.rtu_device import ModbusRTUOptions, ModbusRTUNode
 from protocol.opcua.opcua_device import OPCUAOptions, OPCUANode
@@ -32,15 +32,15 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
     nodes: Set[Node] = set()
     
     # L1
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_voltage", "V", phase=NodePhase.L1, logging=True, logging_period=1), protocol_options=ModbusRTUNodeOptions(first_register=0x000E, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_current", "A", phase=NodePhase.L1), protocol_options=ModbusRTUNodeOptions(first_register=0x0016, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_active_power", "kW", phase=NodePhase.L1), protocol_options=ModbusRTUNodeOptions(first_register=0x001E, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_reactive_power", "kVAr", phase=NodePhase.L1), protocol_options=ModbusRTUNodeOptions(first_register=0x0026, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l1_voltage", "V", phase=NodePhase.L1, logging=True, logging_period=1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x000E, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l1_current", "A", phase=NodePhase.L1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0016, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l1_active_power", "kW", phase=NodePhase.L1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x001E, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l1_reactive_power", "kVAr", phase=NodePhase.L1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0026, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
     
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_forward_active_energy", "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(first_register=0x010A, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_reverse_active_energy", "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(first_register=0x0112, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_forward_reactive_energy", "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(first_register=0x0122, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_reverse_reactive_energy", "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(first_register=0x012A, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l1_forward_active_energy", "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x010A, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l1_reverse_active_energy", "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0112, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l1_forward_reactive_energy", "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0122, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l1_reverse_reactive_energy", "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x012A, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
     
     nodes.add(Node(configuration=cfg("l1_active_energy", "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
     nodes.add(Node(configuration=cfg("l1_reactive_energy", "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
@@ -49,15 +49,15 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
     nodes.add(Node(configuration=cfg("l1_power_factor", "", phase=NodePhase.L1, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
 
     # L2
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_voltage", "V", phase=NodePhase.L2, logging=True, logging_period=1), protocol_options=ModbusRTUNodeOptions(first_register=0x0010, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_current", "A", phase=NodePhase.L2), protocol_options=ModbusRTUNodeOptions(first_register=0x0018, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_active_power", "kW", phase=NodePhase.L2), protocol_options=ModbusRTUNodeOptions(first_register=0x0020, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_reactive_power", "kVAr", phase=NodePhase.L2), protocol_options=ModbusRTUNodeOptions(first_register=0x0028, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l2_voltage", "V", phase=NodePhase.L2, logging=True, logging_period=1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0010, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l2_current", "A", phase=NodePhase.L2), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0018, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l2_active_power", "kW", phase=NodePhase.L2), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0020, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l2_reactive_power", "kVAr", phase=NodePhase.L2), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0028, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
     
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_forward_active_energy", "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(first_register=0x010C, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_reverse_active_energy", "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(first_register=0x0114, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_forward_reactive_energy", "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(first_register=0x0124, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_reverse_reactive_energy", "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(first_register=0x012C, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l2_forward_active_energy", "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x010C, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l2_reverse_active_energy", "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0114, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l2_forward_reactive_energy", "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0124, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l2_reverse_reactive_energy", "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x012C, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
     
     nodes.add(Node(configuration=cfg("l2_active_energy", "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
     nodes.add(Node(configuration=cfg("l2_reactive_energy", "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
@@ -66,15 +66,15 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
     nodes.add(Node(configuration=cfg("l2_power_factor", "", phase=NodePhase.L2, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
     
     # L3
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_voltage", "V", phase=NodePhase.L3, logging=True, logging_period=1), protocol_options=ModbusRTUNodeOptions(first_register=0x0012, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_current", "A", phase=NodePhase.L3), protocol_options=ModbusRTUNodeOptions(first_register=0x001A, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_active_power", "kW", phase=NodePhase.L3), protocol_options=ModbusRTUNodeOptions(first_register=0x0022, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_reactive_power", "kVAr", phase=NodePhase.L3), protocol_options=ModbusRTUNodeOptions(first_register=0x002A, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l3_voltage", "V", phase=NodePhase.L3, logging=True, logging_period=1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0012, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l3_current", "A", phase=NodePhase.L3), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x001A, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l3_active_power", "kW", phase=NodePhase.L3), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0022, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l3_reactive_power", "kVAr", phase=NodePhase.L3), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x002A, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
     
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_forward_active_energy", "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(first_register=0x010E, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_reverse_active_energy", "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(first_register=0x0116, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_forward_reactive_energy", "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(first_register=0x0126, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_reverse_reactive_energy", "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(first_register=0x012E, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l3_forward_active_energy", "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x010E, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l3_reverse_active_energy", "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0116, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l3_forward_reactive_energy", "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0126, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("l3_reverse_reactive_energy", "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x012E, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
     
     nodes.add(Node(configuration=cfg("l3_active_energy", "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
     nodes.add(Node(configuration=cfg("l3_reactive_energy", "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
@@ -93,7 +93,7 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
     
     # General    
     
-    nodes.add(ModbusRTUNode(configuration=cfg("frequency", "Hz", phase=NodePhase.GENERAL, logging=True, logging_period=1), protocol_options=ModbusRTUNodeOptions(first_register=0x0014, coil=None, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(ModbusRTUNode(configuration=cfg("frequency", "Hz", phase=NodePhase.GENERAL, logging=True, logging_period=1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0014, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
 
     node_records: set[NodeRecord] = {node.get_node_record() for node in nodes}
 

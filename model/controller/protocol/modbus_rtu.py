@@ -70,27 +70,51 @@ class ModbusRTUNodeMode(str, Enum):
     BYTE_SWAP = "BYTE_SWAP"
     WORD_BYTE_SWAP = "WORD_BYTE_SWAP"
     
+    
+class ModbusRTUFunction(str, Enum):
+    """
+    Modbus RTU function codes supported for reading node values.
 
+    Represents the four standard Modbus memory areas, each accessed through
+    its corresponding read function.
+
+    Attributes:
+        READ_COILS: Read writable boolean coils (FC1).
+        READ_DISCRETE_INPUTS: Read read-only boolean inputs (FC2).
+        READ_HOLDING_REGISTERS: Read 16-bit holding registers (FC3).
+        READ_INPUT_REGISTERS: Read 16-bit input registers (FC4).
+    """
+    
+    READ_COILS = "READ_COILS"
+    READ_DISCRETE_INPUTS = "READ_DISCRETE_INPUTS"
+    READ_HOLDING_REGISTERS = "READ_HOLDING_REGISTERS"
+    READ_INPUT_REGISTERS = "READ_INPUT_REGISTERS"
+
+    
 @dataclass
 class ModbusRTUNodeOptions(BaseNodeProtocolOptions):
     """
     Protocol-specific configuration for a Modbus RTU node.
 
-    Defines the register mapping and numeric interpretation used when reading
-    values from a Modbus device.
+    Defines how a node value is read from a Modbus device, including the
+    function code, address, data type, and optional bit extraction or
+    endianness rules for multi-register values.
 
     Attributes:
-        first_register (int): The starting register address for the node.
-        coil (int | None): Coil address for boolean values. None for register-based types.
-        type (ModbusRTUNodeType): The numeric Modbus data type (e.g., INT_16, FLOAT_32).
-        endian_mode (ModbusRTUNodeMode): Byte/word ordering mode applied when decoding
-            multi-register values (e.g., BIG_ENDIAN, WORD_SWAP).
-    """    
+        function (ModbusRTUFunction): Modbus read function to use
+            (coils, discrete inputs, holding registers, input registers).
+        address (int): Address used with the selected function (coil or register index).
+        type (ModbusRTUNodeType): Modbus data type (e.g., INT_16, FLOAT_32, BOOL).
+        endian_mode (ModbusRTUNodeMode | None): Byte/word ordering for multi-register
+            numeric types. None for single-register or coil values.
+        bit (int | None): Optional bit index for boolean flags stored within registers.
+    """
     
-    first_register: int
-    coil: int | None
+    function: ModbusRTUFunction
+    address: int
     type: ModbusRTUNodeType
-    endian_mode: ModbusRTUNodeMode
+    endian_mode: ModbusRTUNodeMode | None = None
+    bit: int | None = None
     
     
 @dataclass(kw_only=True)

@@ -238,7 +238,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
         try:
             response = client.read_holding_registers(
-                address=node.options.first_register, count=2, device_id=self.communication_options.slave_id, no_response_expected=False
+                address=node.options.address, count=2, device_id=self.communication_options.slave_id, no_response_expected=False
             )
 
             if not response or not hasattr(response, "registers") or len(response.registers) < 2:
