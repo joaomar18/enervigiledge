@@ -1,8 +1,8 @@
 ############### EXTERNAL IMPORTS ###############
 
 import asyncio
-from asyncua import Client
-from typing import Set, Optional, Callable
+import asyncua
+from typing import Set, Dict, Optional, Any, Callable, Coroutine
 import logging
 
 ############### LOCAL IMPORTS ###############
@@ -11,7 +11,7 @@ from util.debug import LoggerManager
 from controller.node.node import Node, OPCUANode
 from model.controller.general import Protocol
 from model.controller.device import EnergyMeterType, EnergyMeterOptions
-from model.controller.protocol.opcua import OPCUAOptions
+from model.controller.protocol.opcua import OPCUAOptions, OPCUANodeType
 from controller.meter.meter import EnergyMeter
 
 #######################################
@@ -22,32 +22,35 @@ LoggerManager.get_logger(__name__).setLevel(logging.ERROR)
 
 class OPCUAEnergyMeter(EnergyMeter):
     """
-    Represents an energy meter that communicates over the OPC UA protocol.
+    Energy meter implementation that communicates using the OPC UA protocol.
 
-    This class extends the generic EnergyMeter to implement specific functionality
-    for devices connected via OPC UA. It manages the OPC UA client lifecycle,
-    node reading routines, and connection handling.
+    This class extends `EnergyMeter` with OPC UA–specific connection handling,
+    asynchronous node reading, and lifecycle management for an `asyncua.Client`.
+    It maps each node type to an appropriate async value reader and tracks the
+    connection state of both the device and its nodes.
 
-    Inherits from:
-        EnergyMeter: Base class for energy meter abstraction.
+    Inherits:
+        EnergyMeter: Base abstraction for energy meter devices.
 
     Args:
-        id (int): Unique identifier of the energy meter.
+        id (int): Unique identifier of the meter.
         name (str): Display name of the meter.
-        publish_queue (asyncio.Queue): Queue used to publish processed meter data to MQTT.
-        measurements_queue (asyncio.Queue): Queue for pushing measurements to be logged.
-        meter_type (EnergyMeterType): Specifies the type of meter (EnergyMeterType.SINGLE_PHASE, EnergyMeterType.THREE_PHASE).
-        meter_options (EnergyMeterOptions): General configuration options for the meter.
-        communication_options (OPCUAOptions): Connection configuration parameters for the OPC UA client.
-        nodes (Optional[Set[Node]]): Set of nodes representing individual measurement points.
-        on_connection_change (Callable[[int, bool], None] | None): Optional callback triggered when the device connection state changes.
-            Expects two parameters: device id (int) and state (bool).
+        publish_queue (asyncio.Queue): Queue used to publish processed readings.
+        measurements_queue (asyncio.Queue): Queue used to push values for logging.
+        meter_type (EnergyMeterType): Single-phase or three-phase meter type.
+        meter_options (EnergyMeterOptions): General meter configuration.
+        communication_options (OPCUAOptions): OPC UA connection parameters.
+        nodes (Optional[Set[Node]]): Node definitions for this meter.
+        on_connection_change (Callable[[int, bool], None] | None): Optional callback
+            invoked when the meter's connection state changes.
 
     Attributes:
-        client (Optional[asyncua.Client]): Instance of the OPC UA client used for communication.
-        communication_options (OPCUAOptions): Configuration used to initialize the OPC UA client.
+        client (Optional[asyncua.Client]): OPC UA client instance.
+        communication_options (OPCUAOptions): Connection configuration.
         nodes (Set[Node]): All nodes associated with this meter.
-        opcua_nodes (Set[OPCUANode]): Subset of nodes specific to OPC UA.
+        opcua_nodes (Set[OPCUANode]): Nodes specific to the OPC UA protocol.
+        get_value_map (Dict[OPCUANodeType, Callable]): Mapping of node types to
+            their asynchronous value-reader functions.
     """
 
     def __init__(
@@ -76,7 +79,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         )
 
         self.communication_options = communication_options
-        self.client: Optional[Client] = None
+        self.client: Optional[asyncua.Client] = None
 
         self.nodes = nodes if nodes else set()
         self.opcua_nodes: Set[OPCUANode] = {node for node in self.nodes if isinstance(node, OPCUANode)}
@@ -87,6 +90,13 @@ class OPCUAEnergyMeter(EnergyMeter):
         self.connection_task: asyncio.Task | None = None
         self.receiver_task: asyncio.Task | None = None
 
+        self.get_value_map: Dict[OPCUANodeType, Callable[[asyncua.Node], Coroutine[Any, Any, float | int | str | bool]]] = {
+            OPCUANodeType.FLOAT: self.get_float,
+            OPCUANodeType.INT: self.get_int,
+            OPCUANodeType.STRING: self.get_string,
+            OPCUANodeType.BOOL: self.get_bool,
+        }
+
     async def start(self) -> None:
         """
         Starts the OPC UA energy meter background tasks for connection management and data acquisition.
@@ -95,7 +105,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         if self.client is not None:
             raise RuntimeError(f"OPC UA Client for device {self.name} is already running")
 
-        self.client = Client(url=self.communication_options.url, timeout=self.communication_options.timeout)
+        self.client = asyncua.Client(url=self.communication_options.url, timeout=self.communication_options.timeout)
         if self.communication_options.username is not None and self.communication_options.password is not None:
             self.client.set_user(self.communication_options.username)
             self.client.set_password(self.communication_options.password)
@@ -120,7 +130,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         self.receiver_task = None
         await self.close_connection()
 
-    def __require_client(self) -> Client:
+    def __require_client(self) -> asyncua.Client:
         """
         Return the active OPC UA client connection.
 
@@ -192,7 +202,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         while self.run_receiver_task:
             try:
                 if self.network_connected:
-                    tasks = [asyncio.create_task(self.read_float(client, node)) for node in self.opcua_nodes if node.config.enabled]
+                    tasks = [asyncio.create_task(self.read_node(client, node)) for node in self.opcua_nodes if node.config.enabled]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
 
                     failed_nodes = []
@@ -220,16 +230,16 @@ class OPCUAEnergyMeter(EnergyMeter):
 
             await asyncio.sleep(self.communication_options.read_period)
 
-    async def read_float(self, client: Client, node: OPCUANode):
+    async def read_node(self, client: asyncua.Client, node: OPCUANode) -> float | int | str | bool:
         """
-        Reads a float value from the specified OPC UA node.
+        Read a value from the given OPC UA node using the appropriate typed getter.
 
         Args:
-            client (Client): The OPC UA client instance to use for the read operation.
-            node (OPCUANode): The node to read from.
+            client (asyncua.Client): The OPC UA client used to access the server.
+            node (OPCUANode): The node definition containing type and NodeId information.
 
         Returns:
-            float: The value read from the node.
+            float | int | str | bool: The parsed value read from the OPC UA node.
 
         Raises:
             Exception: If the read operation fails.
@@ -237,12 +247,28 @@ class OPCUAEnergyMeter(EnergyMeter):
 
         try:
             opc_node = client.get_node(node.options.node_id)
-            value = await opc_node.read_value()
+            value = await (self.get_value_map[node.options.type])(opc_node)
             node.set_connection_state(True)
-            return float(value)
+            return value
         except Exception as e:
             node.set_connection_state(False)
             raise Exception(f"Failed to read {node.config.name} from {self.name}") from e
+        
+    async def get_float(self, node: asyncua.Node) -> float:
+        """Read the node's value and return it as a float."""
+        return float(await node.read_value())
+    
+    async def get_int(self, node:asyncua.Node) -> int:
+        """Read the node's value and return it as an integer."""
+        return int(await node.read_value())
+
+    async def get_string(self, node:asyncua.Node) -> str:
+        """Read the node's value and return it as a string."""
+        return str(await node.read_value())
+
+    async def get_bool(self, node:asyncua.Node) -> bool:
+        """Read the node's value and return it as a boolean."""
+        return bool(await node.read_value())
 
     async def close_connection(self):
         """
