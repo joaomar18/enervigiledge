@@ -12,9 +12,9 @@ from controller.node.node import Node, ModbusRTUNode, OPCUANode
 from model.controller.general import Protocol
 from model.controller.device import BaseCommunicationOptions
 from model.controller.node import NodeRecord, NodeConfig, BaseNodeProtocolOptions
-from model.controller.protocol.no_protocol import NoProtocolNodeOptions, NONE_TO_INTERAL_TYPE_MAP
-from model.controller.protocol.modbus_rtu import ModbusRTUOptions, ModbusRTUNodeOptions, MODBUS_RTU_TO_INTERAL_TYPE_MAP
-from model.controller.protocol.opcua import OPCUAOptions, OPCUANodeOptions, OPCUA_TO_INTERAL_TYPE_MAP
+from model.controller.protocol.no_protocol import NoProtocolNodeOptions, NONE_TO_INTERNAL_TYPE_MAP
+from model.controller.protocol.modbus_rtu import ModbusRTUOptions, ModbusRTUNodeOptions, MODBUS_RTU_TO_INTERNAL_TYPE_MAP
+from model.controller.protocol.opcua import OPCUAOptions, OPCUANodeOptions, OPCUA_TO_INTERNAL_TYPE_MAP
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
 from protocol.opcua.opcua_device import OPCUAEnergyMeter
 from controller.exceptions import NotImplemeted
@@ -107,7 +107,7 @@ def _base_node_factory(record: NodeRecord) -> Node:
     """Creates a basic Node instance from a NodeRecord."""
     
     protocol_options = NoProtocolNodeOptions(**record.protocol_options)
-    internal_type = NONE_TO_INTERAL_TYPE_MAP[protocol_options.type]
+    internal_type = NONE_TO_INTERNAL_TYPE_MAP[protocol_options.type]
     config = NodeConfig.create_config_from_record(record, internal_type)
     return Node(configuration=config, protocol_options=protocol_options)
 
@@ -120,7 +120,7 @@ def _modbus_rtu_node_factory(record: NodeRecord) -> Node:
     """Creates a ModbusRTUNode instance with register configuration."""
     
     protocol_options = ModbusRTUNodeOptions(**record.protocol_options)
-    internal_type = MODBUS_RTU_TO_INTERAL_TYPE_MAP[protocol_options.type]
+    internal_type = MODBUS_RTU_TO_INTERNAL_TYPE_MAP[protocol_options.type]
     config = NodeConfig.create_config_from_record(record, internal_type)
     return ModbusRTUNode(configuration=config, protocol_options=protocol_options)
 
@@ -133,7 +133,7 @@ def _opcua_node_factory(record: NodeRecord) -> Node:
     """Creates an OPCUANode instance with node_id configuration."""
     
     protocol_options = OPCUANodeOptions(**record.protocol_options)
-    internal_type = OPCUA_TO_INTERAL_TYPE_MAP[protocol_options.type]
+    internal_type = OPCUA_TO_INTERNAL_TYPE_MAP[protocol_options.type]
     config = NodeConfig.create_config_from_record(record, internal_type)
     return OPCUANode(configuration=config, protocol_options=protocol_options)
 

@@ -68,10 +68,10 @@ class NumericNodeProcessor(NodeProcessor[N]):
         if self.config.max_alarm and self.config.max_alarm_value is not None:
             self.max_alarm_state = value > self.config.max_alarm_value
 
-        if self.config.min_alarm and self.config.min_warning_value is not None:
+        if self.config.min_warning and self.config.min_warning_value is not None:
             self.min_warning_state = value < self.config.min_warning_value
 
-        if self.config.max_alarm and self.config.max_warning_value is not None:
+        if self.config.max_warning and self.config.max_warning_value is not None:
             self.max_warning_state = value > self.config.max_warning_value
 
     def reset_direction(self) -> None:

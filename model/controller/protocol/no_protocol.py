@@ -31,7 +31,7 @@ class NoProtocolType(str, Enum):
     
     
 """Mapping from NoProtocolType to the internal unified NodeType."""
-NONE_TO_INTERAL_TYPE_MAP = {
+NONE_TO_INTERNAL_TYPE_MAP = {
     NoProtocolType.BOOL: NodeType.BOOL,
     NoProtocolType.INT: NodeType.INT,
     NoProtocolType.FLOAT: NodeType.FLOAT,

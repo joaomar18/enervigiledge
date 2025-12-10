@@ -184,6 +184,10 @@ class BaseNodeRecordConfig:
     max_alarm: bool
     min_alarm_value: float | None
     max_alarm_value: float | None
+    min_warning: bool
+    max_warning: bool
+    min_warning_value: float | None
+    max_warning_value: float | None
     is_counter: bool | None
     counter_mode: CounterMode | None = None
 
@@ -358,8 +362,10 @@ class NodeConfig:
     logging_period: int = 15
     min_alarm: bool = False
     max_alarm: bool = False
-    min_alarm_value: float | None = 0.0
-    max_alarm_value: float | None = 0.0
+    min_alarm_value: float | None = None
+    max_alarm_value: float | None = None
+    min_warning: bool = False
+    max_warning: bool = False
     min_warning_value: float | None = None
     max_warning_value: float | None = None
     decimal_places: int | None = 3
@@ -434,6 +440,10 @@ class NodeConfig:
             self.max_alarm = False
             self.min_alarm_value = None
             self.max_alarm_value = None
+            self.min_warning = False
+            self.max_warning = False
+            self.min_warning_value = None
+            self.max_warning_value = None
             self.unit = None
 
         if self.type in {NodeType.BOOL, NodeType.STRING}:
@@ -441,20 +451,26 @@ class NodeConfig:
                 raise ValueError(f"counter node is not valid for {self.type.name} nodes.")
             if self.counter_mode is not None:
                 raise ValueError("Counter mode is not applicable to non counter nodes.")
-            if self.min_alarm or self.max_alarm or self.min_alarm_value is not None or self.max_alarm_value is not None:
-                raise ValueError(f"Alarms are not supported for {self.type.name} nodes.")
+            if self.min_alarm or self.max_alarm or self.min_warning or self.max_warning or self.min_alarm_value is not None or self.min_warning_value is not None or self.max_alarm_value is not None or self.max_warning_value is not None:
+                raise ValueError(f"Alarms and Warnings are not supported for {self.type.name} nodes.")
             if self.unit is not None:
                 raise ValueError(f"Non null unit is not applicable to {self.type.name} nodes.")
 
         if self.is_counter:
-            if self.min_alarm or self.max_alarm:
-                raise ValueError("Alarms are not applicable to counter nodes.")
+            if self.min_alarm or self.min_warning or self.max_alarm or self.max_warning:
+                raise ValueError("Alarms and Warnings are not applicable to counter nodes.")
 
         if self.min_alarm and self.min_alarm_value is None:
             raise ValueError("min_alarm is enabled but min_alarm_value is None.")
 
         if self.max_alarm and self.max_alarm_value is None:
             raise ValueError("max_alarm is enabled but max_alarm_value is None.")
+        
+        if self.min_warning and self.min_warning_value is None:
+            raise ValueError("min_warning is enabled but min_warning_value is None.")
+        
+        if self.max_warning and self.max_warning_value is None:
+            raise ValueError("max_warning is enabled but max_warning_value is None.")
 
         if self.logging and (not isinstance(self.logging_period, int) or self.logging_period <= 0):
             raise ValueError(f"Invalid logging period '{self.logging_period}' for node '{self.name}'. Must be a positive integer.")

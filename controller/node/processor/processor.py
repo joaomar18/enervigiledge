@@ -91,11 +91,11 @@ class NodeProcessor(ABC, Generic[V]):
         if not self.config.enabled:
             return False
 
-        self.update_timestamp()
         if value is None:
             self.value = None
             return False
-
+        
+        self.update_timestamp()
         return True
 
     def update_timestamp(self) -> None:
@@ -141,10 +141,14 @@ class NodeProcessor(ABC, Generic[V]):
 
         if self.config.min_alarm:
             output["min_alarm_state"] = self.min_alarm_state
+        
+        if self.config.min_warning:
             output["min_warning_state"] = self.min_warning_state
 
         if self.config.max_alarm:
             output["max_alarm_state"] = self.max_alarm_state
+        
+        if self.config.max_warning:
             output["max_warning_state"] = self.max_warning_state
 
         attributes = self.config.attributes.get_attributes()
@@ -158,12 +162,17 @@ class NodeProcessor(ABC, Generic[V]):
         output = additional_data.copy()
         output["last_update_date"] = date.to_iso(date.get_date_from_timestamp(self.timestamp)) if self.timestamp is not None else None
         output["last_reset_date"] = date.to_iso(self.last_log_datetime) if self.last_log_datetime is not None else None
+        
         if self.config.min_alarm:
             output["min_alarm_value"] = self.config.min_alarm_value
+            
+        if self.config.min_warning:
             output["min_warning_value"] = self.config.min_warning_value
 
         if self.config.max_alarm:
             output["max_alarm_value"] = self.config.max_alarm_value
+            
+        if self.config.max_warning:
             output["max_warning_value"] = self.config.max_warning_value
 
         output["type"] = self.config.type

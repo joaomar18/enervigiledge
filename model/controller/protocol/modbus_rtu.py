@@ -41,7 +41,7 @@ class ModbusRTUNodeType(str, Enum):
     
     
 """Mapping from ModbusRTUNodeType enum values to their corresponding internal type NodeType."""
-MODBUS_RTU_TO_INTERAL_TYPE_MAP = {
+MODBUS_RTU_TO_INTERNAL_TYPE_MAP = {
     ModbusRTUNodeType.BOOL: NodeType.BOOL,
     ModbusRTUNodeType.INT_16: NodeType.INT,
     ModbusRTUNodeType.UINT_16: NodeType.INT,

@@ -55,7 +55,7 @@ class Node:
 
         return {
             **self.processor.create_additional_info(),
-            **self.protocol_options.get_options(),
+            "protocol_type": self.protocol_options.get_options().get("type") or "Not found"
         }
 
     def get_node_record(self) -> NodeRecord:
@@ -82,6 +82,10 @@ class Node:
             max_alarm=self.config.max_alarm,
             min_alarm_value=self.config.min_alarm_value,
             max_alarm_value=self.config.max_alarm_value,
+            min_warning=self.config.min_warning,
+            max_warning=self.config.max_warning,
+            min_warning_value=self.config.min_warning_value,
+            max_warning_value=self.config.max_warning_value,
             is_counter=self.config.is_counter,
             counter_mode=self.config.counter_mode,
         )

@@ -32,7 +32,7 @@ class OPCUANodeType(str, Enum):
     
     
 """Mapping from OPCUANodeType enum values to their corresponding internal type NodeType."""
-OPCUA_TO_INTERAL_TYPE_MAP = {
+OPCUA_TO_INTERNAL_TYPE_MAP = {
     OPCUANodeType.BOOL: NodeType.BOOL,
     OPCUANodeType.INT: NodeType.INT,
     OPCUANodeType.FLOAT: NodeType.FLOAT,
