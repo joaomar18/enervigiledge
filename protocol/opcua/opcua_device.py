@@ -2,7 +2,7 @@
 
 import asyncio
 import asyncua
-from typing import Set, Dict, Optional, Any, Callable, Coroutine
+from typing import Set, List, Dict, Optional, Any, Callable, Coroutine
 import logging
 
 ############### LOCAL IMPORTS ###############
@@ -90,7 +90,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         self.connection_task: asyncio.Task | None = None
         self.receiver_task: asyncio.Task | None = None
 
-        self.get_value_map: Dict[OPCUANodeType, Callable[[asyncua.Node], Coroutine[Any, Any, float | int | str | bool]]] = {
+        self.get_value_map: Dict[OPCUANodeType, Callable[[Any], float | int | str | bool]] = {
             OPCUANodeType.FLOAT: self.get_float,
             OPCUANodeType.INT: self.get_int,
             OPCUANodeType.STRING: self.get_string,
@@ -202,6 +202,9 @@ class OPCUAEnergyMeter(EnergyMeter):
         while self.run_receiver_task:
             try:
                 if self.network_connected:
+                    
+                    batch_read_nodes = [node for node in self.opcua_nodes if node.config.enabled and node.enable_batch_read]
+                    
                     tasks = [asyncio.create_task(self.read_node(client, node)) for node in self.opcua_nodes if node.config.enabled]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -229,6 +232,34 @@ class OPCUAEnergyMeter(EnergyMeter):
                 self.set_connection_state(False)
 
             await asyncio.sleep(self.communication_options.read_period)
+        
+    async def batch_read_nodes(self, client: asyncua.Client, nodes: list[OPCUANode]) -> List[float | int | str | bool]:
+        """
+        Read multiple OPC UA nodes in a single batch request and convert each
+        returned raw value to its configured type.
+
+        Args:
+            client (asyncua.Client): Active OPC UA client connection.
+            nodes (list[OPCUANode]): Nodes to read in a single batch.
+
+        Returns:
+            List[float | int | str | bool]: Typed values in the same order as the nodes.
+
+        Raises:
+            Exception: If the batch read operation fails entirely.
+        """
+
+        ua_nodes = [client.get_node(node.options.node_id) for node in nodes]
+
+        try:
+            values = await client.read_values(ua_nodes)
+            typed_values: List[float | int | str | bool] = [] 
+            for i, value in enumerate(values):
+                typed_values.append((self.get_value_map[nodes[i].options.type])(value))
+            return typed_values
+        
+        except Exception as e:
+            raise Exception(f"Batch read failed for {self.name}: {e}")
 
     async def read_node(self, client: asyncua.Client, node: OPCUANode) -> float | int | str | bool:
         """
@@ -247,28 +278,29 @@ class OPCUAEnergyMeter(EnergyMeter):
 
         try:
             opc_node = client.get_node(node.options.node_id)
-            value = await (self.get_value_map[node.options.type])(opc_node)
+            value = await opc_node.read_value()
+            typed_value = (self.get_value_map[node.options.type])(value)
             node.set_connection_state(True)
-            return value
+            return typed_value
         except Exception as e:
             node.set_connection_state(False)
             raise Exception(f"Failed to read {node.config.name} from {self.name}") from e
         
-    async def get_float(self, node: asyncua.Node) -> float:
-        """Read the node's value and return it as a float."""
-        return float(await node.read_value())
+    def get_float(self, value: Any) -> float:
+        """Convert a raw OPC UA value to float."""
+        return float(value)
     
-    async def get_int(self, node:asyncua.Node) -> int:
-        """Read the node's value and return it as an integer."""
-        return int(await node.read_value())
+    def get_int(self, value: Any) -> int:
+        """Convert a raw OPC UA value to int."""
+        return int(value)
 
-    async def get_string(self, node:asyncua.Node) -> str:
-        """Read the node's value and return it as a string."""
-        return str(await node.read_value())
+    def get_string(self, value: Any) -> str:
+        """Convert a raw OPC UA value to string."""
+        return str(value)
 
-    async def get_bool(self, node:asyncua.Node) -> bool:
-        """Read the node's value and return it as a boolean."""
-        return bool(await node.read_value())
+    def get_bool(self, value: Any) -> bool:
+        """Convert a raw OPC UA value to bool."""
+        return bool(value)
 
     async def close_connection(self):
         """

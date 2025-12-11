@@ -114,21 +114,44 @@ class ModbusRTUNode(Node):
         options (ModbusRTUNodeOptions): Modbus-specific options
             including register address, data type, and endianness.
     """
-
+    
+    MAX_NUMBER_FAILS = 3
 
     def __init__(self, configuration: NodeConfig, protocol_options: ModbusRTUNodeOptions):
         super().__init__(configuration=configuration, protocol_options=protocol_options)
         self.options = protocol_options
         self.connected = False
+        self.enable_batch_read = True
+        self.number_fails = 0
 
     def set_connection_state(self, state: bool):
         """
-        Updates the connection state of this Modbus node.
-
+        Update the node's connection state and adjust its failure counter based on the result.
+        
         Args:
-            state (bool): True if the node is connected and communicating, False otherwise.
+            state (bool): True if the node read succeeded, False if it failed.
         """
+        
+        if state:
+            self.reset_fails()
+        elif not state and self.enable_batch_read:
+            self.increment_fails()
+            
         self.connected = state
+        
+    def increment_fails(self) -> None:
+        """Increase failure count and disable batch reading if limit exceeded."""
+
+        self.number_fails += 1
+        if self.number_fails > ModbusRTUNode.MAX_NUMBER_FAILS:
+            self.enable_batch_read = False
+        
+    def reset_fails(self) -> None:
+        """Reset the failure counter and re-enable batch reading."""
+
+        self.number_fails = 0
+        self.enable_batch_read = True
+        
 
 
 # OPC UA Node
@@ -146,19 +169,42 @@ class OPCUANode(Node):
             the NodeId and expected data type.
     """
 
+    MAX_NUMBER_FAILS = 3
+
     def __init__(self, configuration: NodeConfig, protocol_options: OPCUANodeOptions):
         super().__init__(configuration=configuration, protocol_options=protocol_options)
         self.options = protocol_options
         self.connected = False
+        self.enable_batch_read = True
+        self.number_fails = 0
 
     def set_connection_state(self, state: bool):
         """
-        Updates the connection state of this OPC UA node.
-
+        Update the node's connection state and adjust its failure counter based on the result.
+        
         Args:
-            state (bool): True if the node is connected and communicating, False otherwise.
+            state (bool): True if the node read succeeded, False if it failed.
         """
+
+        if state:
+            self.reset_fails()
+        elif not state and self.enable_batch_read:
+            self.increment_fails()
+        
         self.connected = state
+        
+    def increment_fails(self) -> None:
+        """Increase failure count and disable batch reading if limit exceeded."""
+
+        self.number_fails += 1
+        if self.number_fails > OPCUANode.MAX_NUMBER_FAILS:
+            self.enable_batch_read = False
+        
+    def reset_fails(self) -> None:
+        """Reset the failure counter and re-enable batch reading."""
+
+        self.number_fails = 0
+        self.enable_batch_read = True
 
 
 #################################################################################
