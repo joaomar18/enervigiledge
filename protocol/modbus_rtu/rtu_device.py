@@ -16,7 +16,7 @@ from util.debug import LoggerManager
 from controller.node.node import Node, ModbusRTUNode
 from model.controller.general import Protocol
 from model.controller.device import EnergyMeterType, EnergyMeterOptions
-from model.controller.protocol.modbus_rtu import ModbusRTUOptions
+from model.controller.protocol.modbus_rtu import ModbusRTUOptions, ModbusRTUNodeType, ModbusRTUFunction, ModbusRTUNodeMode
 from controller.meter.meter import EnergyMeter
 
 #######################################
@@ -93,7 +93,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
         self.connection_task: asyncio.Task | None = None
         self.receiver_task: asyncio.Task | None = None
-
+        
     async def start(self) -> None:
         """
         Starts the Modbus RTU energy meter background tasks for connection management and data polling.
