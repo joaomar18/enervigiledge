@@ -222,23 +222,9 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                     batch_read_nodes = [node for node in enabled_nodes if node.enable_batch_read]
                     single_read_nodes = [node for node in enabled_nodes if not node.enable_batch_read]
                     
-                    tasks = [asyncio.to_thread(self.read_single_address, client, node) for node in enabled_nodes]
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
-                    failed_nodes = []
-
-                    for node, result in zip(self.modbus_rtu_nodes, results):
-                        if isinstance(result, Exception):
-                            failed_nodes.append(node.config.name)
-                            node.processor.set_value(None)
-                            continue
-
-                        node.processor.set_value(result)
-
-                    if failed_nodes:
-                        logger.warning(
-                            f"Failed to read {len(failed_nodes)} nodes from device {self.name} with id {self.id}: {', '.join(failed_nodes)}"
-                        )
-
+                    await self.process_batch_read(client, batch_read_nodes, single_read_nodes)
+                    await self.process_single_reads(client, single_read_nodes)
+                    
                     if not enabled_nodes or any(node.connected for node in enabled_nodes):
                         self.set_connection_state(True)
                     else:
@@ -255,8 +241,49 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                 self.set_network_state(False)
 
             await asyncio.sleep(self.communication_options.read_period)
+            
+    async def process_batch_read(self, client: ModbusRTUClient, batch_read_nodes: List[ModbusRTUNode], single_read_nodes: List[ModbusRTUNode]) -> None:
+        
+        logger = LoggerManager.get_logger(__name__)
+        
+        if not batch_read_nodes:
+            return
+        
+        try:
+            batch_values = await self.batch_read_nodes(client, batch_read_nodes)
+            for node, result in zip(batch_read_nodes, batch_values):
+                node.processor.set_value(result)
+                                
+        except Exception as e:
+            single_read_nodes.extend(batch_read_nodes)
+            logger.warning(f"Batch read failed for device {self.name} with id {self.id}: {e}")
+            
+    async def process_single_reads(self, client: ModbusRTUClient, single_read_nodes: List[ModbusRTUNode]) -> None:
+        
+        logger = LoggerManager.get_logger(__name__)
+        
+        if not single_read_nodes:
+            return
+        
+        tasks = [asyncio.to_thread(self.read_node, client, node) for node in single_read_nodes]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        failed_nodes = []
+        
+        for node, result in zip(single_read_nodes, results):
+            if isinstance(result, Exception):
+                failed_nodes.append(node.config.name)
+                node.processor.set_value(None)
+                continue
+            
+            node.processor.set_value(result)
+            
+        if failed_nodes:
+            logger.warning(f"Failed to read {len(failed_nodes)} nodes from device {self.name} with id {self.id}: {', '.join(failed_nodes)}")
+            
+    async def batch_read_nodes(self, client: ModbusRTUClient, batch_read_nodes: List[ModbusRTUNode]) -> List[float | int | bool]:
+        return []
 
-    def read_single_address(self, client: ModbusRTUClient, node: ModbusRTUNode) -> float | int | bool:
+    def read_node(self, client: ModbusRTUClient, node: ModbusRTUNode) -> float | int | bool:
         """
         Read and decode a single Modbus address for the given node.
 

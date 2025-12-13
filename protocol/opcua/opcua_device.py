@@ -241,7 +241,7 @@ class OPCUAEnergyMeter(EnergyMeter):
                                 
         except Exception as e:
             single_read_nodes.extend(batch_read_nodes)
-            logger.warning(f"Batch read failed for {self.name}: {e}")
+            logger.warning(f"Batch read failed for device {self.name} with id {self.id}: {e}")
             
     async def process_single_reads(self, client: asyncua.Client, single_read_nodes: List[OPCUANode]) -> None:
         """
@@ -271,7 +271,7 @@ class OPCUAEnergyMeter(EnergyMeter):
             node.processor.set_value(result)
             
         if failed_nodes:
-            logger.warning(f"Failed to read {len(failed_nodes)} nodes from {self.name}: {', '.join(failed_nodes)}")
+            logger.warning(f"Failed to read {len(failed_nodes)} nodes from device {self.name} with id {self.id}: {', '.join(failed_nodes)}")
         
     async def batch_read_nodes(self, client: asyncua.Client, nodes: list[OPCUANode]) -> List[float | int | str | bool]:
         """
