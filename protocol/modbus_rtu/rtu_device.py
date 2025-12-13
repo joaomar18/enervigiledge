@@ -252,6 +252,11 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         if not batch_read_nodes:
             return
         
+        read_coils_nodes = [node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_COILS]
+        read_disc_inp_nodes = [node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_DISCRETE_INPUTS]
+        read_hold_regs_nodes = [node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_HOLDING_REGISTERS]
+        read_inp_regs_nodes = [node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_INPUT_REGISTERS]
+        
         try:
             batch_values = await self.batch_read_nodes(client, batch_read_nodes)
             for node, result in zip(batch_read_nodes, batch_values):
