@@ -196,19 +196,19 @@ class OPCUAEnergyMeter(EnergyMeter):
         while self.run_receiver_task:
             try:
                 if self.network_connected:
-                    
-                    batch_read_nodes = [node for node in self.opcua_nodes if node.config.enabled and node.enable_batch_read]
-                    single_read_nodes = [node for node in self.opcua_nodes if node.config.enabled and not node.enable_batch_read]
+                    enabled_nodes = [node for node in self.opcua_nodes if node.config.enabled]
+                    batch_read_nodes = [node for node in enabled_nodes if node.enable_batch_read]
+                    single_read_nodes = [node for node in enabled_nodes if not node.enable_batch_read]
                 
                     await self.process_batch_read(client, batch_read_nodes, single_read_nodes)
                     await self.process_single_reads(client, single_read_nodes)
-                        
-                    if any(node.connected for node in self.opcua_nodes):
+                    
+                    if not enabled_nodes or any(node.connected for node in enabled_nodes):
                         self.set_connection_state(True)
                     else:
                         self.set_connection_state(False)
 
-                    await self.process_nodes()
+                await self.process_nodes()
 
             except Exception as e:
                 logger.exception(f"{e}")

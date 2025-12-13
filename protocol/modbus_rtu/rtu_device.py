@@ -218,7 +218,11 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         while self.run_receiver_task:
             try:
                 if self.network_connected:
-                    tasks = [asyncio.to_thread(self.read_single_address, client, node) for node in self.modbus_rtu_nodes if node.config.enabled]
+                    enabled_nodes = [node for node in self.modbus_rtu_nodes if node.config.enabled]
+                    batch_read_nodes = [node for node in enabled_nodes if node.enable_batch_read]
+                    single_read_nodes = [node for node in enabled_nodes if not node.enable_batch_read]
+                    
+                    tasks = [asyncio.to_thread(self.read_single_address, client, node) for node in enabled_nodes]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
                     failed_nodes = []
 
@@ -235,12 +239,12 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                             f"Failed to read {len(failed_nodes)} nodes from device {self.name} with id {self.id}: {', '.join(failed_nodes)}"
                         )
 
-                    if any(node.connected for node in self.modbus_rtu_nodes):
+                    if not enabled_nodes or any(node.connected for node in enabled_nodes):
                         self.set_connection_state(True)
                     else:
                         self.set_connection_state(False)
 
-                    await self.process_nodes()
+                await self.process_nodes()
 
             except ModbusException as e:
                 logger.error(f"{e}")
