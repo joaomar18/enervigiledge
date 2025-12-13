@@ -52,6 +52,24 @@ MODBUS_RTU_TO_INTERNAL_TYPE_MAP = {
     ModbusRTUNodeType.UINT_64: NodeType.INT,
     ModbusRTUNodeType.FLOAT_64: NodeType.FLOAT,
 }
+
+"""
+Mapping from ModbusRTUNodeType enum values to the number of Modbus data units
+required to represent their raw value. For register-based types, the value
+indicates the number of 16-bit registers; boolean types represent either a
+single coil/discrete input or a single bit within a register.
+"""
+MODBUS_RTU_TYPE_TO_SIZE_MAP = {
+    ModbusRTUNodeType.BOOL: 1,
+    ModbusRTUNodeType.INT_16: 1,
+    ModbusRTUNodeType.UINT_16: 1,
+    ModbusRTUNodeType.INT_32: 2,
+    ModbusRTUNodeType.UINT_32: 2,
+    ModbusRTUNodeType.FLOAT_32: 2,
+    ModbusRTUNodeType.INT_64: 4,
+    ModbusRTUNodeType.UINT_64: 4,
+    ModbusRTUNodeType.FLOAT_64: 4,
+}
     
 
 class ModbusRTUNodeMode(str, Enum):
