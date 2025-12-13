@@ -57,6 +57,9 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         communication_options (ModbusRTUOptions): Connection configuration used to initialize the client.
         client (Optional[ModbusRTUClient]): Instance of the Modbus RTU client used for communication.
     """
+    
+    MAX_BATCH_NUMBER = 16
+    MAX_ADDRESS_SPAN = 2
 
     def __init__(
         self,
