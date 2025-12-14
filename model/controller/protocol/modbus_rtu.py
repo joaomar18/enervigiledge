@@ -155,7 +155,7 @@ class ModbusRTUBatchGroup:
 
     start_addr: int
     size: int
-    nodes: List[ModbusRTUNode]
+    nodes: List["ModbusRTUNode"]
 
 
 @dataclass(kw_only=True)
