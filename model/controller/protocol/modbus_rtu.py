@@ -2,6 +2,7 @@
 
 from enum import Enum
 from dataclasses import dataclass
+from typing import List, TYPE_CHECKING
 
 #######################################
 
@@ -9,6 +10,8 @@ from dataclasses import dataclass
 
 from model.controller.node import BaseNodeProtocolOptions, NodeType
 from model.controller.device import BaseCommunicationOptions
+if TYPE_CHECKING:
+    from controller.node.node import ModbusRTUNode
 
 #######################################
 
@@ -38,8 +41,8 @@ class ModbusRTUNodeType(str, Enum):
     INT_64 = "INT_64"
     UINT_64 = "UINT_64"
     FLOAT_64 = "FLOAT_64"
-    
-    
+
+
 """Mapping from ModbusRTUNodeType enum values to their corresponding internal type NodeType."""
 MODBUS_RTU_TO_INTERNAL_TYPE_MAP = {
     ModbusRTUNodeType.BOOL: NodeType.BOOL,
@@ -70,7 +73,7 @@ MODBUS_RTU_TYPE_TO_SIZE_MAP = {
     ModbusRTUNodeType.UINT_64: 4,
     ModbusRTUNodeType.FLOAT_64: 4,
 }
-    
+
 
 class ModbusRTUNodeMode(str, Enum):
     """
@@ -82,13 +85,13 @@ class ModbusRTUNodeMode(str, Enum):
         BYTE_SWAP (str): Swap bytes within each word (A2 A1 B2 B1).
         WORD_BYTE_SWAP (str): Swap both words and bytes (B2 B1 A2 A1).
     """
-    
+
     BIG_ENDIAN = "BIG_ENDIAN"
     WORD_SWAP = "WORD_SWAP"
     BYTE_SWAP = "BYTE_SWAP"
     WORD_BYTE_SWAP = "WORD_BYTE_SWAP"
-    
-    
+
+
 class ModbusRTUFunction(str, Enum):
     """
     Modbus RTU function codes supported for reading node values.
@@ -102,13 +105,13 @@ class ModbusRTUFunction(str, Enum):
         READ_HOLDING_REGISTERS: Read 16-bit holding registers (FC3).
         READ_INPUT_REGISTERS: Read 16-bit input registers (FC4).
     """
-    
+
     READ_COILS = "READ_COILS"
     READ_DISCRETE_INPUTS = "READ_DISCRETE_INPUTS"
     READ_HOLDING_REGISTERS = "READ_HOLDING_REGISTERS"
     READ_INPUT_REGISTERS = "READ_INPUT_REGISTERS"
 
-    
+
 @dataclass
 class ModbusRTUNodeOptions(BaseNodeProtocolOptions):
     """
@@ -127,14 +130,34 @@ class ModbusRTUNodeOptions(BaseNodeProtocolOptions):
             numeric types. None for single-register or coil values.
         bit (int | None): Optional bit index for boolean flags stored within registers.
     """
-    
+
     function: ModbusRTUFunction
     address: int
     type: ModbusRTUNodeType
     endian_mode: ModbusRTUNodeMode | None = None
     bit: int | None = None
-    
-    
+
+
+@dataclass
+class ModbusRTUBatchGroup:
+    """
+    Defines a Modbus RTU batch read group.
+
+    Represents a contiguous range of Modbus addresses that can be read
+    in a single Modbus request, along with the node option definitions
+    that map to values within that address range.
+
+    Attributes:
+        start_addr (int): Starting Modbus address of the batch read.
+        size (int): Number of consecutive Modbus registers or data units to read.
+        nodes (List[ModbusRTUNode]): List of Modbus RTU nodes whose values are contained within this batch read range.
+    """
+
+    start_addr: int
+    size: int
+    nodes: List[ModbusRTUNode]
+
+
 @dataclass(kw_only=True)
 class ModbusRTUOptions(BaseCommunicationOptions):
     """

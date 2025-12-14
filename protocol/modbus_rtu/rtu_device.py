@@ -5,9 +5,8 @@ import struct
 from pymodbus.pdu import ModbusPDU
 from pymodbus.client import ModbusSerialClient as ModbusRTUClient
 from pymodbus import ModbusException
-from typing import Optional, Set, Dict, List, Callable, Any
+from typing import Optional, Set, Dict, List, Callable
 import logging
-from typing import Set, Optional
 
 #######################################
 
@@ -17,7 +16,7 @@ from util.debug import LoggerManager
 from controller.node.node import Node, ModbusRTUNode
 from model.controller.general import Protocol
 from model.controller.device import EnergyMeterType, EnergyMeterOptions
-from model.controller.protocol.modbus_rtu import ModbusRTUOptions, ModbusRTUNodeOptions, ModbusRTUNodeType, ModbusRTUFunction, ModbusRTUNodeMode, MODBUS_RTU_TYPE_TO_SIZE_MAP 
+from model.controller.protocol.modbus_rtu import ModbusRTUOptions, ModbusRTUNodeOptions, ModbusRTUNodeType, ModbusRTUFunction, ModbusRTUNodeMode, ModbusRTUBatchGroup, MODBUS_RTU_TYPE_TO_SIZE_MAP 
 from controller.meter.meter import EnergyMeter
 
 #######################################
@@ -30,36 +29,35 @@ ModbusCall = Callable[[ModbusRTUClient, int, int, int, bool], ModbusPDU]
 class ModbusRTUEnergyMeter(EnergyMeter):
     """
     Represents an energy meter that communicates over Modbus RTU.
-
-    This class extends the generic EnergyMeter to implement specific functionality
-    for devices connected via the Modbus RTU protocol. It prepares a ModbusRTUClient
-    with the appropriate serial communication settings and separates Modbus RTU nodes
-    from the generic node set.
-
+    This class extends EnergyMeter to implement Modbus RTU protocol handling,including client lifecycle management,connection monitoring,and periodic data acquisition.
+    It performs optimized reads by grouping nodes into batch requests based on Modbus function and address proximity,with automatic fallback to individual reads when batch operations fail.
+    The class decodes raw Modbus responses into typed values(bool,int,float),updates node connection states,and integrates acquired data into the generic EnergyMeter processing pipeline.
     Inherits from:
-        EnergyMeter: Base class for energy meter abstraction.
-
+        EnergyMeter:Base class for energy meter abstraction.
     Args:
-        id (int): Unique identifier of the energy meter.
-        name (str): Display name of the meter.
-        publish_queue (asyncio.Queue): Queue used to publish processed meter data to MQTT.
-        measurements_queue (asyncio.Queue): Queue for pushing measurements to be logged.
-        meter_type (EnergyMeterType): Specifies the type of meter (EnergyMeterType.SINGLE_PHASE, EnergyMeterType.THREE_PHASE).
-        meter_options (EnergyMeterOptions): General configuration options for the meter.
-        communication_options (ModbusRTUOptions): Serial communication parameters specific to Modbus RTU.
-        nodes (set[Node]): Set of nodes representing individual measurement points.
-        on_connection_change (Callable[[int, bool], None] | None): Optional callback triggered when the device connection state changes.
-            Expects two parameters: device id (int) and state (bool).
-
+        id(int):Unique identifier of the energy meter.
+        name(str):Display name of the meter.
+        publish_queue(asyncio.Queue):Queue used to publish processed meter data.
+        measurements_queue(asyncio.Queue):Queue for pushing measurements to be logged.
+        meter_type(EnergyMeterType):Electrical configuration of the meter.
+        meter_options(EnergyMeterOptions):General configuration options for the meter.
+        communication_options(ModbusRTUOptions):Serial communication parameters for Modbus RTU.
+        nodes(set[Node]):Set of nodes representing Modbus measurement points.
+        on_connection_change(Callable[[int,bool],None]|None):Optional callback triggered on connection state changes.
     Attributes:
-        nodes (set[Node]): All nodes associated with this meter.
-        modbus_rtu_nodes (set[ModbusRTUNode]): Subset of nodes specific to Modbus RTU.
-        communication_options (ModbusRTUOptions): Connection configuration used to initialize the client.
-        client (Optional[ModbusRTUClient]): Instance of the Modbus RTU client used for communication.
+        nodes(set[Node]):All nodes associated with this meter.
+        modbus_rtu_nodes(set[ModbusRTUNode]):Subset of nodes using the Modbus RTU protocol.
+        communication_options(ModbusRTUOptions):Configuration used to initialize the RTU client.
+        client(Optional[ModbusRTUClient]):Active Modbus RTU client instance.
+        modbus_function_map(Dict[ModbusRTUFunction,Callable]):Dispatch table mapping Modbus function enums to client read operations.
+        get_value_map(Dict[ModbusRTUNodeType,Callable]):Dispatch table mapping node types to value decoding functions.
+    Class attributes:
+        MAX_BATCH_SPAN(int):Maximum number of consecutive Modbus data units read in a single batch request.
+        MAX_ADDRESS_GAP(int):Maximum allowed gap between node addresses within a batch group.
     """
     
-    MAX_BATCH_NUMBER = 16
-    MAX_ADDRESS_SPAN = 2
+    MAX_BATCH_SPAN = 16
+    MAX_ADDRESS_GAP = 2
 
     def __init__(
         self,
@@ -246,27 +244,44 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             await asyncio.sleep(self.communication_options.read_period)
             
     async def process_batch_read(self, client: ModbusRTUClient, batch_read_nodes: List[ModbusRTUNode], single_read_nodes: List[ModbusRTUNode]) -> None:
+        """
+        Perform batch reads for eligible Modbus RTU nodes.
+
+        Nodes are grouped by Modbus function and address range, then read using
+        batch Modbus requests. If a batch read fails, all nodes in the affected
+        batch group are scheduled for fallback single reads.
+        """
         
         logger = LoggerManager.get_logger(__name__)
         
         if not batch_read_nodes:
             return
         
-        read_coils_nodes = [node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_COILS]
-        read_disc_inp_nodes = [node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_DISCRETE_INPUTS]
-        read_hold_regs_nodes = [node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_HOLDING_REGISTERS]
-        read_inp_regs_nodes = [node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_INPUT_REGISTERS]
+        batch_by_function: Dict[ModbusRTUFunction, List[ModbusRTUBatchGroup]] = {}
+        batch_by_function[ModbusRTUFunction.READ_COILS] = self.create_batch_groups([node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_COILS])
+        batch_by_function[ModbusRTUFunction.READ_DISCRETE_INPUTS] = self.create_batch_groups([node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_DISCRETE_INPUTS])
+        batch_by_function[ModbusRTUFunction.READ_HOLDING_REGISTERS] = self.create_batch_groups([node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_HOLDING_REGISTERS])
+        batch_by_function[ModbusRTUFunction.READ_INPUT_REGISTERS] = self.create_batch_groups([node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_INPUT_REGISTERS])
         
-        try:
-            batch_values = await self.batch_read_nodes(client, batch_read_nodes)
-            for node, result in zip(batch_read_nodes, batch_values):
-                node.processor.set_value(result)
-                                
-        except Exception as e:
-            single_read_nodes.extend(batch_read_nodes)
-            logger.warning(f"Batch read failed for device {self.name} with id {self.id}: {e}")
+        for function, batch_groups in batch_by_function.items():
+            for group in batch_groups:
+                try:
+                    results = await self.batch_read_nodes(client, function, group)
+                
+                    for node, value in results.items():
+                        node.processor.set_value(value)
+
+                except Exception as e:
+                    single_read_nodes.extend(group.nodes)
+                    logger.warning(f"Batch read failed for {function.name} (addr={group.start_addr}, size={group.size}) on device {self.name}: {e}")
             
     async def process_single_reads(self, client: ModbusRTUClient, single_read_nodes: List[ModbusRTUNode]) -> None:
+        """
+        Perform individual Modbus reads for nodes not handled by batch reads.
+
+        Executes per-node Modbus reads concurrently and updates node values.
+        Failed reads are logged and result values are set to None.
+        """
         
         logger = LoggerManager.get_logger(__name__)
         
@@ -288,9 +303,108 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         if failed_nodes:
             logger.warning(f"Failed to read {len(failed_nodes)} nodes from device {self.name} with id {self.id}: {', '.join(failed_nodes)}")
             
-    async def batch_read_nodes(self, client: ModbusRTUClient, batch_read_nodes: List[ModbusRTUNode]) -> List[float | int | bool]:
-        return []
+    def create_batch_groups(self, nodes: List[ModbusRTUNode]) -> List[ModbusRTUBatchGroup]:
+        """
+        Create Modbus RTU batch read groups from a list of nodes.
 
+        Groups nodes into contiguous Modbus address ranges that can be read
+        using a single Modbus request. Nodes are first sorted by address and
+        then incrementally merged into batch groups while respecting the
+        maximum allowed address gap and maximum batch span constraints.
+
+        Each batch group contains the full node definitions whose data is
+        covered by the computed address range, allowing values to be
+        decoded directly from a shared Modbus response.
+
+        This method operates at the protocol level and assumes that all
+        provided nodes use the same Modbus function and belong to the same
+        Modbus address space.
+
+        Args:
+            nodes (List[ModbusRTUNode]):
+                List of Modbus RTU nodes eligible for batch reading.
+
+        Returns:
+            List[ModbusRTUBatchGroup]:
+                List of batch groups defining contiguous address ranges and
+                the nodes associated with each Modbus read operation.
+        """
+        
+        if not nodes:
+            return []
+        
+        nodes = sorted(nodes, key=lambda node: node.options.address)
+        groups: List[ModbusRTUBatchGroup] = []
+        
+        start_addr = nodes[0].options.address
+        end_addr = start_addr + MODBUS_RTU_TYPE_TO_SIZE_MAP[nodes[0].options.type]
+        current_group: List[ModbusRTUNode] = [nodes[0]]
+        
+        for node in nodes[1:]:
+            addr = node.options.address
+            size = MODBUS_RTU_TYPE_TO_SIZE_MAP[node.options.type]
+        
+            gap = addr - end_addr
+            new_end = addr + size
+            new_span = new_end - start_addr
+            
+            if gap <= ModbusRTUEnergyMeter.MAX_ADDRESS_GAP and new_span <= ModbusRTUEnergyMeter.MAX_BATCH_SPAN:
+                end_addr = max(end_addr, new_end)
+                current_group.append(node)
+            else:
+                groups.append(ModbusRTUBatchGroup(start_addr=start_addr, size=end_addr - start_addr, nodes=current_group))
+                start_addr = addr
+                end_addr = addr + size
+                current_group = [node]
+                
+        groups.append(ModbusRTUBatchGroup(start_addr=start_addr, size=end_addr - start_addr, nodes=current_group))
+        return groups
+            
+    async def batch_read_nodes(self, client: ModbusRTUClient, function: ModbusRTUFunction, batch_group: ModbusRTUBatchGroup) -> Dict[ModbusRTUNode,float | int | bool]:
+        """
+        Perform a batch Modbus RTU read for a group of nodes.
+
+        Executes a single Modbus request covering the address range defined
+        by the batch group and decodes each node value from the shared
+        response payload.
+
+        Args:
+            client (ModbusRTUClient):
+                Connected Modbus RTU client.
+
+            function (ModbusRTUFunction):
+                Modbus function code used for the batch read.
+
+            batch_group (ModbusRTUBatchGroup):
+                Batch group defining the read range and associated nodes.
+
+        Returns:
+            Dict[ModbusRTUNode, float | int | bool]:
+                Mapping of nodes to their decoded values.
+
+        Raises:
+            ModbusException:
+                If the batch read or value decoding fails.
+        """
+        
+        if function not in self.modbus_function_map:
+            raise ModbusException(f"Unknown modbus function {function} while trying to read batch group: {batch_group.nodes}.")
+
+        response = await asyncio.to_thread(self.modbus_function_map[function], client, batch_group.start_addr, batch_group.size, self.communication_options.slave_id, False)
+        results: Dict[ModbusRTUNode, float | int | bool] = {}
+
+        for node in batch_group.nodes:
+            try:
+                index = node.options.address - batch_group.start_addr
+                size = MODBUS_RTU_TYPE_TO_SIZE_MAP[node.options.type]
+                value = self.get_value_map[node.options.type](node.options, response, index, size)
+                results[node] = value
+
+            except Exception as e:
+                raise ModbusException(f"Batch read failed for {self.name} on batch group {batch_group.nodes}: {e}")
+
+        return results
+        
     def read_node(self, client: ModbusRTUClient, node: ModbusRTUNode) -> float | int | bool:
         """
         Read and decode a single Modbus address for the given node.
