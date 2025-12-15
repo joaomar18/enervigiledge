@@ -241,7 +241,7 @@ async def get_device_with_image(
     device_id = int(objects.require_field(request.query_params, "id", str))
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
 
     device_obj = device.get_device()
     device_obj["image"] = get_device_image(device.id, "default", "db/device_img/")
@@ -261,7 +261,7 @@ async def get_device_info_with_image(
     device_id = int(objects.require_field(request.query_params, "id", str))
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
 
     device_info = device.get_device_info(database.get_device_history)
     device_info["image"] = get_device_image(device.id, "default", "db/device_img/")

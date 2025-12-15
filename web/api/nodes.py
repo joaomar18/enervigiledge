@@ -20,6 +20,7 @@ from model.controller.node import NodePhase, NodeDirection
 from model.date import FormattedTimeStep, TimeSpanParameters
 import util.functions.objects as objects
 import util.functions.date as date
+import web.exceptions as api_exception
 
 #######################################
 
@@ -82,7 +83,7 @@ async def get_nodes_state(
 
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
 
     if filter:
         nodes_state = {node.config.name: node.get_publish_format() for node in device.nodes if node.config.publish and filter in node.config.name}
@@ -99,20 +100,18 @@ async def get_node_additional_info(
 ) -> JSONResponse:
 
     device_id = int(objects.require_field(request.query_params, "device_id", str))
-    node_name = objects.require_field(request.query_params, "node_name", str)
+    name = objects.require_field(request.query_params, "node_name", str)
 
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
 
-    nodes = [node for node in device.nodes if node.config.name == node_name]
+    node = next((n for n in device.nodes if n.config.name == name), None)
 
-    if len(nodes) == 0:
-        raise ValueError(f"Device with id {device_id} does not have a node with name {node_name}.")
-    elif len(nodes) != 1:
-        raise ValueError(f"Device with id {device_id} has more than 1 node with name {node_name}.")
+    if not node:
+        raise api_exception.NodeNotFound(f"Device with id {device_id} does not have a node with name {name}.")
 
-    node_detailed_state = nodes[0].get_additional_info()
+    node_detailed_state = node.get_additional_info()
 
     if isinstance(device, EnergyMeter):
         node_detailed_state.update({"read_period": device.communication_options.read_period})
@@ -132,7 +131,7 @@ async def get_nodes_config(
 
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
 
     if filter:
         nodes_config = {}
@@ -168,11 +167,11 @@ async def get_logs_from_node(
 
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
 
     node = next((n for n in device.nodes if n.config.name == name), None)
     if not node:
-        raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
+        raise api_exception.NodeNotFound(f"Device with id {device_id} does not have a node with name {name}.")
 
     date.process_time_span(time_span)
     response = timedb.get_variable_logs(device.name, device_id, node, time_span).get_logs()
@@ -198,7 +197,7 @@ async def get_energy_consumption(
 
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
     
     date.process_time_span(time_span)
     response = meter_extraction.get_meter_energy_consumption(device, phase, direction, timedb, time_span)
@@ -222,7 +221,7 @@ async def get_peak_demand_power(
 
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
 
     date.process_time_span(time_span)
     response = meter_extraction.get_meter_peak_power(device, phase, timedb, time_span)
@@ -240,26 +239,24 @@ async def delete_logs_from_node(
     """Deletes all historical logs from a specific device node."""
 
     data = await request.json()
-
     device_id = objects.require_field(data, "device_id", int)
     name = objects.require_field(data, "node_name", str)
 
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
 
     node = next((n for n in device.nodes if n.config.name == name), None)
     if not node:
-        raise ValueError(f"Node with name {name} does not exist in device {device.name} with id {device_id}")
+        raise api_exception.NodeNotFound(f"Device with id {device_id} does not have a node with name {name}.")
 
     result = timedb.delete_variable_data(device_name=device.name, device_id=device_id, variable=node)
 
-    if result:
-        message = f"Successfully deleted logs for node '{name}' from device '{device.name}' with id {device_id}."
-        return JSONResponse(content={"result": message})
-
-    raise ValueError(f"Could not delete logs for node '{name}' from device '{device.name}' with id {device_id}.")
-
+    if not result:
+        raise api_exception.DeviceDeleteError(f"Could not delete logs for node '{name}' from device '{device.name}' with id {device_id}.")
+    
+    return JSONResponse(content={"result": f"Successfully deleted logs for node '{name}' from device '{device.name}' with id {device_id}."})
+    
 
 @router.delete("/delete_all_logs")
 @auth_endpoint(AuthConfigs.PROTECTED)
@@ -276,12 +273,11 @@ async def delete_all_logs(
 
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
 
     result = timedb.delete_db(device_name=device.name, device_id=device_id)
 
-    if result:
-        message = f"Successfully deleted all logs from device '{device.name}' with id {device_id}."
-        return JSONResponse(content={"result": message})
-
-    raise ValueError(f"Could not delete all logs from from device '{device.name}' with id {device_id}.")
+    if not result:
+        raise api_exception.DeviceDeleteError(f"Could not delete all logs from from device '{device.name}' with id {device_id}.")
+            
+    return JSONResponse(content={"result": f"Successfully deleted all logs from device '{device.name}' with id {device_id}."})

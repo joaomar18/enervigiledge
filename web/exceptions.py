@@ -47,3 +47,9 @@ class DeviceDeleteError(Exception):
 class DeviceNotFound(Exception):
     """Raised when a requested device does not exist in the system."""
     pass
+
+##########     N O D E     E X C E P T I O N S     ##########
+
+class NodeNotFound(Exception):
+    """Raised when a requested node does not exist in the system."""
+    pass
