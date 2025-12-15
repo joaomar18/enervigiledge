@@ -73,7 +73,7 @@ class SQLiteDBClient:
         except Exception as e:
             logger.exception(f"Failed to close SQLite connection: {e}")
 
-    def __require_client(self) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
+    def require_client(self) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
         """
         Return the active database connection and cursor.
 
@@ -107,7 +107,7 @@ class SQLiteDBClient:
         """
 
         logger = LoggerManager.get_logger(__name__)
-        conn, cursor = self.__require_client()
+        conn, cursor = self.require_client()
 
         try:
 
@@ -155,29 +155,34 @@ class SQLiteDBClient:
         except Exception as e:
             logger.exception(f"Failed to create tables: {e}")
 
-    def insert_energy_meter(self, record: EnergyMeterRecord) -> int | None:
+    def insert_energy_meter(self, record: EnergyMeterRecord, conn: sqlite3.Connection, cursor: sqlite3.Cursor) -> int | None:
         """
-        Inserts a new energy meter (device) into the database along with all associated nodes and status tracking.
+        Inserts a new energy meter (device) into the database along with all associated
+        nodes and an initial device status record.
 
-        This method creates a complete energy meter record including device configuration,
-        all associated node configurations, and initializes the device status tracking
-        with default timestamps. Uses database transactions to ensure atomicity.
+        This method performs multiple INSERT operations using the provided database
+        cursor but does NOT manage the transaction lifecycle. It assumes an active
+        transaction context controlled by the caller. No commit or rollback is
+        performed inside this method.
 
         Args:
-            record (EnergyMeterRecord): Structured energy meter data including nodes.
+            record (EnergyMeterRecord): Structured energy meter data, including device
+                configuration and associated node definitions.
+            conn (sqlite3.Connection): Active SQLite database connection.
+            cursor (sqlite3.Cursor): Cursor bound to an active transaction.
 
         Returns:
-            int | None: The ID of the inserted device if successful, None otherwise.
+            int | None: The ID of the newly inserted device if successful, None if an
+            error occurs during insertion.
 
         Note:
-            Creates the following records:
-            - Device record with configuration
-            - All associated node records
-            - Device status record with default timestamps (connection times set to NULL)
-        """
+            This method creates the following records:
+            - A device entry in the devices table
+            - One entry per associated node in the nodes table
+            - An initial device status entry with default values
 
-        logger = LoggerManager.get_logger(__name__)
-        conn, cursor = self.__require_client()
+            Transaction commit or rollback must be handled by the caller.
+        """
 
         try:
             cursor.execute(
@@ -208,36 +213,45 @@ class SQLiteDBClient:
                 (device_id,),
             )
 
-            conn.commit()
-            logger.info(f"Successfully added energy meter '{record.name}' with ID {device_id}")
             return device_id
 
         except Exception as e:
-            logger.exception(f"Failed to insert energy meter '{record.name}': {e}")
-            conn.rollback()
             return None
 
-    def update_energy_meter(self, record: EnergyMeterRecord) -> bool:
+    def update_energy_meter(self, record: EnergyMeterRecord, conn: sqlite3.Connection, cursor: sqlite3.Cursor) -> bool:
         """
-        Updates an existing energy meter configuration by replacing it entirely.
+        Updates an existing energy meter configuration by fully replacing its
+        device and node definitions.
 
-        This method performs a complete replacement of the energy meter configuration
-        by deleting the existing record and inserting the new one. Uses database
-        transactions to ensure atomicity and data consistency. The device status
-        is preserved and updated with a new timestamp.
+        This method performs a complete replacement of the energy meter data by
+        deleting the existing device and its associated nodes, then inserting the
+        updated configuration. The device status record is preserved when present
+        and its timestamps are updated accordingly.
+
+        This method executes multiple database operations using the provided
+        cursor but does NOT manage the transaction lifecycle. It assumes an active
+        transaction context controlled by the caller. No commit or rollback is
+        performed inside this method.
 
         Args:
-            record (EnergyMeterRecord): New energy meter configuration including nodes.
-                Must have a valid id field to identify the record to update.
+            record (EnergyMeterRecord): Updated energy meter configuration, including
+                associated nodes. The record must contain a valid `id` field
+                identifying the device to update.
+            conn (sqlite3.Connection): Active SQLite database connection.
+            cursor (sqlite3.Cursor): Cursor bound to an active transaction.
 
         Returns:
-            bool: True if update successful, False otherwise.
+            bool: True if the update operations complete successfully, False if an
+            error occurs or the specified device does not exist.
 
         Note:
-            - Device status record is preserved (not deleted/recreated)
-            - Device status updated_at timestamp is refreshed
-            - Connection timestamps (first/last) remain unchanged
-            - Creates device status if it doesn't exist
+            - All existing node records for the device are deleted and recreated.
+            - The device status record is preserved when present.
+            - The `created_at`, `connection_on_datetime`, and
+            `connection_off_datetime` values are preserved.
+            - The `updated_at` timestamp is refreshed.
+            - If no device status record exists, a new one is created.
+            - Transaction commit or rollback must be handled by the caller.
         """
 
         logger = LoggerManager.get_logger(__name__)
@@ -246,13 +260,8 @@ class SQLiteDBClient:
             logger.error("Cannot update energy meter: record ID is required")
             return False
 
-        conn, cursor = self.__require_client()
-
         try:
-            # Begin transaction
-            cursor.execute("BEGIN TRANSACTION")
 
-            # Preserve device status by temporarily storing it
             cursor.execute(
                 """
                 SELECT connection_on_datetime, connection_off_datetime, created_at 
@@ -269,7 +278,6 @@ class SQLiteDBClient:
 
             if cursor.rowcount == 0:
                 logger.warning(f"No energy meter found with ID {record.id}")
-                conn.rollback()
                 return False
 
             # Insert the updated device configuration
@@ -311,53 +319,53 @@ class SQLiteDBClient:
                     (record.id,),
                 )
 
-            # Commit transaction
-            conn.commit()
-            logger.info(f"Successfully updated energy meter '{record.name}' with ID {record.id}")
             return True
 
         except Exception as e:
-            logger.exception(f"Failed to update energy meter '{record.name}' with ID {record.id}: {e}")
-            conn.rollback()
             return False
 
-    def delete_device(self, device_id: int) -> bool:
+    def delete_device(self, device_id: int, conn: sqlite3.Connection, cursor: sqlite3.Cursor) -> bool:
         """
         Deletes a device and all its associated data from the database.
 
-        Uses database transactions to ensure atomicity. The foreign key cascade
-        constraints automatically remove all tables when the device is deleted.
+        This method deletes the device record identified by the given ID. All related
+        records (such as nodes and device status entries) are removed automatically
+        via foreign key cascade constraints.
+
+        This method executes a DELETE operation using the provided cursor but does
+        NOT manage the transaction lifecycle. It assumes an active transaction
+        context controlled by the caller. No commit or rollback is performed inside
+        this method.
 
         Args:
-            device_id(int): ID of the device to delete
+            device_id (int): The unique ID of the device to delete.
+            conn (sqlite3.Connection): Active SQLite database connection.
+            cursor (sqlite3.Cursor): Cursor bound to an active transaction.
 
         Returns:
-            bool: True if deletion successful, False otherwise.
+            bool: True if the device was successfully deleted, False if the device
+            does not exist or an error occurs.
+
+        Note:
+            - Foreign key cascade constraints are responsible for removing all
+            dependent records.
+            - Transaction commit or rollback must be handled by the caller.
         """
 
         logger = LoggerManager.get_logger(__name__)
-        conn, cursor = self.__require_client()
 
         try:
-            # Begin transaction
-            cursor.execute("BEGIN TRANSACTION")
 
             # Delete the device (other tables will be cascade deleted due to foreign key)
             cursor.execute("DELETE FROM devices WHERE id = ?", (device_id,))
 
             if cursor.rowcount == 0:
                 logger.warning(f"No energy meter found with ID {device_id}")
-                conn.rollback()
                 return False
 
-            # Commit transaction
-            conn.commit()
-            logger.info(f"Successfully deleted device with ID {device_id}")
             return True
 
         except Exception as e:
-            logger.exception(f"Failed to delete device with ID {device_id}: {e}")
-            conn.rollback()
             return False
 
     def get_all_energy_meters(self) -> List[EnergyMeterRecord]:
@@ -372,7 +380,7 @@ class SQLiteDBClient:
 
         meters: List[EnergyMeterRecord] = []
 
-        conn, cursor = self.__require_client()
+        conn, cursor = self.require_client()
 
         try:
             cursor.execute(
@@ -443,7 +451,7 @@ class SQLiteDBClient:
         """
 
         logger = LoggerManager.get_logger(__name__)
-        conn, cursor = self.__require_client()
+        conn, cursor = self.require_client()
 
         try:
             conn_parameter = "on" if status else "off"
@@ -476,7 +484,7 @@ class SQLiteDBClient:
         """
 
         logger = LoggerManager.get_logger(__name__)
-        conn, cursor = self.__require_client()
+        conn, cursor = self.require_client()
 
         try:
             cursor.execute(

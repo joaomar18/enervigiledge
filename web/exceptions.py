@@ -27,3 +27,23 @@ class InvalidCredentials(Exception):
 
 class InvalidRequest(Exception):
     """Raised when a request is malformed or contains invalid data."""
+    
+##########     D B     E X C E P T I O N S     ##########
+
+class DeviceCreationError(Exception):
+    """Raised when a device cannot be created or persisted in the system."""
+    pass
+
+class DeviceUpdateError(Exception):
+    """Raised when updating an existing device configuration or state fails."""
+    pass
+
+class DeviceDeleteError(Exception):
+    """Raised when deletion of a device or its associated resources fails."""
+    pass
+
+##########     D E V I C E     E X C E P T I O N S     ##########
+
+class DeviceNotFound(Exception):
+    """Raised when a requested device does not exist in the system."""
+    pass

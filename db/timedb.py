@@ -814,6 +814,38 @@ class TimeDBClient:
         )
 
         return variable_logs
+    
+    
+    def create_db(self, device_name:str, device_id: int) -> bool:
+        """
+        Creates an InfluxDB database for a specific device.
+
+        The database name is constructed as "<device_name>_<device_id>" and is intended
+        to store time-series measurements for the device. Database creation is a
+        non-transactional operation and cannot be rolled back.
+
+        Args:
+            device_name (str): The device name.
+            device_id (int): The device ID.
+
+        Returns:
+            bool: True if the database was created successfully, False if it already
+            exists or if creation fails.
+        """
+        
+        logger = LoggerManager.get_logger(__name__)
+        client = self.__require_client()
+
+        db_name = f"{device_name}_{device_id}"
+        if self.check_db_exists(db_name):  
+            logger.warning(f"Database for device with name {device_name} and id {device_id} already exists.")
+            return False
+        try:
+            client.create_database(db_name)
+            return True
+        except Exception as e:
+            return False
+        
 
     def delete_variable_data(self, device_name: str, device_id: int, variable: Node) -> bool:
         """
@@ -863,7 +895,7 @@ class TimeDBClient:
             bool: True if the database was successfully deleted, False otherwise.
 
         Raises:
-            ValueError: If the specified database does not exist.
+            RuntimeError: If the specified database does not exist.
         """
 
         logger = LoggerManager.get_logger(__name__)
@@ -872,7 +904,7 @@ class TimeDBClient:
         db_name = f"{device_name}_{device_id}"
 
         if not self.check_db_exists(db_name):
-            raise ValueError(f"Database '{db_name}' does not exist.")
+            raise RuntimeError(f"Database '{db_name}' does not exist.")
 
         try:
             client.drop_database(db_name)

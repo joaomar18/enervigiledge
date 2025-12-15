@@ -14,10 +14,12 @@ from web.safety import HTTPSafety
 from web.dependencies import services
 from controller.manager import DeviceManager
 from db.db import SQLiteDBClient
+from db.timedb import TimeDBClient
 from web.api.decorator import auth_endpoint, AuthConfigs
-from util.functions.images import process_and_save_image, get_device_image, delete_device_image
+from util.functions.images import process_and_save_image, get_device_image, delete_device_image, rollback_image, flush_bin_images
 from controller.conversion import convert_dict_to_energy_meter
 import util.functions.objects as objects
+import web.exceptions as api_exception
 
 #######################################
 
@@ -66,6 +68,7 @@ async def add_device(
     safety: HTTPSafety = Depends(services.get_safety),
     device_manager: DeviceManager = Depends(services.get_device_manager),
     database: SQLiteDBClient = Depends(services.get_db),
+    timedb: TimeDBClient = Depends(services.get_timedb),
 ) -> JSONResponse:
     """Adds a new device with configuration and optional image."""
 
@@ -74,19 +77,35 @@ async def add_device(
 
     # Tries to initialize a new energy meter with the given configuration. Throws exception if an error is found in the configuration
     energy_meter = convert_dict_to_energy_meter(device_data, device_nodes, device_manager.publish_queue, device_manager.measurements_queue)
-    energy_meter_record = energy_meter.get_meter_record()
 
-    device_id = database.insert_energy_meter(energy_meter_record)
-    if device_id is not None:
+    # DB Update
+    conn, cursor = database.require_client()
+    device_id = None
+    
+    try:
+        device_id = database.insert_energy_meter(energy_meter.get_meter_record(), conn, cursor)
+        if device_id is None:
+            raise api_exception.DeviceCreationError(f"Could not add device with name {device_name} to the database.")
+
         energy_meter.id = device_id
 
         if device_image:
-            process_and_save_image(device_image, device_id, 200, "db/device_img/")
+            if not process_and_save_image(device_image, device_id, 200, "db/device_img/"):
+                raise api_exception.DeviceCreationError(f"Could not save the uploaded image for device with name {device_name} and id {device_id}.")
+            
+        if not timedb.create_db(device_name, device_id):
+            raise api_exception.DeviceCreationError(f"Could not create time series DB for device with name {device_name} and id {device_id}.")
 
-        await device_manager.add_device(energy_meter)
-        return JSONResponse(content={"message": "Device added sucessfully."})
-
-    raise ValueError(f"Could not add device with name {device_name} and id {device_id} in the database.")
+        conn.commit()
+        
+    except Exception:
+        conn.rollback()
+        if device_id:
+            delete_device_image(device_id, "db/device_img/")
+        raise
+    
+    await device_manager.add_device(energy_meter)
+    return JSONResponse(content={"message": "Device added sucessfully."})
 
 
 @router.post("/edit_device")
@@ -105,22 +124,32 @@ async def edit_device(
     # Tries to initialize a new energy meter with the given configuration. Throws exception if an error is found in the configuration
     energy_meter = convert_dict_to_energy_meter(device_data, device_nodes, device_manager.publish_queue, device_manager.measurements_queue)
 
+
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device not found with id {device_id}")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
 
-    await device_manager.delete_device(device)
-
-    if database.update_energy_meter(energy_meter.get_meter_record()):
-
-        # Process and save image if provided
+    # DB Update
+    conn, cursor = database.require_client()
+    
+    try:
+        if not database.update_energy_meter(energy_meter.get_meter_record(), conn, cursor):
+            raise api_exception.DeviceUpdateError(f"Could not update device with name {device.name} and id {device_id} in the database.")
         if device_image:
-            process_and_save_image(device_image, device_id, 200, "db/device_img/")
-
-        await device_manager.add_device(energy_meter)
-        return JSONResponse(content={"message": "Device edited sucessfully."})
-
-    raise ValueError(f"Could not update device with name {device.name if device else 'not found'} and id {device_id} in the database.")
+            if not process_and_save_image(device_image, device_id, 200, "db/device_img/", "db/device_img/.bin/"):
+                raise api_exception.DeviceUpdateError(f"Could not save the uploaded image for device with name {device.name} and id {device_id}.")
+        
+        conn.commit()
+        flush_bin_images("db/device_img/.bin/")
+        
+    except Exception:
+        conn.rollback()
+        rollback_image(device_id, "db/device_img/", "db/device_img/.bin/")
+        raise
+    
+    await device_manager.delete_device(device)
+    await device_manager.add_device(energy_meter)
+    return JSONResponse(content={"message": "Device edited sucessfully."})
 
 
 @router.delete("/delete_device")
@@ -130,25 +159,34 @@ async def delete_device(
     safety: HTTPSafety = Depends(services.get_safety),
     device_manager: DeviceManager = Depends(services.get_device_manager),
     database: SQLiteDBClient = Depends(services.get_db),
+    timedb: TimeDBClient = Depends(services.get_timedb),
 ) -> JSONResponse:
     """Removes device from system and deletes associated data."""
 
     payload: Dict[str, Any] = await request.json()
-    device_id = objects.require_field(payload, "deviceID", int)
+    device_id = objects.require_field(payload, "device_id", int)
 
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device not found with id {device_id}")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
 
+    # DB Update
+    conn, cursor = database.require_client()
+    
+    try:
+        if not database.delete_device(device.id, conn, cursor):
+            raise api_exception.DeviceDeleteError(f"Could not delete device with name {device.name} and id {device_id} in the database.")
+        
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    delete_device_image(device_id, "db/device_img/")
+    timedb.delete_db(device.name, device_id)
     await device_manager.delete_device(device)
-    if database.delete_device(device_id):
-
-        if not delete_device_image(device_id, "db/device_img/"):
-            raise ValueError(f"Could not delete device image of device id: {device_id}")
-
-        return JSONResponse(content={"message": "Device deleted sucessfully."})
-
-    raise Exception(f"Could not delete device with name {device.name if device else 'not found'} and id {device_id} from the database.")
+    return JSONResponse(content={"message": "Device deleted sucessfully."})
 
 
 @router.get("/get_device")
