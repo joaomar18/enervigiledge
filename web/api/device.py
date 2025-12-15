@@ -199,7 +199,7 @@ async def get_device(
     device_id = int(objects.require_field(request.query_params, "id", str))
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
     return JSONResponse(content=device.get_device())
 
 
@@ -216,7 +216,7 @@ async def get_device_info(
     device_id = int(objects.require_field(request.query_params, "id", str))
     device = device_manager.get_device(device_id)
     if not device:
-        raise ValueError(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
     return JSONResponse(content=device.get_device_info(database.get_device_history))
 
 
