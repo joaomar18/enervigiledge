@@ -17,9 +17,7 @@ import util.functions.web as web_util
 
 #######################################
 
-DEFAULT_INCREMENT_EXCEPTIONS = [TokenInRequestInvalid, FileNotFoundError]  # Default exceptions that should increment failed requests
-DEFAULT_NO_INCREMENT_EXCEPTIONS = [TokenNotInRequest]  # Default exceptions that should not increment failed requests
-
+DEFAULT_INCREMENT_EXCEPTIONS = [TokenNotInRequest, TokenInRequestInvalid, FileNotFoundError]  # Default exceptions that should increment failed requests
 
 @dataclass
 class APIMethodConfig:
@@ -29,12 +27,10 @@ class APIMethodConfig:
     Attributes:
         requires_auth: Whether the endpoint requires authentication (JWT Token)
         increment_exceptions: Exception types that should increment failed requests
-        no_increment_exceptions: Exception types that should NOT increment failed requests
     """
 
     requires_auth: bool = True
     increment_exceptions: List[Type[Exception]] = field(default_factory=list)  # Exception types that increment failed requests
-    no_increment_exceptions: List[Type[Exception]] = field(default_factory=list)  # Exception types that don't increment
 
 
 def auth_endpoint(config: APIMethodConfig):
@@ -73,20 +69,13 @@ def auth_endpoint(config: APIMethodConfig):
                 safety.clean_failed_requests(request, web_util.get_api_url(request))  # Clean failed requests on success
 
                 return result
-
+            
             except Exception as e:
                 exception_name = e.__class__.__name__
 
                 all_increment_exceptions = (
                     DEFAULT_INCREMENT_EXCEPTIONS + config.increment_exceptions
                 )  # Merge default icrement exceptions with config-specific ones
-                all_no_increment_exceptions = (
-                    DEFAULT_NO_INCREMENT_EXCEPTIONS + config.no_increment_exceptions
-                )  # Merge default no-increment exceptions with config-specific ones
-
-                # Handle non-incrementing exceptions
-                if any(isinstance(e, exc) for exc in all_no_increment_exceptions):
-                    return JSONResponse(status_code=401, content={"error": str(e)})
 
                 # Handle incrementing exceptions
                 if any(isinstance(e, exc) for exc in all_increment_exceptions):
@@ -103,6 +92,8 @@ def auth_endpoint(config: APIMethodConfig):
                         )
 
                     return JSONResponse(status_code=401, content={"remaining": safety.get_remaining_requests(request), "error": str(e)})
+                else:
+                    safety.clean_failed_requests(request, web_util.get_api_url(request))  # Clean failed requests if the exception was not of incrementing type
 
                 # Handle unexpected exceptions
                 logger.exception(f"Failed {web_util.get_api_url(request)} API due to server error: {str(e)}")
@@ -121,6 +112,6 @@ class AuthConfigs:
     LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[ValueError, InvalidCredentials])
     AUTO_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[ValueError])
     LOGOUT = APIMethodConfig(increment_exceptions=[ValueError])
-    CREATE_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[ValueError, UserConfigurationExists, InvalidCredentials])
+    CREATE_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[UserConfigurationExists])
     CHANGE_PASSWORD = APIMethodConfig(increment_exceptions=[ValueError, InvalidCredentials])
-    PROTECTED = APIMethodConfig(increment_exceptions=[ValueError])
+    PROTECTED = APIMethodConfig(increment_exceptions=[])
