@@ -17,7 +17,7 @@ E = TypeVar("E", bound=Enum)  # Generic Enum Variable
 
 
 def check_required_keys(
-    input_dict: Dict[str, Any], dataclass_type: Type, ignore_keys: Tuple[str] = tuple()
+    input_dict: Dict[str, Any], dataclass_type: Type, ignore_keys: Tuple[str, ...] = tuple()
 ) -> Tuple[Tuple[dataclasses.Field, ...], List[str]]:
     """
     Validates that all required keys are present in the input dictionary.
@@ -114,35 +114,35 @@ def create_dict_from_fields(
     return output_dict
 
 
-def require_field(data: dict[str, Any] | FormData | QueryParams, key: str, expected_type: Type[T]) -> T:
+def require_field(data: dict[str, Any] | FormData | QueryParams, key: str, expected_type: Type[T]) -> Optional[T]:
     """
-    Retrieves and validates a required field from a dictionary, FormData or QueryParams.
+    Retrieves a field from a mapping-like object and validates its type.
+
+    The function returns the field value if present and of the expected type,
+    otherwise returns None.
 
     Args:
-        data (dict[str, Any] | FormData | QueryParams): The source object to extract the field from.
-        key (str): The field key to retrieve.
-        expected_type (Type[T]): The expected type of the field value.
+        data (dict[str, Any] | FormData | QueryParams): Source object to read from.
+        key (str): Field name to retrieve.
+        expected_type (Type[T]): Expected type of the field value.
 
     Returns:
-        T: The field value, cast to the expected type.
-
-    Raises:
-        ValueError: If the field is missing or not of the expected type.
+        Optional[T]: The field value if present and valid, otherwise None.
 
     Note:
-        The type check only validates against the provided expected_type if it is a class.
-        The returned value is cast to the expected type for type checkers, but no runtime conversion is performed.
+        - This function performs presence and type checks only.
+        - No runtime type conversion is performed.
     """
 
     if key not in data:
-        raise ValueError(f"Field '{key}' is required but is missing.")
+        return None
     value = data[key]
 
     origin = get_origin(expected_type) or expected_type
 
     if isinstance(origin, type):
         if not isinstance(value, origin):
-            raise ValueError(f"Field '{key}' must be of type {origin.__name__}, " f"got {type(value).__name__}")
+            return None
 
     return cast(T, value)
 

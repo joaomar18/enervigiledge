@@ -20,7 +20,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @auth_endpoint(AuthConfigs.AUTO_LOGIN)
 async def auto_login(request: Request, safety: HTTPSafety = Depends(services.get_safety)) -> JSONResponse:
     """Refreshes existing session token for authenticated users."""
-
+    
     username, token = await safety.update_jwt_token(request)
     response = JSONResponse(content={"message": "Auto-login successful", "username": username})
     response.set_cookie(

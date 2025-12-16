@@ -17,7 +17,9 @@ import util.functions.web as web_util
 
 #######################################
 
+
 DEFAULT_INCREMENT_EXCEPTIONS = [TokenNotInRequest, TokenInRequestInvalid, FileNotFoundError]  # Default exceptions that should increment failed requests
+
 
 @dataclass
 class APIMethodConfig:

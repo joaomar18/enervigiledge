@@ -17,10 +17,10 @@ from argon2.exceptions import VerifyMismatchError, InvalidHashError
 #############LOCAL IMPORTS#############
 
 from util.debug import LoggerManager
-from web.exceptions import TokenNotInRequest, TokenInRequestInvalid, UserConfigurationExists, InvalidCredentials
 import web.validation as validation
 import util.functions.objects as objects
 import util.functions.web as web_util
+import web.exceptions as api_exception
 
 #######################################
 
@@ -105,30 +105,45 @@ class HTTPSafety:
 
     async def create_user_configuration(self, request: Request) -> None:
         """
-        Creates initial user configuration file with username and password.
+        Creates the initial user configuration with username and password.
+
+        This method initializes the authentication configuration by validating the
+        request payload, enforcing password requirements, and persisting the user
+        credentials and JWT secret. The operation is allowed only once.
 
         Args:
-            request: Request with JSON payload containing username and password
+            request (Request): HTTP request containing a JSON body with
+                `username` and `password` fields.
 
         Returns:
             None
 
         Raises:
-            UserConfigurationExists: User configuration file already exists
-            ValueError: Missing username/password in request payload
-            InvalidCredentials: Password doesn't meet validation requirements
+            UserConfigurationExists: If the user configuration already exists.
+            InvalidRequestPayload: If the request body is not valid JSON or required
+                fields are missing or invalid.
+            InvalidCredentials: If the password does not meet validation requirements.
         """
 
-        if os.path.exists(HTTPSafety.USER_CONFIG_PATH):
-            raise UserConfigurationExists("User configuration file already exists")
-
-        payload: Dict[str, Any] = await request.json()  # request payload
-
+        try:
+            payload: Dict[str, Any] = await request.json()  # request payload
+        except Exception as e:
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
+            
         username = objects.require_field(payload, "username", str)
         password = objects.require_field(payload, "password", str)
-
+        
+        if username is None:
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_USERNAME)
+        
+        if password is None:
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_PASSWORD)
+        
         if not validation.validate_password(password):
-            raise InvalidCredentials("Password must be at least 5 characters and not just whitespace.")
+            raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_PASSWORD)
+        
+        if os.path.exists(HTTPSafety.USER_CONFIG_PATH):
+            raise api_exception.UserConfigurationExists(api_exception.Errors.AUTH.USER_CONFIG_EXISTS)
 
         hashed_password = self.ph.hash(password)
         jwt_secret = secrets.token_hex(32)
@@ -154,18 +169,33 @@ class HTTPSafety:
             FileNotFoundError: User config file missing
         """
 
-        payload: Dict[str, str] = await request.json()
+        try:
+            payload: Dict[str, Any] = await request.json()  # request payload
+        except Exception as e:
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
 
         username = objects.require_field(payload, "username", str)
         old_password = objects.require_field(payload, "old_password", str)
         new_password = objects.require_field(payload, "new_password", str)
         confirm_new_password = objects.require_field(payload, "confirm_new_password", str)
+        
+        if username is None:
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
+        
+        if old_password is None:
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_OLD_PASSWORD)
+
+        if new_password is None:
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_NEW_PASSWORD)
+        
+        if confirm_new_password is None:
+            raise api_exception.InvalidRequestPayload(status_code=400, error_id="REQ.MISSING_NEW_PASSWORD_CONFIRM", message="The new password confirmation is missing or in an invalid format.")
 
         if new_password != confirm_new_password:
-            raise ValueError("New password confirmation does not match")
+            raise api_exception.InvalidCredentials(status_code=422, error_id="AUTH.PASSWORD_MISMATCH", message="New password and confirmation do not match.")
 
         if not validation.validate_password(new_password):
-            raise InvalidCredentials("Password must be at least 5 characters and not just whitespace.")
+            raise api_exception.InvalidCredentials(status_code=422, error_id="AUTH.INVALID_NEW_PASSWORD", message="The new password must be at least 5 characters and not just whitespace.")
 
         # Checks if configuration file exists
         if not os.path.exists(HTTPSafety.USER_CONFIG_PATH):
