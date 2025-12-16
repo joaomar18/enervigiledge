@@ -227,29 +227,31 @@ class NodeAttributes:
 @dataclass
 class NodeRecord:
     """
-    Database record representing a node and its configuration, including both
-    protocol-independent settings and protocol-specific communication options.
+    Persistent representation of a device node configuration.
 
-    Used for persisting node definitions in the database and for reconstructing
-    Node instances through protocol-specific factory methods.
+    Encapsulates both protocol-agnostic node settings and protocol-specific
+    communication options. This record is used for database persistence and
+    as an intermediate representation when reconstructing runtime Node
+    instances via protocol-specific factories.
 
     Attributes:
-        name (str): Unique node identifier within the device.
-        protocol (str): Communication protocol used by the node
-            (e.g., "MODBUS_RTU", "OPC_UA", "NONE").
-        config (Dict[str, Any]): Base configuration containing protocol-independent
-            attributes such as type, unit, alarms, logging, counters, and display settings.
-        protocol_options (Dict[str, Any]): Protocol-specific communication settings,
-            such as Modbus register information or OPC UA NodeId.
-        attributes (Dict[str, Any]): Domain-level metadata (e.g., {"phase": "L1"}).
-        device_id (Optional[int]): ID of the parent device in the database, if assigned.
+        name: Unique node identifier within a device.
+        protocol: Communication protocol associated with the node
+            (e.g. "MODBUS_RTU", "OPC_UA", "NONE").
+        config: Protocol-independent node configuration (type, units, logging,
+            alarms, counters, display options, etc.).
+        protocol_options: Protocol-specific communication configuration
+            (e.g. Modbus register details or OPC UA NodeId).
+        attributes: Domain-level metadata associated with the node
+            (e.g. phase, direction).
+        device_id: Identifier of the parent device in the database, if assigned.
     """
 
     name: str
-    protocol: str
-    config: Dict[str, Any]
-    protocol_options: Dict[str, Any]
-    attributes: Dict[str, Any]
+    protocol: Protocol
+    config: BaseNodeRecordConfig
+    protocol_options: BaseNodeProtocolOptions
+    attributes: NodeAttributes
     device_id: Optional[int] = None
 
     def __eq__(self, other):
@@ -276,6 +278,19 @@ class NodeRecord:
         """
 
         return hash((self.device_id, self.name))
+    
+    def get_attributes(self) -> Dict[str, Any]:
+        """
+        Return a dictionary representation of the node record for persistence or serialization.
+        """
+        
+        return {"name": self.name, 
+                "protocol": self.protocol, 
+                "config": self.config.get_config(), 
+                "protocol_options": self.protocol_options.get_options(), 
+                "attributes": self.attributes.get_attributes(), 
+                "device_id": self.device_id
+        }
 
 
 @dataclass
@@ -387,7 +402,7 @@ class NodeConfig:
             NodeConfig: Fully initialized runtime configuration.
         """
 
-        config = record.config
+        config = record.config.get_config()
         valid_fields = set(NodeConfig.__dataclass_fields__.keys())
         filtered_config = {k: v for k, v in config.items() if k in valid_fields and k not in ["unit", "name", "attributes", "protocol", "counter_mode"]}
 
@@ -397,7 +412,7 @@ class NodeConfig:
             unit=config["unit"],
             protocol=Protocol(record.protocol),
             counter_mode=CounterMode(config["counter_mode"]) if config["counter_mode"] else None,
-            attributes=NodeAttributes(**record.attributes),
+            attributes=record.attributes,
             **filtered_config,
         )
 

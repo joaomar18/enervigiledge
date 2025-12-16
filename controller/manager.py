@@ -180,8 +180,8 @@ class DeviceManager:
             publish_queue=self.publish_queue,
             measurements_queue=self.measurements_queue,
             meter_type=record.type,
-            meter_options=EnergyMeterOptions(**record.options),
-            communication_options=plugin.options_class(**record.communication_options),
+            meter_options=record.options,
+            communication_options=record.communication_options,
             nodes=self.create_nodes(record),
             on_connection_change=self.devices_db.update_device_connection_history,
         )
@@ -201,7 +201,7 @@ class DeviceManager:
 
         for node_record in record.nodes:
 
-            protocol = objects.convert_str_to_enum(node_record.protocol, Protocol)
+            protocol = node_record.protocol
 
             if protocol is Protocol.NONE:
                 node_factory = ProtocolRegistry.get_base_node_factory()

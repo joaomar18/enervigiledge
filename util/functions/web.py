@@ -2,11 +2,12 @@
 
 from fastapi import Request
 
+
 #######################################
 
 #############LOCAL IMPORTS#############
 
-from web.exceptions import InvalidRequest
+import web.exceptions as api_exception
 
 #######################################
 
@@ -20,7 +21,7 @@ def get_ip_address(request: Request) -> str:
     """
 
     if request.client is None:
-        raise InvalidRequest(f"Request doesn't contain valid client")
+        raise api_exception.InvalidRequest(api_exception.Errors.MISSING_IP)
 
     return request.client.host
 

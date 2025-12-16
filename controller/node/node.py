@@ -89,11 +89,8 @@ class Node:
             is_counter=self.config.is_counter,
             counter_mode=self.config.counter_mode,
         )
-
-        configuration = base_config.get_config()
-        protocol_options = self.protocol_options.get_options()
-        attributes = self.config.attributes.get_attributes()
-        return NodeRecord(device_id=None, name=self.config.name, protocol=self.config.protocol, config=configuration, protocol_options=protocol_options, attributes=attributes)
+        
+        return NodeRecord(device_id=None, name=self.config.name, protocol=self.config.protocol, config=base_config, protocol_options=self.protocol_options, attributes=self.config.attributes)
 
 
 ###########     P R O T O C O L     S P E C I F I C     N O D E S     ###########

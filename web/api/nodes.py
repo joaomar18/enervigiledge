@@ -1,7 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
 from fastapi import APIRouter, Request, Depends
-from typing import Optional
+from typing import Optional, Dict, Any
 from fastapi.responses import JSONResponse
 from datetime import datetime
 
@@ -17,58 +17,15 @@ from web.api.decorator import auth_endpoint, AuthConfigs
 from controller.manager import DeviceManager
 from db.timedb import TimeDBClient
 from model.controller.node import NodePhase, NodeDirection
-from model.date import FormattedTimeStep, TimeSpanParameters
 import util.functions.objects as objects
 import util.functions.date as date
 import web.exceptions as api_exception
+import web.parsers.nodes as nodes_parser
 
 #######################################
 
 
 router = APIRouter(prefix="/nodes", tags=["nodes"])
-
-
-##########     P A R S E     M E T H O D S     ##########
-
-
-async def _parse_formatted_time_span(request: Request, formatted: bool, force_aggregation: Optional[bool] = None) -> TimeSpanParameters:
-    """Parse time span parameters from request query params.
-    
-    Extracts and converts start_time, end_time, time_step, formatted flag, and time_zone
-    from query parameters. When formatted=true, start_time is required and end_time defaults
-    to now. Returns datetime objects with second precision removed.
-    
-    Args:
-        request: The HTTP request containing query parameters.
-        formatted: If True, enables formatted time span behavior with required start_time
-            and optional time_step. If False, all time parameters are optional.
-        force_aggregation: Optional flag to force aggregation of data when True.
-    
-    Returns:
-        TimeSpanParameters: Containing the parsed time span configuration with start_time,
-            end_time, time_step, formatted flag, time_zone, and force_aggregation settings.
-    """
-
-    time_zone = date.get_time_zone_info(request.query_params.get("time_zone"))
-
-    if formatted:
-        time_step = request.query_params.get("time_step")
-        time_step = FormattedTimeStep(time_step) if time_step is not None else None
-        start_time = objects.require_field(request.query_params, "start_time", str)
-        end_time = request.query_params.get("end_time")
-        end_time = end_time if end_time is not None else datetime.isoformat(datetime.now())  # If None accounts end time is now
-    else:
-        start_time = request.query_params.get("start_time")  # Optional
-        end_time = request.query_params.get("end_time")  # Optional
-        time_step = None
-
-    start_time = date.remove_sec_precision(date.convert_isostr_to_date(start_time)) if start_time else None
-    end_time = date.remove_sec_precision(date.convert_isostr_to_date(end_time)) if end_time else None
-
-    return TimeSpanParameters(start_time, end_time, time_step, formatted, time_zone, force_aggregation)
-
-
-#########################################################
 
 
 @router.get("/get_nodes_state")
@@ -78,12 +35,20 @@ async def get_nodes_state(
 ) -> JSONResponse:
     """Retrieves current state of device nodes with optional filtering."""
 
-    device_id = int(objects.require_field(request.query_params, "id", str))
+    device_id = objects.require_field(request.query_params, "id", str)
     filter: Optional[str] = request.query_params.get("filter")  # Optional
-
+    
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    
+    try: 
+        device_id = int(device_id)
+    except Exception:    
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)   
+    
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     if filter:
         nodes_state = {node.config.name: node.get_publish_format() for node in device.nodes if node.config.publish and filter in node.config.name}
@@ -99,17 +64,28 @@ async def get_node_additional_info(
     request: Request, safety: HTTPSafety = Depends(services.get_safety), device_manager: DeviceManager = Depends(services.get_device_manager)
 ) -> JSONResponse:
 
-    device_id = int(objects.require_field(request.query_params, "device_id", str))
+    device_id = objects.require_field(request.query_params, "id", str)
     name = objects.require_field(request.query_params, "node_name", str)
 
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    
+    if name is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_NAME)
+    
+    try: 
+        device_id = int(device_id)
+    except Exception:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)  
+    
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     node = next((n for n in device.nodes if n.config.name == name), None)
 
     if not node:
-        raise api_exception.NodeNotFound(f"Device with id {device_id} does not have a node with name {name}.")
+        raise api_exception.NodeNotFound(api_exception.Errors.NODES.NOT_FOUND)
 
     node_detailed_state = node.get_additional_info()
 
@@ -126,12 +102,20 @@ async def get_nodes_config(
 ) -> JSONResponse:
     """Retrieves configuration of device nodes with optional filtering."""
 
-    device_id = int(objects.require_field(request.query_params, "id", str))
+    device_id = objects.require_field(request.query_params, "id", str)
     filter: Optional[str] = request.query_params.get("filter")  # Optional
+    
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    
+    try: 
+        device_id = int(device_id)
+    except Exception:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)  
 
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     if filter:
         nodes_config = {}
@@ -139,13 +123,13 @@ async def get_nodes_config(
             if filter in node.config.name:
                 record = node.get_node_record()
                 record.device_id = device_id
-                nodes_config[node.config.name] = record.__dict__
+                nodes_config[node.config.name] = record.get_attributes()
     else:
         nodes_config = {}
         for node in device.nodes:
             record = node.get_node_record()
             record.device_id = device_id
-            nodes_config[node.config.name] = record.__dict__
+            nodes_config[node.config.name] = record.get_attributes()
 
     return JSONResponse(content=nodes_config)
 
@@ -160,18 +144,29 @@ async def get_logs_from_node(
 ) -> JSONResponse:
     """Retrieves historical logs from a specific device node within time range."""
 
-    device_id = int(objects.require_field(request.query_params, "device_id", str))
+    device_id = objects.require_field(request.query_params, "id", str)
     name = objects.require_field(request.query_params, "node_name", str)
     formatted = objects.check_bool_str(request.query_params.get("formatted"))
-    time_span = await _parse_formatted_time_span(request, formatted)
-
+    
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    
+    if name is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_NAME)
+    
+    try: 
+        device_id = int(device_id)
+    except Exception:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)  
+    
+    time_span = await nodes_parser.parse_formatted_time_span(request, formatted)
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     node = next((n for n in device.nodes if n.config.name == name), None)
     if not node:
-        raise api_exception.NodeNotFound(f"Device with id {device_id} does not have a node with name {name}.")
+        raise api_exception.NodeNotFound(api_exception.Errors.NODES.NOT_FOUND)
 
     date.process_time_span(time_span)
     response = timedb.get_variable_logs(device.name, device_id, node, time_span).get_logs()
@@ -189,15 +184,40 @@ async def get_energy_consumption(
     """Retrieves active and reactive energy data for a specific device phase and direction,
     and computes the corresponding average power factor within the selected time range."""
 
-    device_id = int(objects.require_field(request.query_params, "device_id", str))
-    phase = NodePhase(objects.require_field(request.query_params, "phase", str))
+    device_id = objects.require_field(request.query_params, "device_id", str)
+    phase = objects.require_field(request.query_params, "phase", str)
     direction = NodeDirection(objects.require_field(request.query_params, "direction", str))
+    
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    
+    if phase is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_PHASE)
+        
+    if direction is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_ENERGY_DIRECTION)
+    
+    try: 
+        device_id = int(device_id)
+    except Exception:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)  
+    
+    try:
+        phase = NodePhase(phase)
+    except Exception:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.INVALID_PHASE)
+    
+    try:
+        direction = NodeDirection(direction)
+    except Exception:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.INVALID_ENERGY_DIRECTION)
+    
     formatted = objects.check_bool_str(request.query_params.get("formatted"))
-    time_span = await _parse_formatted_time_span(request, formatted)
+    time_span = await nodes_parser.parse_formatted_time_span(request, formatted)
 
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
     
     date.process_time_span(time_span)
     response = meter_extraction.get_meter_energy_consumption(device, phase, direction, timedb, time_span)
@@ -215,13 +235,30 @@ async def get_peak_demand_power(
     """Retrieves peak power metrics (min, max, avg) for active and apparent power
     of a specific device phase within the selected time range."""
 
-    device_id = int(objects.require_field(request.query_params, "device_id", str))
-    phase = NodePhase(objects.require_field(request.query_params, "phase", str))
-    time_span = await _parse_formatted_time_span(request, False, False)
+    device_id = objects.require_field(request.query_params, "device_id", str)
+    phase = objects.require_field(request.query_params, "phase", str)
+    
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    
+    if phase is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_PHASE)
+    
+    try: 
+        device_id = int(device_id)
+    except Exception:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)  
+    
+    try:
+        phase = NodePhase(phase)
+    except Exception:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.INVALID_PHASE)
+    
+    time_span = await nodes_parser.parse_formatted_time_span(request, False, False)
 
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     date.process_time_span(time_span)
     response = meter_extraction.get_meter_peak_power(device, phase, timedb, time_span)
@@ -238,22 +275,31 @@ async def delete_logs_from_node(
 ) -> JSONResponse:
     """Deletes all historical logs from a specific device node."""
 
-    data = await request.json()
-    device_id = objects.require_field(data, "device_id", int)
-    name = objects.require_field(data, "node_name", str)
-
+    try:
+        payload: Dict[str, Any] = await request.json()  # request payload
+    except Exception as e:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
+    
+    device_id = objects.require_field(payload, "device_id", int)
+    name = objects.require_field(payload, "node_name", str)
+    
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    
+    if name is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_NAME)
+    
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     node = next((n for n in device.nodes if n.config.name == name), None)
     if not node:
-        raise api_exception.NodeNotFound(f"Device with id {device_id} does not have a node with name {name}.")
-
-    result = timedb.delete_variable_data(device_name=device.name, device_id=device_id, variable=node)
-
-    if not result:
-        raise api_exception.DeviceDeleteError(f"Could not delete logs for node '{name}' from device '{device.name}' with id {device_id}.")
+        raise api_exception.NodeNotFound(api_exception.Errors.NODES.NOT_FOUND)
+    
+    if timedb.check_variable_has_logs(device_name=device.name, device_id=device_id, variable=node):
+        if not timedb.delete_variable_data(device_name=device.name, device_id=device_id, variable=node):
+            raise api_exception.DeviceDeleteError(api_exception.Errors.NODES.DELETE_LOGS_FAILED)
     
     return JSONResponse(content={"result": f"Successfully deleted logs for node '{name}' from device '{device.name}' with id {device_id}."})
     
@@ -268,16 +314,21 @@ async def delete_all_logs(
 ) -> JSONResponse:
     """Deletes all historical logs from a specific device."""
 
-    data = await request.json()
-    device_id = objects.require_field(data, "device_id", int)
-
+    try:
+        payload: Dict[str, Any] = await request.json()  # request payload
+    except Exception as e:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
+    
+    device_id = objects.require_field(payload, "device_id", int)
+    
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
-    result = timedb.delete_db(device_name=device.name, device_id=device_id)
-
-    if not result:
-        raise api_exception.DeviceDeleteError(f"Could not delete all logs from from device '{device.name}' with id {device_id}.")
+    if not timedb.delete_all_data(device_name=device.name, device_id=device_id):
+        raise api_exception.DeviceDeleteError(api_exception.Errors.NODES.DELETE_ALL_LOGS_FAILED)
             
     return JSONResponse(content={"result": f"Successfully deleted all logs from device '{device.name}' with id {device_id}."})

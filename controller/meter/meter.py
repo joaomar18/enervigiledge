@@ -362,7 +362,7 @@ class EnergyMeter(Device):
             id=self.id,
             protocol=self.protocol,
             type=self.meter_type,
-            options=self.meter_options.get_meter_options(),
-            communication_options=self.communication_options.get_communication_options(),
+            options=self.meter_options,
+            communication_options=self.communication_options,
             nodes=node_records,
         )

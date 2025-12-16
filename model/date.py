@@ -25,20 +25,25 @@ class FormattedTimeStep(str, Enum):
 
 @dataclass
 class TimeSpanParameters:
-    """Parameters for specifying a time span with optional formatting and timezone.
+    """
+    Defines a normalized time span configuration for time-series queries.
+
+    Holds validated start and end timestamps, optional formatting and
+    aggregation settings, and timezone information used when querying
+    and processing time-series data.
     
     Attributes:
-        start_time: Start of the time span
-        end_time: End of the time span
-        time_step: Step interval for formatted time spans
-        formatted: Whether to use formatted time span behavior
-        time_zone: Timezone for interpreting the time span
-        force_aggregation: Whether to force aggregation of data (default: None)
+        start_time: Start of the time span (timezone-aware datetime), or None.
+        end_time: End of the time span (timezone-aware datetime), or None.
+        time_step: Optional step interval used for formatted queries.
+        formatted: Indicates whether formatted time span behavior is enabled.
+        time_zone: Time zone used for interpreting timestamps.
+        force_aggregation: Optional flag to force aggregation of data.
     """
 
-    start_time: Optional[datetime]
-    end_time: Optional[datetime]
-    time_step: Optional[FormattedTimeStep]
-    formatted: Optional[bool]
-    time_zone: Optional[ZoneInfo]
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    time_step: Optional[FormattedTimeStep] = None
+    formatted: Optional[bool] = None
+    time_zone: Optional[ZoneInfo] = None
     force_aggregation: Optional[bool] = None

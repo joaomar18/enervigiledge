@@ -30,7 +30,7 @@ class ProtocolPlugin:
 
     meter_class: Type[EnergyMeter]
     options_class: Type[BaseCommunicationOptions]
-    node_protocol_options: Type[BaseNodeProtocolOptions]
+    node_options_class: Type[BaseNodeProtocolOptions]
     node_factory: NodeFactory
 
 
@@ -63,7 +63,7 @@ class ProtocolRegistry:
         return _base_node_factory
 
     @staticmethod
-    def register_protocol(protocol: Protocol, meter_class: Type[EnergyMeter], options_class: Type[BaseCommunicationOptions], node_protocol_options: Type[BaseNodeProtocolOptions], node_factory: NodeFactory) -> None:
+    def register_protocol(protocol: Protocol, meter_class: Type[EnergyMeter], options_class: Type[BaseCommunicationOptions], node_options_class: Type[BaseNodeProtocolOptions], node_factory: NodeFactory) -> None:
         """
         Registers a protocol with its device class, option classes, and node factory.
 
@@ -71,11 +71,11 @@ class ProtocolRegistry:
             protocol: Protocol identifier.
             meter_class: Energy meter class for the protocol.
             options_class: Device-level communication options class.
-            node_protocol_options: Node-level protocol options class.
+            node_options_class: Node-level protocol options class.
             node_factory: Factory for creating protocol-specific nodes.
         """
 
-        ProtocolRegistry._registry[protocol] = ProtocolPlugin(meter_class=meter_class, options_class=options_class, node_protocol_options=node_protocol_options, node_factory=node_factory)
+        ProtocolRegistry._registry[protocol] = ProtocolPlugin(meter_class=meter_class, options_class=options_class, node_options_class=node_options_class, node_factory=node_factory)
 
     @staticmethod
     def get_protocol_plugin(protocol: Protocol) -> ProtocolPlugin:
@@ -106,7 +106,7 @@ class ProtocolRegistry:
 def _base_node_factory(record: NodeRecord) -> Node:
     """Creates a basic Node instance from a NodeRecord."""
     
-    protocol_options = NoProtocolNodeOptions(**record.protocol_options)
+    protocol_options = NoProtocolNodeOptions(**record.protocol_options.get_options())
     internal_type = NONE_TO_INTERNAL_TYPE_MAP[protocol_options.type]
     config = NodeConfig.create_config_from_record(record, internal_type)
     return Node(configuration=config, protocol_options=protocol_options)
@@ -119,7 +119,7 @@ ProtocolRegistry.base_node_factory = _base_node_factory
 def _modbus_rtu_node_factory(record: NodeRecord) -> Node:
     """Creates a ModbusRTUNode instance with register configuration."""
     
-    protocol_options = ModbusRTUNodeOptions(**record.protocol_options)
+    protocol_options = ModbusRTUNodeOptions(**record.protocol_options.get_options())
     internal_type = MODBUS_RTU_TO_INTERNAL_TYPE_MAP[protocol_options.type]
     config = NodeConfig.create_config_from_record(record, internal_type)
     return ModbusRTUNode(configuration=config, protocol_options=protocol_options)
@@ -132,7 +132,7 @@ ProtocolRegistry.register_protocol(Protocol.MODBUS_RTU, ModbusRTUEnergyMeter, Mo
 def _opcua_node_factory(record: NodeRecord) -> Node:
     """Creates an OPCUANode instance with node_id configuration."""
     
-    protocol_options = OPCUANodeOptions(**record.protocol_options)
+    protocol_options = OPCUANodeOptions(**record.protocol_options.get_options())
     internal_type = OPCUA_TO_INTERNAL_TYPE_MAP[protocol_options.type]
     config = NodeConfig.create_config_from_record(record, internal_type)
     return OPCUANode(configuration=config, protocol_options=protocol_options)

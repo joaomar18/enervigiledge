@@ -815,7 +815,6 @@ class TimeDBClient:
 
         return variable_logs
     
-    
     def create_db(self, device_name:str, device_id: int) -> bool:
         """
         Creates an InfluxDB database for a specific device.
@@ -845,7 +844,6 @@ class TimeDBClient:
             return True
         except Exception as e:
             return False
-        
 
     def delete_variable_data(self, device_name: str, device_id: int, variable: Node) -> bool:
         """
@@ -858,9 +856,6 @@ class TimeDBClient:
 
         Returns:
             bool: True if deletion was successful, False otherwise.
-
-        Raises:
-            ValueError: If the device database does not exist.
         """
 
         logger = LoggerManager.get_logger(__name__)
@@ -869,7 +864,7 @@ class TimeDBClient:
         db_name = f"{device_name}_{device_id}"
 
         if not self.check_db_exists(db_name):
-            raise ValueError(f"Database '{db_name}' does not exist.")
+            return False
 
         try:
             client.switch_database(db_name)
@@ -877,7 +872,39 @@ class TimeDBClient:
             return True
 
         except Exception as e:
-            logger.exception(f"Failed to delete measurement '{variable.config.name}' from DB '{db_name}': {e}")
+            logger.warning(f"Failed to delete measurement '{variable.config.name}' from DB '{db_name}': {e}")
+            return False
+        
+    def delete_all_data(self, device_name: str, device_id: int) -> bool:
+        """
+        Deletes all time-series data for a device without dropping the database.
+
+        Removes all series and data points from the device-specific database while
+        preserving measurement metadata.
+
+        Args:
+            device_name: Name of the device.
+            device_id: Unique device identifier.
+
+        Returns:
+            bool: True if data was deleted successfully, False otherwise.
+        """
+        
+        logger = LoggerManager.get_logger(__name__)
+        client = self.__require_client()
+
+        db_name = f"{device_name}_{device_id}"
+
+        if not self.check_db_exists(db_name):
+            return False
+
+        try:
+            client.switch_database(db_name)
+            client.query(f'DROP SERIES FROM /.*/')
+            return True
+
+        except Exception as e:
+            logger.warning(f"Failed to delete all measurements from DB '{db_name}': {e}")
             return False
 
     def delete_db(self, device_name: str, device_id: int) -> bool:
@@ -893,9 +920,6 @@ class TimeDBClient:
 
         Returns:
             bool: True if the database was successfully deleted, False otherwise.
-
-        Raises:
-            RuntimeError: If the specified database does not exist.
         """
 
         logger = LoggerManager.get_logger(__name__)
@@ -904,10 +928,11 @@ class TimeDBClient:
         db_name = f"{device_name}_{device_id}"
 
         if not self.check_db_exists(db_name):
-            raise RuntimeError(f"Database '{db_name}' does not exist.")
+            return False
 
         try:
             client.drop_database(db_name)
+            
             return True
         except Exception as e:
             logger.exception(f"Failed to delete DB '{db_name}': {e}")
@@ -926,3 +951,19 @@ class TimeDBClient:
 
         client = self.__require_client()
         return {"name": db} in client.get_list_database()
+
+    def check_variable_has_logs(self, device_name: str, device_id: int, variable: Node) -> bool:
+        """
+        Checks if there are logs available for the specified variable.
+
+        Args:
+            device_name (str): Name of the device.
+            device_id (int): ID of the device.
+            variable (Node): The variable (node) for which to check logs.
+
+        Returns:
+            bool: True if logs exist for the variable, False otherwise.
+        """
+        
+        logs = self.get_variable_logs(device_name, device_id, variable, TimeSpanParameters())
+        return len(logs.points) > 0

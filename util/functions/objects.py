@@ -22,16 +22,24 @@ def check_required_keys(
     """
     Validates that all required keys are present in the input dictionary.
 
+    Checks the input dictionary against the required and optional fields of
+    the provided dataclass type. Returns the list of all dataclass fields
+    and optional fields. If any required fields are missing, raises a KeyError
+    containing the missing field names as structured data.
+
     Args:
         input_dict (Dict[str, Any]): The dictionary to validate.
         dataclass_type (Type): The dataclass type to check against.
         ignore_keys (Tuple[str]): Keys to ignore during validation.
 
     Returns:
-        Tuple[Tuple[dataclasses.Field, ...], List[str]]: Dataclass fields and optional fields.
+        Tuple[Tuple[dataclasses.Field, ...], List[str]]: A tuple containing:
+            - A tuple of all dataclass fields.
+            - A list of optional field names.
 
     Raises:
-        KeyError: If required fields are missing.
+        KeyError: If required fields are missing. The exception argument contains
+        a tuple of missing field names.
     """
 
     # Get required fields from the class
@@ -52,30 +60,36 @@ def check_required_keys(
     # Check for missing required fields
     missing_fields = [field for field in required_fields if field not in input_dict and field not in ignore_keys]
     if missing_fields:
-        raise KeyError(f"Missing required fields: {', '.join(missing_fields)}")
+        raise KeyError(tuple(missing_fields))
 
     return (dataclass_fields, optional_fields)
 
 
-def add_value_to_dict(dict: Dict[str, Any], field: dataclasses.Field, value: Union[int, float, str, bool]) -> None:
+def add_value_to_dict(dict: Dict[str, Any], field: dataclasses.Field, value: Any) -> None:
     """
-    Adds a value to a dictionary after validating the field.
+    Add a value to a dictionary and validate it against a dataclass field.
+
+    Inserts the value using the dataclass field name as the key and validates
+    the value against the resolved field type. If validation fails, raises a
+    ValueError carrying the field name as structured exception data.
 
     Args:
-        dict (Dict[str, Any]): The target dictionary to modify.
-        field (dataclasses.Field): The dataclass field to process.
-        value (Union[int, float, str, bool]): The value to add to the dictionary.
+        dict: Target dictionary to update.
+        field: Dataclass field defining the expected key name and type.
+        value: Value to assign to the field.
 
     Raises:
-        ValueError: If the field validation fails or the value cannot be added.
+        ValueError: If the value cannot be validated. The exception argument
+        contains the field name as a tuple.
     """
 
     try:
         dict[field.name] = value
         real_type = resolve_type(field.type)
-        require_field(dict, field.name, real_type)
+        if require_field(dict, field.name, real_type) is None:
+            raise ValueError(f"{field.name} with invalid type or missing.")
     except (TypeError, ValueError) as e:
-        raise ValueError(f"Failed to add value '{value}' of type '{field.type}' to dictionary: {e}")
+        raise ValueError(tuple(field.name)) from e
 
 
 def create_dict_from_fields(

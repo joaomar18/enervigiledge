@@ -2,7 +2,7 @@
 
 import sqlite3
 import json
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Set, Optional
 from dataclasses import dataclass
 
 #################################################
@@ -10,9 +10,10 @@ from dataclasses import dataclass
 ############### LOCAL IMPORTS ###################
 
 from util.debug import LoggerManager
+from controller.registry.protocol import ProtocolRegistry
 from model.controller.general import Protocol
-from model.controller.device import EnergyMeterType, EnergyMeterRecord, DeviceHistoryStatus
-from model.controller.node import NodeRecord
+from model.controller.device import EnergyMeterType, EnergyMeterRecord, DeviceHistoryStatus, EnergyMeterOptions, BaseCommunicationOptions
+from model.controller.node import NodeRecord, BaseNodeRecordConfig, BaseNodeProtocolOptions, NodeAttributes
 
 #################################################
 
@@ -183,6 +184,8 @@ class SQLiteDBClient:
 
             Transaction commit or rollback must be handled by the caller.
         """
+        
+        logger = LoggerManager.get_logger(__name__)
 
         try:
             cursor.execute(
@@ -190,7 +193,7 @@ class SQLiteDBClient:
                 INSERT INTO devices (name, protocol, device_type, meter_options, communication_options)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (record.name, record.protocol, record.type, json.dumps(record.options), json.dumps(record.communication_options)),
+                (record.name, record.protocol, record.type, json.dumps(record.options.get_meter_options()), json.dumps(record.communication_options.get_communication_options())),
             )
             device_id = cursor.lastrowid
 
@@ -201,7 +204,7 @@ class SQLiteDBClient:
                     INSERT INTO nodes (device_id, name, protocol, config, protocol_options, attributes)
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (device_id, node.name, node.protocol, json.dumps(node.config), json.dumps(node.protocol_options), json.dumps(node.attributes)),
+                    (device_id, node.name, node.protocol, json.dumps(node.config.get_config()), json.dumps(node.protocol_options.get_options()), json.dumps(node.attributes.get_attributes())),
                 )
 
             # Create initial device status entry
@@ -215,6 +218,9 @@ class SQLiteDBClient:
 
             return device_id
 
+        except sqlite3.OperationalError as e:
+            logger.error(f"Operational error while trying to insert energy meter {record.name}: {e}")
+            return None
         except Exception as e:
             return None
 
@@ -286,7 +292,7 @@ class SQLiteDBClient:
                 INSERT INTO devices (id, name, protocol, device_type, meter_options, communication_options)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (record.id, record.name, record.protocol, record.type, json.dumps(record.options), json.dumps(record.communication_options)),
+                (record.id, record.name, record.protocol, record.type, json.dumps(record.options.get_meter_options()), json.dumps(record.communication_options.get_communication_options())),
             )
 
             # Insert all associated nodes
@@ -297,7 +303,7 @@ class SQLiteDBClient:
                     INSERT INTO nodes (device_id, name, protocol, config, protocol_options, attributes)
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (record.id, node.name, node.protocol, json.dumps(node.config), json.dumps(node.protocol_options), json.dumps(node.attributes)),
+                    (record.id, node.name, node.protocol, json.dumps(node.config.get_config()), json.dumps(node.protocol_options.get_options()), json.dumps(node.attributes.get_attributes())),
                 )
 
             # Restore device status with preserved created_at and updated updated_at
@@ -320,7 +326,9 @@ class SQLiteDBClient:
                 )
 
             return True
-
+        except sqlite3.OperationalError as e:
+            logger.error(f"Operational error while trying to update energy meter {record.name} with id {record.id}: {e}")
+            return False
         except Exception as e:
             return False
 
@@ -408,26 +416,33 @@ class SQLiteDBClient:
                     (device_id,),
                 )
                 node_rows = cursor.fetchall()
+                
+                protocol = Protocol(protocol)
+                plugin = ProtocolRegistry.get_protocol_plugin(protocol)
 
-                nodes = set()
+                nodes: Set[NodeRecord] = set()
                 for node_name, node_protocol, config_str, protocol_options_str, attributes_str in node_rows:
+                    
+                    node_protocol = Protocol(node_protocol)
+                    node_plugin = ProtocolRegistry.get_protocol_plugin(node_protocol)
+                    
                     node = NodeRecord(
                         device_id=device_id,
                         name=node_name,
                         protocol=node_protocol,
-                        config=json.loads(config_str),
-                        protocol_options=json.loads(protocol_options_str),
-                        attributes=json.loads(attributes_str),
+                        config=BaseNodeRecordConfig(**json.loads(config_str)),
+                        protocol_options=node_plugin.node_options_class(**json.loads(protocol_options_str)),
+                        attributes=NodeAttributes(**json.loads(attributes_str)),
                     )
                     nodes.add(node)
-
+                    
                 meter = EnergyMeterRecord(
                     id=device_id,
                     name=name,
-                    protocol=Protocol(protocol),
+                    protocol=protocol,
                     type=EnergyMeterType(device_type),
-                    options=json.loads(meter_opts_str),
-                    communication_options=json.loads(comm_opts_str),
+                    options=EnergyMeterOptions(**json.loads(meter_opts_str)),
+                    communication_options=plugin.options_class(**json.loads(comm_opts_str)),
                     nodes=nodes,
                 )
 

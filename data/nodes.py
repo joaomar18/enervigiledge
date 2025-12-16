@@ -20,8 +20,8 @@ from protocol.opcua.opcua_device import OPCUAOptions, OPCUANode
 
 
 def get_orno_we_516_db() -> EnergyMeterRecord:
-    meter_options = EnergyMeterOptions().get_meter_options()
-    communication_options = ModbusRTUOptions(slave_id=1, port="/dev/ttyAMA0", baudrate=9600, stopbits=1, parity="E", bytesize=8, read_period=5, timeout=1, retries=0).get_communication_options()
+    meter_options = EnergyMeterOptions()
+    communication_options = ModbusRTUOptions(slave_id=1, port="/dev/ttyAMA0", baudrate=9600, stopbits=1, parity="E", bytesize=8, read_period=5, timeout=1, retries=0)
 
     def cfg(name: str, unit: str, phase: NodePhase, logging: bool = False, logging_period: int = 15, **extra) -> NodeConfig:
         protocol = Protocol.MODBUS_RTU if not extra.get("calculated", None) else Protocol.NONE
@@ -108,9 +108,9 @@ def get_orno_we_516_db() -> EnergyMeterRecord:
 
 
 def get_sm1238_db() -> EnergyMeterRecord:
-    meter_options = EnergyMeterOptions().get_meter_options()
 
-    communication_options = OPCUAOptions(url="opc.tcp://192.168.10.10:4840").get_communication_options()
+    meter_options = EnergyMeterOptions()
+    communication_options = OPCUAOptions(url="opc.tcp://192.168.10.10:4840")
 
     def cfg(name: str, unit: str, phase: NodePhase, logging: bool = False, logging_period: int = 15, **extra) -> NodeConfig:
         protocol = Protocol.OPC_UA if not extra.get("calculated", None) else Protocol.NONE

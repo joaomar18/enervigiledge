@@ -155,18 +155,27 @@ class HTTPSafety:
 
     async def change_user_password(self, request: Request) -> None:
         """
-        Updates user password after validating current credentials.
+        Changes the user's password after validating authentication credentials
+        and request payload.
+
+        This method validates the JSON request body, ensures all authentication
+        fields are present, verifies the current credentials, enforces password
+        rules, and updates the stored password hash.
 
         Args:
-            request: Request with JSON payload containing username, old_password, new_password, confirm_new_password
+            request (Request): HTTP request containing a JSON body with
+                `username`, `old_password`, `new_password`, and
+                `confirm_new_password` fields.
 
         Returns:
             None
 
         Raises:
-            ValueError: Missing required fields, password confirmation mismatch, invalid username, or incorrect old password
-            InvalidCredentials: New password doesn't meet validation requirements
-            FileNotFoundError: User config file missing
+            InvalidRequestPayload: If the request body is invalid JSON or required
+                authentication fields are missing or malformed.
+            InvalidCredentials: If authentication fails, passwords do not match,
+                or the new password violates validation rules.
+            UserConfigurationNotFound: If the user configuration does not exist.
         """
 
         try:
@@ -180,7 +189,7 @@ class HTTPSafety:
         confirm_new_password = objects.require_field(payload, "confirm_new_password", str)
         
         if username is None:
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_USERNAME)
         
         if old_password is None:
             raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_OLD_PASSWORD)
@@ -189,17 +198,17 @@ class HTTPSafety:
             raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_NEW_PASSWORD)
         
         if confirm_new_password is None:
-            raise api_exception.InvalidRequestPayload(status_code=400, error_id="REQ.MISSING_NEW_PASSWORD_CONFIRM", message="The new password confirmation is missing or in an invalid format.")
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_NEW_PASSWORD_CONFIRM)
 
         if new_password != confirm_new_password:
-            raise api_exception.InvalidCredentials(status_code=422, error_id="AUTH.PASSWORD_MISMATCH", message="New password and confirmation do not match.")
+            raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.PASSWORD_MISMATCH)
 
         if not validation.validate_password(new_password):
-            raise api_exception.InvalidCredentials(status_code=422, error_id="AUTH.INVALID_NEW_PASSWORD", message="The new password must be at least 5 characters and not just whitespace.")
+            raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_NEW_PASSWORD)
 
         # Checks if configuration file exists
         if not os.path.exists(HTTPSafety.USER_CONFIG_PATH):
-            raise FileNotFoundError("User configuration file does not exist.")
+            raise api_exception.UserConfigurationNotFound(api_exception.Errors.AUTH.USER_CONFIG_NOT_FOUND)
 
         # Obtain user configuration
         with open(HTTPSafety.USER_CONFIG_PATH, "r") as file:
@@ -209,12 +218,12 @@ class HTTPSafety:
         stored_hash = objects.require_field(config, "password_hash", str)
 
         if username != stored_username:
-            raise ValueError("Invalid username")
+            raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_CREDENTIALS)
 
         try:
             self.ph.verify(stored_hash, old_password)
         except (VerifyMismatchError, InvalidHashError):
-            raise ValueError("Old password is incorrect")
+            raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_CREDENTIALS)
 
         # Generate new hash and update config
         new_hash = self.ph.hash(new_password)
@@ -255,29 +264,45 @@ class HTTPSafety:
 
     async def create_jwt_token(self, request: Request) -> Tuple[str, str]:
         """
-        Creates JWT token after validating user credentials from request payload.
+        Authenticates user credentials and issues a JWT access token.
+
+        This method validates the JSON request body, verifies authentication
+        credentials against the stored user configuration, and generates a JWT
+        token for the authenticated user.
 
         Args:
-            request: Request with JSON payload containing username, password, auto_login
+            request (Request): HTTP request containing a JSON body with
+                `username`, `password`, and optional `auto_login` fields.
 
         Returns:
-            Tuple[str, str]: (username, jwt_token)
+            Tuple[str, str]: A tuple containing the authenticated username and
+            the generated JWT token.
 
         Raises:
-            ValueError: Missing username/password
-            FileNotFoundError: User config file missing
-            InvalidCredentials: Invalid username/password
+            InvalidRequestPayload: If the request body is invalid JSON or required
+                authentication fields are missing.
+            InvalidCredentials: If the provided username or password is invalid.
+            UserConfigurationNotFound: If the user configuration does not exist.
         """
 
-        payload: Dict[str, Any] = await request.json()  # request payload
-
-        username: str = objects.require_field(payload, "username", str)
-        password: str = objects.require_field(payload, "password", str)
+        try:
+            payload: Dict[str, Any] = await request.json()  # request payload
+        except Exception as e:
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
+        
+        username = objects.require_field(payload, "username", str)
+        password = objects.require_field(payload, "password", str)
         auto_login: bool = payload.get("auto_login", False)
+        
+        if username is None:
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_USERNAME)
+        
+        if password is None:
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_PASSWORD)
 
         # Checks if configuration file exists
         if not os.path.exists(HTTPSafety.USER_CONFIG_PATH):
-            raise FileNotFoundError("User configuration file does not exist.")
+            raise api_exception.UserConfigurationNotFound(api_exception.Errors.AUTH.USER_CONFIG_NOT_FOUND)
 
         # Obtain user configuration
         with open(HTTPSafety.USER_CONFIG_PATH, "r") as file:
@@ -285,14 +310,14 @@ class HTTPSafety:
 
         # Verify credentials
         if username != config.get("username") or not validation.validate_password(password):
-            raise InvalidCredentials("Invalid credentials")
+            raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_CREDENTIALS)
 
         stored_hash = objects.require_field(config, "password_hash", str)
 
         try:
             self.ph.verify(stored_hash, password)
         except (VerifyMismatchError, InvalidHashError):
-            raise InvalidCredentials("Invalid credentials")
+            raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_CREDENTIALS)
 
         # Create token and return it
         token_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
@@ -304,25 +329,22 @@ class HTTPSafety:
 
     async def update_jwt_token(self, request: Request) -> Tuple[str, str]:
         """
-        Refreshes JWT token while preserving session settings.
+        Refreshes an existing JWT access token while preserving session settings.
+
+        This method validates the current authentication token, issues a new JWT
+        with an updated issuance timestamp, and retains session attributes such
+        as auto-login state.
 
         Args:
-            request: Request with current token in header or cookies
+            request (Request): HTTP request containing the current authentication
+                token in headers or cookies.
 
         Returns:
-            Tuple[str, str]: (username, new_jwt_token)
-
-        Raises:
-            TokenNotInRequest: No token found (from check_authorization_token)
-            TokenInRequestInvalid: Invalid token or session (from check_authorization_token)
-            FileNotFoundError: User config file missing
-            ValueError: Invalid username in token
+            Tuple[str, str]: A tuple containing the authenticated username and the
+            refreshed JWT token.
         """
 
         username, token, jwt_secret = self.check_authorization_token(request)
-        if not username:
-            raise ValueError(f"Username stored in security token is not valid. Got username: {username}")
-
         new_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
         new_token = jwt.encode(new_payload, jwt_secret, algorithm="HS256")
 
@@ -336,34 +358,44 @@ class HTTPSafety:
 
     async def delete_jwt_token(self, request: Request) -> None:
         """
-        Invalidates JWT token and removes it from active sessions.
+        Invalidates the current JWT token and removes the associated active session.
 
-        Raises:
-            TokenNotInRequest: No token found in request
-            TokenInRequestInvalid: Invalid token format or expired
-            ValueError: Username in token is invalid
+        This method validates the authentication token provided in the request and,
+        if valid, deletes it from the active session store.
+
+        Args:
+            request (Request): HTTP request containing the authentication token
+                in headers or cookies.
+
+        Returns:
+            None
         """
 
         username, token, jwt_secret = self.check_authorization_token(request)
-        if not username:
-            raise ValueError(f"Username stored in security token is not valid. Got username: {username}")
-
         del self.active_tokens[token]
 
     def check_authorization_token(self, request: Request) -> Tuple[str, str, str]:
         """
-        Validates JWT token and returns authentication details.
+        Validates the authentication token and returns authorization details.
+
+        This method extracts the JWT token from the request headers or cookies,
+        verifies its signature and payload, checks that the token corresponds to
+        an active session, and validates the associated user and client context.
 
         Args:
-            request: Request containing token in Authorization header or cookies
+            request (Request): HTTP request containing the authentication token
+                in the Authorization header or cookies.
 
         Returns:
-            Tuple[str, str, str]: (username, jwt_token, jwt_secret)
+            Tuple[str, str, str]: A tuple containing the authenticated username,
+            the JWT token string, and the JWT secret used for verification.
 
         Raises:
-            TokenNotInRequest: No token found or token expired
-            TokenInRequestInvalid: Invalid token or session mismatch
-            FileNotFoundError: User config file missing
+            InvalidCredentials: If the authentication token is missing, invalid,
+                expired, revoked, or does not match the active session or request
+                context.
+            UserConfigurationNotFound: If the user configuration required for token
+                validation does not exist.
         """
 
         token: str | None = None
@@ -376,27 +408,27 @@ class HTTPSafety:
             token = request.cookies.get("token")
 
         if not token:
-            raise TokenNotInRequest("No security token found")
+            raise api_exception.TokenNotInRequest(api_exception.Errors.AUTH.TOKEN_MISSING)
 
         # Checks if configuration file exists
         if not os.path.exists(HTTPSafety.USER_CONFIG_PATH):
-            raise FileNotFoundError("User configuration file does not exist.")
+            raise api_exception.UserConfigurationNotFound(api_exception.Errors.AUTH.USER_CONFIG_NOT_FOUND)
 
         # Obtain user configuration
         with open(HTTPSafety.USER_CONFIG_PATH, "r") as file:
             config: Dict[str, Any] = json.load(file)
 
         payload: Dict[str, Any] = jwt.decode(token, config["jwt_secret"], algorithms=["HS256"])
-        username = payload["user"]
-
+        username: str = payload["user"]
+        
         # Check if token exists in active tokens and matches the token in the request
         stored_token = self.active_tokens.get(token)
 
         if not stored_token or stored_token.token != token:
-            raise TokenNotInRequest("Security token expired or not present in the active tokens")
+            raise api_exception.TokenInRequestInvalid(api_exception.Errors.AUTH.INVALID_TOKEN)
 
         if stored_token.user != username or stored_token.ip != web_util.get_ip_address(request):
-            raise TokenInRequestInvalid("Token is invalid or session expired")
+            raise api_exception.TokenInRequestInvalid(api_exception.Errors.AUTH.INVALID_TOKEN)
 
         return (username, token, str(config["jwt_secret"]))
 

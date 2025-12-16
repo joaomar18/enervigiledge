@@ -9,69 +9,24 @@ import asyncio
 
 from model.controller.general import Protocol
 from model.controller.device import EnergyMeterRecord, EnergyMeterType, EnergyMeterOptions, BaseCommunicationOptions
-from model.controller.node import BaseNodeRecordConfig, NodeRecord
+from model.controller.node import BaseNodeRecordConfig, NodeRecord, NodeAttributes
 from controller.meter.meter import EnergyMeter
 from controller.registry.protocol import ProtocolRegistry
 from controller.node.node import Node
 import util.functions.objects as objects
 import util.functions.meter as meter_util
+import web.exceptions as api_exception
 
 #######################################
 
 
-def convert_dict_to_meter_options(dict_meter_options: Dict[str, Any]) -> EnergyMeterOptions:
-    """
-    Converts a dictionary of meter options into a structured format.
-
-    Args:
-        dict_meter_options (Dict[str, Any]): The input dictionary containing meter options.
-
-    Returns:
-        Dict[str, Any]: A structured dictionary with processed meter options.
-
-    Raises:
-        ValueError: If required fields are missing or invalid.
-    """
-
-    dataclass_fields, optional_fields = objects.check_required_keys(dict_meter_options, EnergyMeterOptions)
-    try:
-        arguments = objects.create_dict_from_fields(dict_meter_options, dataclass_fields, optional_fields)
-    except Exception as e:
-        raise TypeError(f"Invalid field type in meter options: {e}")
-
-    return EnergyMeterOptions(**arguments)
 
 
-def convert_dict_to_comm_options(dict_communication_options: Dict[str, Any], protocol: Protocol) -> BaseCommunicationOptions:
-    """
-    Converts a dictionary of communication options based on the specified protocol.
-
-    Args:
-        dict_communication_options (Dict[str, Any]): The input dictionary containing communication options.
-        protocol (Any): The protocol to use for processing the options.
-
-    Returns:
-        Dict[str, Any]: A structured dictionary with processed communication options.
-
-    Raises:
-        ValueError: If required fields are missing or invalid.
-    """
-
-    # Get protocol plugin from registry
-    plugin = ProtocolRegistry.get_protocol_plugin(protocol)
-    if not plugin:
-        raise ValueError(f"Protocol {protocol} is not supported")
-
-    dataclass_fields, optional_fields = objects.check_required_keys(dict_communication_options, plugin.options_class)
-    try:
-        arguments = objects.create_dict_from_fields(dict_communication_options, dataclass_fields, optional_fields)
-    except Exception as e:
-        raise TypeError(f"Invalid field type in {protocol.value} options: {e}")
-
-    return plugin.options_class(**arguments)
 
 
-def convert_dict_to_node(dict_node: Dict[str, Any], meter_type: EnergyMeterType) -> Node:
+
+
+def parse_node_record(dict_node: Dict[str, Any], meter_type: EnergyMeterType) -> NodeRecord:
     """
     Converts a dictionary to a node object.
 
@@ -86,17 +41,48 @@ def convert_dict_to_node(dict_node: Dict[str, Any], meter_type: EnergyMeterType)
         ValueError: If the dictionary contains invalid or missing fields.
     """
 
-    objects.check_required_keys(dict_node, NodeRecord)
-    node_dict_config: Dict[str, Any] = objects.require_field(dict_node, "config", Dict[str, Any])
-    node_dict_protocol_options: Dict[str, Any] = objects.require_field(dict_node, "protocol_options", Dict[str, Any])
-    node_dict_attributes: Optional[Dict[str, Any]] = dict_node.get("attributes")
-    objects.check_required_keys(node_dict_config, BaseNodeRecordConfig)
+    try:
+        objects.check_required_keys(dict_node, NodeRecord)
+    except KeyError as e:
+        missing_fields = list(e.args[0]) if e.args else []
+        raise api_exception.InvalidRequestPayload(error=api_exception.Errors.DEVICE.MISSING_NODE_FIELDS, details={"fields": missing_fields})
+
+    
+    try:
+        objects.check_required_keys(dict_node["config"], BaseNodeRecordConfig)
+    except KeyError as e:
+        missing_fields = list(e.args[0]) if e.args else []
+        raise api_exception.InvalidRequestPayload(error=api_exception.Errors.DEVICE.MISSING_NODE_FIELDS, details={"fields": missing_fields})
+    
+    
+    
+    node_dict_config = objects.require_field(dict_node, "config", Dict[str, Any])
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    node_dict_protocol_options = objects.require_field(dict_node, "protocol_options", Dict[str, Any])
+    node_dict_attributes: Optional[Dict[str, Any]] = dict_node.get("attributes") #Optional
+    
     if node_dict_attributes is None:
         node_dict_attributes = meter_util.create_default_node_attributes(meter_type).get_attributes()
-
+    else:
+        try:
+            objects.check_required_keys(node_dict_attributes, NodeAttributes)
+        except KeyError as e:
+            missing_fields = list(e.args[0]) if e.args else []
+            raise api_exception.InvalidRequestPayload(error=api_exception.Errors.DEVICE.MISSING_NODE_ATTRIBUTES_FIELDS, details={"fields": missing_fields})
+    
+    objects.check_required_keys(node_dict_config, BaseNodeRecordConfig)
     name = objects.require_field(dict_node, "name", str)
     protocol = objects.convert_str_to_enum(objects.require_field(dict_node, "protocol", str), Protocol)
 
+    """
     if protocol is Protocol.NONE:
         objects.check_required_keys(node_dict_protocol_options, ProtocolRegistry.no_protocol_options)
         node_record = NodeRecord(name=name, protocol=protocol, config=node_dict_config, protocol_options=node_dict_protocol_options, attributes=node_dict_attributes)
@@ -107,6 +93,7 @@ def convert_dict_to_node(dict_node: Dict[str, Any], meter_type: EnergyMeterType)
     objects.check_required_keys(node_dict_protocol_options, plugin.node_protocol_options)
     node_record = NodeRecord(name=name, protocol=protocol, config=node_dict_config, protocol_options=node_dict_protocol_options, attributes=node_dict_attributes)
     return plugin.node_factory(node_record)
+    """
 
 
 def convert_dict_to_energy_nodes(list_nodes: List[Dict[str, Any]], meter_type: EnergyMeterType) -> Set[Node]:
@@ -160,10 +147,31 @@ def convert_dict_to_energy_meter(
     Raises:
         ValueError: If the dictionary contains invalid or missing fields.
     """
-
-    result = objects.check_required_keys(dict_energy_meter, EnergyMeterRecord, ("nodes",))
-
+  
+  
+  
+  
+    device_id = dict_energy_meter.get("id")
+    
+    if meter_id is not None:
+                   
+        try: 
+            device_id = int(device_id)
+        except Exception:
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)
+            
+    
+    
+    
+    
+    
     meter_id = objects.require_field(dict_energy_meter, "id", int)
+    
+    
+    
+    
+    
+    
     name = objects.require_field(dict_energy_meter, "name", str)
     protocol = objects.convert_str_to_enum(objects.require_field(dict_energy_meter, "protocol", str), Protocol)
     meter_type = objects.convert_str_to_enum(objects.require_field(dict_energy_meter, "type", str), EnergyMeterType)

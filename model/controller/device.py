@@ -92,22 +92,30 @@ class BaseCommunicationOptions:
 @dataclass
 class EnergyMeterRecord:
     """
-    Represents the full configuration of an energy meter for persistence in SQLite.
+    Persistent representation of an energy meter configuration.
+
+    Encapsulates the complete meter definition required for database storage
+    and for reconstructing runtime EnergyMeter instances, including protocol,
+    meter type, configuration options, communication settings, and node
+    definitions.
 
     Attributes:
-        id (int): id of the device
-        name (str): Human-readable name of the energy meter (e.g., "OR-WE-516 Energy Meter").
-        protocol (Protocol): Communication protocol used by the meter (e.g., "modbus_rtu", "opcua").
-        type (EnergyMeterType): Type of the meter, typically based on electrical configuration (e.g., "three_phase", "single_phase").
-        options (Dict[str, Any]): Configuration options related to what the meter should read or expose (e.g., frequency, energy direction).
-        communication_options (Dict[str, Any]): Protocol-specific connection settings (e.g., slave ID, port, URL, baudrate).
+        name: Human-readable name of the energy meter.
+        protocol: Communication protocol used by the meter.
+        type: Electrical configuration of the meter (e.g. single-phase,
+            three-phase).
+        options: Meter-level configuration options controlling exposed
+            measurements and behavior.
+        communication_options: Protocol-specific connection settings.
+        nodes: Set of node records associated with the meter.
+        id: Identifier of the meter in the database, if assigned.
     """
 
     name: str
     protocol: Protocol
     type: EnergyMeterType
-    options: Dict[str, Any]
-    communication_options: Dict[str, Any]
+    options: EnergyMeterOptions
+    communication_options: BaseCommunicationOptions
     nodes: Set[NodeRecord]
     id: Optional[int] = None
 

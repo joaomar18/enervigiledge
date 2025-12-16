@@ -18,30 +18,36 @@ import util.functions.meter as meter_util
 
 def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: NodeDirection, timedb: TimeDBClient, time_span: TimeSpanParameters) -> Dict[str, Any]:
     """
-    Retrieve energy consumption metrics and calculated power factor information for a meter.
+    Retrieves energy consumption and derived power factor data for a meter.
 
-    This function gathers the active and reactive energy logs for a specified device/phase/direction combination
-    over a given time span. It also calculates the power factor and power factor direction, both per-point
-    (when a formatted query is requested) and as a global aggregate value. If nodes for any variable are missing,
-    empty log structures are used. Data from active and reactive energy logs are expected to be aligned. Raises
-    a ValueError if their time-steps differ.
+    Collects active and reactive energy logs for the specified device, phase,
+    and direction over the given time span. If any required measurement nodes
+    are missing, empty log structures are returned instead.
+
+    Power factor and power factor direction are calculated from the active and
+    reactive energy values, both per data point (when formatted output is
+    requested) and as global aggregate values.
 
     Args:
-        device (Device): The meter device containing the nodes for measurement.
-        phase (NodePhase): The phase for which to retrieve energy data.
-        direction (NodeDirection): The current direction (e.g., import/export).
-        timedb (TimeDBClient): Database client for querying logs.
-        time_span (TimeSpanParameters): Time parameters (start/end, step, format) for retrieval.
+        device: Meter device containing measurement nodes.
+        phase: Electrical phase to retrieve data for.
+        direction: Energy flow direction (e.g., import or export).
+        timedb: Time-series database client used to query logs.
+        time_span: Time span parameters controlling range, formatting, and
+            aggregation behavior.
 
     Returns:
-        Dict[str, Any]: A dictionary with energy and power factor logs, each structured as:
-            - 'active_energy': NodeLogs dict with energy log details
-            - 'reactive_energy': NodeLogs dict with reactive energy log details
-            - 'power_factor': NodeLogs dict with calculated per-point/global power factor(s)
-            - 'power_factor_direction': NodeLogs dict with calculated per-point/global power factor direction(s)
+        Dict[str, Any]: Dictionary containing energy and calculated metrics with
+        the following keys:
+            - "active_energy": Active energy logs.
+            - "reactive_energy": Reactive energy logs.
+            - "power_factor": Calculated power factor logs.
+            - "power_factor_direction": Calculated power factor direction logs.
 
-    Raises:
-        ValueError: If the time_step of active and reactive energy logs do not match.
+    Notes:
+        - Missing nodes do not raise errors; empty log structures are returned.
+        - Power factor values are derived from active and reactive energy data.
+        - Global metrics are always calculated when possible.
     """
 
     active_energy_node_name = meter_util.create_node_name("active_energy", phase, direction)
@@ -77,9 +83,6 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
             time_step=time_span.time_step,
             global_metrics=meter_util.get_empty_log_global_metrics(numeric=True, incremental=True)
         )
-
-    if active_energy_logs.time_step != reactive_energy_logs.time_step:
-        raise ValueError(f"Active Energy and Reactive Energy time steps can't be different")
     
     if pf_node:
         pf_dp = pf_node.config.decimal_places

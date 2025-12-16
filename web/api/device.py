@@ -1,6 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
 import json
+import sqlite3
 from typing import Dict, Tuple, List, Any, Optional
 from fastapi import APIRouter, Request, Depends
 from starlette.datastructures import UploadFile
@@ -17,46 +18,13 @@ from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
 from web.api.decorator import auth_endpoint, AuthConfigs
 from util.functions.images import process_and_save_image, get_device_image, delete_device_image, rollback_image, flush_bin_images
-from controller.conversion import convert_dict_to_energy_meter
+from controller.parsing import convert_dict_to_energy_meter
 import util.functions.objects as objects
 import web.exceptions as api_exception
+import web.parsers.device as device_parser
 
 #######################################
 
-##########     P A R S E     M E T H O D S     ##########
-
-
-async def _parse_device_request(request: Request) -> Tuple[Dict[str, Any], List[Dict[str, Any]], Optional[UploadFile]]:
-    """
-    Parses a device request, handling both JSON and multipart form data.
-
-    Args:
-        request (Request): The incoming HTTP request.
-
-    Returns:
-        Tuple[Dict[str, Any], List[Dict[str, Any]], Optional[UploadFile]]:
-            - device_data: Parsed device data as a dictionary.
-            - device_nodes: Parsed device nodes as a list of dictionaries.
-            - device_image: Uploaded image file if present, otherwise None.
-    """
-
-    content_type = request.headers.get("content-type", "")
-
-    if content_type.startswith("multipart/form-data"):
-        form = await request.form()
-        device_data: Dict[str, Any] = json.loads(objects.require_field(form, "deviceData", str))
-        device_nodes: List[Dict[str, Any]] = json.loads(objects.require_field(form, "deviceNodes", str))
-        device_image = objects.require_field(form, "deviceImage", UploadFile)
-    else:
-        payload: Dict[str, Any] = await request.json()
-        device_data = objects.require_field(payload, "deviceData", Dict[str, Any])
-        device_nodes = objects.require_field(payload, "deviceNodes", List[Dict[str, Any]])
-        device_image = None
-
-    return device_data, device_nodes, device_image
-
-
-#########################################################
 
 router = APIRouter(prefix="/device", tags=["device"])
 
@@ -72,39 +40,43 @@ async def add_device(
 ) -> JSONResponse:
     """Adds a new device with configuration and optional image."""
 
-    device_data, device_nodes, device_image = await _parse_device_request(request)
+    device_data, device_nodes, device_image = await device_parser.parse_device_request(request)
     device_name = objects.require_field(device_data, "name", str)
+    
+    if device_name is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_NAME)
 
-    # Tries to initialize a new energy meter with the given configuration. Throws exception if an error is found in the configuration
-    energy_meter = convert_dict_to_energy_meter(device_data, device_nodes, device_manager.publish_queue, device_manager.measurements_queue)
+    record = device_parser.parse_device(new_device=True, dict_device=device_data, dict_nodes=device_nodes)
+    # NEEDS VALIDATION BETWEEN PARSING AND INSTANTIATION. MOVE CREATION TO END OF TRY BLOCK WHEN VALIDATION EXISTS
+    new_device = device_manager.create_device_from_record(record)
 
     # DB Update
     conn, cursor = database.require_client()
     device_id = None
     
     try:
-        device_id = database.insert_energy_meter(energy_meter.get_meter_record(), conn, cursor)
+        device_id = database.insert_energy_meter(record, conn, cursor)
         if device_id is None:
-            raise api_exception.DeviceCreationError(f"Could not add device with name {device_name} to the database.")
+            raise api_exception.DeviceCreationError(api_exception.Errors.DEVICE.DEVICE_STORAGE_FAILED)
 
-        energy_meter.id = device_id
+        new_device.id = device_id
 
         if device_image:
             if not process_and_save_image(device_image, device_id, 200, "db/device_img/"):
-                raise api_exception.DeviceCreationError(f"Could not save the uploaded image for device with name {device_name} and id {device_id}.")
+                raise api_exception.DeviceCreationError(api_exception.Errors.DEVICE.SAVE_IMAGE_FAILED)
             
         if not timedb.create_db(device_name, device_id):
-            raise api_exception.DeviceCreationError(f"Could not create time series DB for device with name {device_name} and id {device_id}.")
+            raise api_exception.DeviceCreationError(api_exception.Errors.DEVICE.DEVICE_STORAGE_FAILED)
 
         conn.commit()
-        
+    
     except Exception:
         conn.rollback()
         if device_id:
             delete_device_image(device_id, "db/device_img/")
         raise
     
-    await device_manager.add_device(energy_meter)
+    await device_manager.add_device(new_device)
     return JSONResponse(content={"message": "Device added sucessfully."})
 
 
@@ -118,26 +90,29 @@ async def edit_device(
 ) -> JSONResponse:
     """Updates existing device configuration and optional image."""
 
-    device_data, device_nodes, device_image = await _parse_device_request(request)
+    device_data, device_nodes, device_image = await device_parser.parse_device_request(request)
     device_id = objects.require_field(device_data, "id", int)
+    
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
 
-    # Tries to initialize a new energy meter with the given configuration. Throws exception if an error is found in the configuration
-    energy_meter = convert_dict_to_energy_meter(device_data, device_nodes, device_manager.publish_queue, device_manager.measurements_queue)
-
-
+    record = device_parser.parse_device(new_device=True, dict_device=device_data, dict_nodes=device_nodes)
+    # NEEDS VALIDATION BETWEEN PARSING AND INSTANTIATION. MOVE CREATION TO END OF TRY BLOCK WHEN VALIDATION EXISTS
+    updated_device = device_manager.create_device_from_record(record)
+    
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     # DB Update
     conn, cursor = database.require_client()
     
     try:
-        if not database.update_energy_meter(energy_meter.get_meter_record(), conn, cursor):
-            raise api_exception.DeviceUpdateError(f"Could not update device with name {device.name} and id {device_id} in the database.")
+        if not database.update_energy_meter(record, conn, cursor):
+            raise api_exception.DeviceUpdateError(api_exception.Errors.DEVICE.UPDATE_STORAGE_FAILED)
         if device_image:
             if not process_and_save_image(device_image, device_id, 200, "db/device_img/", "db/device_img/.bin/"):
-                raise api_exception.DeviceUpdateError(f"Could not save the uploaded image for device with name {device.name} and id {device_id}.")
+                raise api_exception.DeviceUpdateError(api_exception.Errors.DEVICE.SAVE_IMAGE_FAILED)
         
         conn.commit()
         flush_bin_images("db/device_img/.bin/")
@@ -148,7 +123,7 @@ async def edit_device(
         raise
     
     await device_manager.delete_device(device)
-    await device_manager.add_device(energy_meter)
+    await device_manager.add_device(updated_device)
     return JSONResponse(content={"message": "Device edited sucessfully."})
 
 
@@ -163,19 +138,26 @@ async def delete_device(
 ) -> JSONResponse:
     """Removes device from system and deletes associated data."""
 
-    payload: Dict[str, Any] = await request.json()
+    try:
+        payload: Dict[str, Any] = await request.json()  # request payload
+    except Exception as e:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
+    
     device_id = objects.require_field(payload, "device_id", int)
+    
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
 
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     # DB Update
     conn, cursor = database.require_client()
     
     try:
         if not database.delete_device(device.id, conn, cursor):
-            raise api_exception.DeviceDeleteError(f"Could not delete device with name {device.name} and id {device_id} in the database.")
+            raise api_exception.DeviceDeleteError(api_exception.Errors.DEVICE.DELETE_STORAGE_FAILED)
         
         conn.commit()
 
@@ -196,10 +178,19 @@ async def get_device(
 ) -> JSONResponse:
     """Retrieves object with configuration and state of a specific device."""
 
-    device_id = int(objects.require_field(request.query_params, "id", str))
+    device_id = objects.require_field(request.query_params, "id", str)
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    
+    try: 
+        device_id = int(device_id)
+    except Exception:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)
+    
+    
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
     return JSONResponse(content=device.get_device())
 
 
@@ -213,10 +204,18 @@ async def get_device_info(
 ) -> JSONResponse:
     """Retrieves comprehensive device information including history status of the device."""
 
-    device_id = int(objects.require_field(request.query_params, "id", str))
+    device_id = objects.require_field(request.query_params, "id", str)
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    
+    try: 
+        device_id = int(device_id)
+    except Exception:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)    
+    
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
     return JSONResponse(content=device.get_device_info(database.get_device_history))
 
 
@@ -238,10 +237,18 @@ async def get_device_with_image(
 ) -> JSONResponse:
     """Retrieves object and image of a specific device."""
 
-    device_id = int(objects.require_field(request.query_params, "id", str))
+    device_id = objects.require_field(request.query_params, "id", str)
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    
+    try: 
+        device_id = int(device_id)
+    except Exception:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)   
+    
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     device_obj = device.get_device()
     device_obj["image"] = get_device_image(device.id, "default", "db/device_img/")
@@ -258,10 +265,18 @@ async def get_device_info_with_image(
 ) -> JSONResponse:
     """Retrieves device information including history status and image of a specific device."""
 
-    device_id = int(objects.require_field(request.query_params, "id", str))
+    device_id = objects.require_field(request.query_params, "id", str)
+    if device_id is None:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    
+    try: 
+        device_id = int(device_id)
+    except Exception:
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)   
+    
     device = device_manager.get_device(device_id)
     if not device:
-        raise api_exception.DeviceNotFound(f"Device with id {device_id} does not exist.")
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     device_info = device.get_device_info(database.get_device_history)
     device_info["image"] = get_device_image(device.id, "default", "db/device_img/")

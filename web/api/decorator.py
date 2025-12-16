@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 #############LOCAL IMPORTS#############
 
-from web.exceptions import TokenNotInRequest, TokenInRequestInvalid, UserConfigurationExists, InvalidCredentials
+from web.exceptions import InvalidRequest, TokenNotInRequest, TokenInRequestInvalid, UserConfigurationExists, UserConfigurationNotFound, InvalidCredentials, APIException
 from web.safety import HTTPSafety
 from util.debug import LoggerManager
 import util.functions.web as web_util
@@ -18,7 +18,7 @@ import util.functions.web as web_util
 #######################################
 
 
-DEFAULT_INCREMENT_EXCEPTIONS = [TokenNotInRequest, TokenInRequestInvalid, FileNotFoundError]  # Default exceptions that should increment failed requests
+DEFAULT_INCREMENT_EXCEPTIONS = [InvalidRequest, TokenNotInRequest, TokenInRequestInvalid]  # Default exceptions that should increment failed requests
 
 
 @dataclass
@@ -32,7 +32,7 @@ class APIMethodConfig:
     """
 
     requires_auth: bool = True
-    increment_exceptions: List[Type[Exception]] = field(default_factory=list)  # Exception types that increment failed requests
+    increment_exceptions: List[Type[APIException]] = field(default_factory=list)  # Exception types that increment failed requests
 
 
 def auth_endpoint(config: APIMethodConfig):
@@ -72,7 +72,7 @@ def auth_endpoint(config: APIMethodConfig):
 
                 return result
             
-            except Exception as e:
+            except APIException as e:
                 exception_name = e.__class__.__name__
 
                 all_increment_exceptions = (
@@ -96,7 +96,9 @@ def auth_endpoint(config: APIMethodConfig):
                     return JSONResponse(status_code=401, content={"remaining": safety.get_remaining_requests(request), "error": str(e)})
                 else:
                     safety.clean_failed_requests(request, web_util.get_api_url(request))  # Clean failed requests if the exception was not of incrementing type
+                    
 
+            except Exception as e:
                 # Handle unexpected exceptions
                 logger.exception(f"Failed {web_util.get_api_url(request)} API due to server error: {str(e)}")
                 return JSONResponse(status_code=500, content={"error": str(e)})
@@ -111,9 +113,9 @@ class AuthConfigs:
     """Simple presets for common auth endpoint patterns."""
 
     # Standard login endpoint
-    LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[ValueError, InvalidCredentials])
-    AUTO_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[ValueError])
-    LOGOUT = APIMethodConfig(increment_exceptions=[ValueError])
+    LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[InvalidCredentials, UserConfigurationNotFound])
+    AUTO_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[InvalidCredentials, UserConfigurationNotFound])
+    LOGOUT = APIMethodConfig(increment_exceptions=[InvalidCredentials, UserConfigurationNotFound])
     CREATE_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[UserConfigurationExists])
-    CHANGE_PASSWORD = APIMethodConfig(increment_exceptions=[ValueError, InvalidCredentials])
-    PROTECTED = APIMethodConfig(increment_exceptions=[])
+    CHANGE_PASSWORD = APIMethodConfig(increment_exceptions=[InvalidCredentials, UserConfigurationNotFound])
+    PROTECTED = APIMethodConfig(increment_exceptions=[InvalidCredentials, UserConfigurationNotFound])
