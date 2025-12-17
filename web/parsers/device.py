@@ -159,10 +159,11 @@ def parse_communication_options(dict_communication_options: Dict[str, Any], prot
     """
 
     # Get protocol plugin from registry
-    plugin = ProtocolRegistry.get_protocol_plugin(protocol)
-    if not plugin:
+    try:
+        plugin = ProtocolRegistry.get_protocol_plugin(protocol)
+    except NotImplementedError as e:
         raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_PROTOCOL)
-        
+    
     try:
         dataclass_fields, optional_fields = objects.check_required_keys(dict_communication_options, plugin.options_class)
     except KeyError as e:
@@ -207,7 +208,7 @@ def parse_device(new_device: bool, dict_device: Dict[str, Any], dict_nodes: List
     
     # Check for Configuration fields
     try:
-        objects.check_required_keys(dict_device, EnergyMeterRecord)
+        objects.check_required_keys(dict_device, EnergyMeterRecord, ("nodes",))
     except KeyError as e:
         missing_fields = list(e.args[0]) if e.args else []
         raise api_exception.InvalidRequestPayload(error=api_exception.Errors.DEVICE.MISSING_DEVICE_FIELDS, details={"fields": missing_fields})

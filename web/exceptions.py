@@ -36,7 +36,6 @@ class APIException(Exception):
 
 class InvalidRequestPayload(APIException):
     """Raised when a request body is malformed, invalid, or missing required fields."""
-
     pass
 
 
@@ -45,37 +44,35 @@ class InvalidRequestPayload(APIException):
 
 class TokenNotInRequest(APIException):
     """Raised when the safety token is not in the request"""
-
     pass
 
 
 class TokenInRequestInvalid(APIException):
     """Raised when the safety token in the request is invalid or doesn't exist in the registered safety tokens"""
-
     pass
 
 
 class UserConfigurationExists(APIException):
     """Raised when user configuration is trying to be created but the file already exists"""
-
     pass
 
 
 class UserConfigurationNotFound(APIException):
     """Raised when the user configuration does not exist or has not been initialized."""
+    pass
 
+class UserConfigCorrupted(APIException):
+    """Raised when the user configuration is corrupted or cannot be parsed."""
     pass
 
 
 class InvalidCredentials(APIException):
     """Raised when credentials (username and password) are invalid (not recognized)."""
-
     pass
 
 
 class InvalidRequest(APIException):
     """Raised when a request is malformed or contains invalid data."""
-
     pass
 
 
@@ -84,19 +81,16 @@ class InvalidRequest(APIException):
 
 class DeviceCreationError(APIException):
     """Raised when a device cannot be created or persisted in the system."""
-
     pass
 
 
 class DeviceUpdateError(APIException):
     """Raised when updating an existing device configuration or state fails."""
-
     pass
 
 
 class DeviceDeleteError(APIException):
     """Raised when deletion of a device or its associated resources fails."""
-
     pass
 
 
@@ -105,7 +99,6 @@ class DeviceDeleteError(APIException):
 
 class DeviceNotFound(APIException):
     """Raised when a requested device does not exist in the system."""
-
     pass
 
 
@@ -114,7 +107,6 @@ class DeviceNotFound(APIException):
 
 class NodeNotFound(APIException):
     """Raised when a requested node does not exist in the system."""
-
     pass
 
 
@@ -188,6 +180,11 @@ class Errors:
             status_code=404,
             error_id="AUTH.USER_CONFIG_NOT_FOUND",
             default_message="User configuration does not exist.",
+        )
+        USER_CONFIG_CORRUPT = APIErrorDef(
+            status_code=500,
+            error_id="AUTH.USER_CONFIG_CORRUPT",
+            default_message="User configuration is corrupted.",
         )
         INVALID_CREDENTIALS = APIErrorDef(
             status_code=401,

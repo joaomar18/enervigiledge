@@ -1,6 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
-from typing import Dict, Any, Type, Union, Tuple, List, Optional, TypeVar, get_origin, cast
+from typing import Dict, Any, Type, Union, Tuple, List, Optional, TypeVar, get_origin, get_args, cast
 from enum import Enum
 import dataclasses
 import os
@@ -80,7 +80,7 @@ def add_value_to_dict(dict: Dict[str, Any], field: dataclasses.Field, value: Any
 
     Raises:
         ValueError: If the value cannot be validated. The exception argument
-        contains the field name as a tuple.
+        contains the field name.
     """
 
     try:
@@ -89,7 +89,7 @@ def add_value_to_dict(dict: Dict[str, Any], field: dataclasses.Field, value: Any
         if require_field(dict, field.name, real_type) is None:
             raise ValueError(f"{field.name} with invalid type or missing.")
     except (TypeError, ValueError) as e:
-        raise ValueError(tuple(field.name)) from e
+        raise ValueError(field.name) from e
 
 
 def create_dict_from_fields(
@@ -154,8 +154,11 @@ def require_field(data: dict[str, Any] | FormData | QueryParams, key: str, expec
 
     origin = get_origin(expected_type) or expected_type
 
-    if isinstance(origin, type):
-        if not isinstance(value, origin):
+    if origin is Union:
+        if not isinstance(value, get_args(expected_type)):
+            return None
+    elif isinstance(expected_type, type):
+        if not isinstance(value, expected_type):
             return None
 
     return cast(T, value)

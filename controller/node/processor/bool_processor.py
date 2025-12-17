@@ -9,7 +9,6 @@ from datetime import datetime
 
 from controller.node.processor.processor import NodeProcessor
 from model.controller.node import NodeConfig
-from controller.exceptions import NotImplemeted
 
 #######################################
 
@@ -36,9 +35,9 @@ class BoolNodeProcessor(NodeProcessor[bool]):
             value (bool): The boolean value (ignored).
 
         Raises:
-            NotImplemeted: Always raised as alarms are not supported for boolean values.
+            NotImplemetedError: Always raised as alarms are not supported for boolean values.
         """
-        raise NotImplemeted(f"check_alarms method is not implemented for bool nodes")
+        raise NotImplementedError(f"check_alarms method is not implemented for bool nodes")
 
     def set_value(self, value: Optional[bool]) -> None:
         """

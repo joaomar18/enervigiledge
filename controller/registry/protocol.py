@@ -17,7 +17,6 @@ from model.controller.protocol.modbus_rtu import ModbusRTUOptions, ModbusRTUNode
 from model.controller.protocol.opcua import OPCUAOptions, OPCUANodeOptions, OPCUA_TO_INTERNAL_TYPE_MAP
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
 from protocol.opcua.opcua_device import OPCUAEnergyMeter
-from controller.exceptions import NotImplemeted
 
 #######################################
 
@@ -55,10 +54,10 @@ class ProtocolRegistry:
             NodeFactory: Factory function for creating base nodes.
 
         Raises:
-            NotImplemeted: If base node factory is not implemented.
+            NotImplementedError: If base node factory is not implemented.
         """
         if _base_node_factory is None:
-            raise NotImplemeted(f"Base node factory is not implemented.")
+            raise NotImplementedError(f"Base node factory is not implemented.")
 
         return _base_node_factory
 
@@ -89,12 +88,12 @@ class ProtocolRegistry:
             ProtocolPlugin: Plugin containing protocol-specific implementations.
 
         Raises:
-            NotImplemeted: If protocol plugin is not implemented.
+            NotImplementedError: If protocol plugin is not implemented.
         """
 
         plugin = ProtocolRegistry._registry.get(protocol)
         if plugin is None:
-            raise NotImplemeted(f"Protocol {protocol} doesn't have a plugin implemented.")
+            raise NotImplementedError(f"Protocol {protocol} doesn't have a plugin implemented.")
 
         return plugin
 

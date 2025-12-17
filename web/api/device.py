@@ -18,7 +18,6 @@ from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
 from web.api.decorator import auth_endpoint, AuthConfigs
 from util.functions.images import process_and_save_image, get_device_image, delete_device_image, rollback_image, flush_bin_images
-from controller.parsing import convert_dict_to_energy_meter
 import util.functions.objects as objects
 import web.exceptions as api_exception
 import web.parsers.device as device_parser

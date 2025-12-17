@@ -13,7 +13,6 @@ from controller.node.processor.float_processor import FloatNodeProcessor
 from controller.node.processor.int_processor import IntNodeProcessor
 from controller.node.processor.string_processor import StringNodeProcessor
 from model.controller.node import NodeType, NodeConfig
-from controller.exceptions import NotImplemeted
 
 #######################################
 
@@ -61,11 +60,11 @@ class TypeRegistry:
             TypePlugin: The plugin containing the processor factory.
 
         Raises:
-            NotImplemeted: If no plugin is registered for the node type.
+            NotImplemetedError: If no plugin is registered for the node type.
         """
         plugin = TypeRegistry._registry.get(node_type)
         if plugin is None:
-            raise NotImplemeted(f"Type {node_type} doesn't have a plugin implemented.")
+            raise NotImplementedError(f"Type {node_type} doesn't have a plugin implemented.")
 
         return plugin
 

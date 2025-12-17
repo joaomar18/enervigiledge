@@ -9,7 +9,6 @@ from datetime import datetime
 
 from controller.node.processor.processor import NodeProcessor
 from model.controller.node import NodeConfig
-from controller.exceptions import NotImplemeted
 
 #######################################
 
@@ -36,9 +35,9 @@ class StringNodeProcessor(NodeProcessor[str]):
             value (str): The string value (ignored).
 
         Raises:
-            NotImplemeted: Always raised as alarms are not supported for string values.
+            NotImplementedError: Always raised as alarms are not supported for string values.
         """
-        raise NotImplemeted(f"check_alarms method is not implemented for string nodes")
+        raise NotImplementedError(f"check_alarms method is not implemented for string nodes")
 
     def set_value(self, value: Optional[str]) -> None:
         """

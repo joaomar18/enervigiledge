@@ -73,6 +73,7 @@ def auth_endpoint(config: APIMethodConfig):
                 return result
             
             except APIException as e:
+                print("API Exception")
                 exception_name = e.__class__.__name__
 
                 all_increment_exceptions = (
@@ -96,9 +97,13 @@ def auth_endpoint(config: APIMethodConfig):
                     return JSONResponse(status_code=401, content={"remaining": safety.get_remaining_requests(request), "error": str(e)})
                 else:
                     safety.clean_failed_requests(request, web_util.get_api_url(request))  # Clean failed requests if the exception was not of incrementing type
-                    
+                    logger.exception(
+                        f"Failed {web_util.get_api_url(request)} API due to exception {exception_name} from IP: {web_util.get_ip_address(request)} due to error: {str(e)}, detail: {e.details}"
+                    )
+                    return JSONResponse(status_code=401, content={"error": str(e)})
 
             except Exception as e:
+                print("Unexpected Exception")
                 # Handle unexpected exceptions
                 logger.exception(f"Failed {web_util.get_api_url(request)} API due to server error: {str(e)}")
                 return JSONResponse(status_code=500, content={"error": str(e)})

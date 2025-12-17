@@ -114,7 +114,7 @@ def parse_node_config(dict_node_config: Dict[str, Any]) -> BaseNodeRecordConfig:
         invalid_field = e.args[0] if e.args else None
         raise api_exception.InvalidRequestPayload(error=api_exception.Errors.NODES.INVALID_NODE_CONFIG_FIELDS, details={"field": invalid_field})
         
-    return BaseNodeRecordConfig(**arguments) 
+    return BaseNodeRecordConfig(**arguments)
 
 
 def parse_node_protocol_options(dict_node_protocol_options: Dict[str, Any], protocol: Protocol) -> BaseNodeProtocolOptions:
@@ -141,13 +141,17 @@ def parse_node_protocol_options(dict_node_protocol_options: Dict[str, Any], prot
             - If a protocol option field has an invalid value or type.
     """
     
-    # Get protocol plugin from registry
-    plugin = ProtocolRegistry.get_protocol_plugin(protocol)
-    if not plugin:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.INVALID_PROTOCOL)
+    if protocol is Protocol.NONE:
+        options_class = ProtocolRegistry.no_protocol_options
+    else:
+        try:
+            plugin = ProtocolRegistry.get_protocol_plugin(protocol)
+            options_class = plugin.node_options_class
+        except NotImplementedError as e:
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.INVALID_PROTOCOL)        
     
     try:
-        dataclass_fields, optional_fields = objects.check_required_keys(dict_node_protocol_options, plugin.node_options_class)
+        dataclass_fields, optional_fields = objects.check_required_keys(dict_node_protocol_options, options_class)
     except KeyError as e:
         missing_fields = list(e.args[0]) if e.args else []
         raise api_exception.InvalidRequestPayload(error=api_exception.Errors.NODES.MISSING_NODE_PROTOCOL_OPTIONS_FIELDS, details={"fields": missing_fields})
@@ -158,7 +162,7 @@ def parse_node_protocol_options(dict_node_protocol_options: Dict[str, Any], prot
         invalid_field = e.args[0] if e.args else None
         raise api_exception.InvalidRequestPayload(error=api_exception.Errors.NODES.INVALID_NODE_PROTOCOL_OPTIONS_FIELDS, details={"field": invalid_field})
         
-    return plugin.node_options_class(**arguments) 
+    return options_class(**arguments) 
 
 
 def parse_node_attributes(dict_node_attributes: Dict[str, Any]) -> NodeAttributes:

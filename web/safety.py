@@ -216,7 +216,10 @@ class HTTPSafety:
 
         stored_username = objects.require_field(config, "username", str)
         stored_hash = objects.require_field(config, "password_hash", str)
-
+        
+        if stored_username is None or stored_hash is None:
+            raise api_exception.UserConfigCorrupted(api_exception.Errors.AUTH.USER_CONFIG_CORRUPT)
+        
         if username != stored_username:
             raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_CREDENTIALS)
 
@@ -313,7 +316,9 @@ class HTTPSafety:
             raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_CREDENTIALS)
 
         stored_hash = objects.require_field(config, "password_hash", str)
-
+        if stored_hash is None:
+            raise api_exception.UserConfigCorrupted(api_exception.Errors.AUTH.USER_CONFIG_CORRUPT)
+            
         try:
             self.ph.verify(stored_hash, password)
         except (VerifyMismatchError, InvalidHashError):

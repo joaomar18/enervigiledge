@@ -424,14 +424,18 @@ class SQLiteDBClient:
                 for node_name, node_protocol, config_str, protocol_options_str, attributes_str in node_rows:
                     
                     node_protocol = Protocol(node_protocol)
-                    node_plugin = ProtocolRegistry.get_protocol_plugin(node_protocol)
-                    
+                    if node_protocol is Protocol.NONE:
+                        protocol_options=ProtocolRegistry.no_protocol_options(**json.loads(protocol_options_str))
+                    else:
+                        node_plugin = ProtocolRegistry.get_protocol_plugin(node_protocol)
+                        protocol_options = node_plugin.node_options_class(**json.loads(protocol_options_str))
+                        
                     node = NodeRecord(
                         device_id=device_id,
                         name=node_name,
                         protocol=node_protocol,
                         config=BaseNodeRecordConfig(**json.loads(config_str)),
-                        protocol_options=node_plugin.node_options_class(**json.loads(protocol_options_str)),
+                        protocol_options=protocol_options,
                         attributes=NodeAttributes(**json.loads(attributes_str)),
                     )
                     nodes.add(node)
