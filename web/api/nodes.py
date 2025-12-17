@@ -20,6 +20,7 @@ from model.controller.node import NodePhase, NodeDirection
 import util.functions.objects as objects
 import util.functions.date as date
 import web.exceptions as api_exception
+import web.parsers.device as device_parser
 import web.parsers.nodes as nodes_parser
 
 #######################################
@@ -35,17 +36,8 @@ async def get_nodes_state(
 ) -> JSONResponse:
     """Retrieves current state of device nodes with optional filtering."""
 
-    device_id = objects.require_field(request.query_params, "id", str)
+    device_id = device_parser.parse_device_id(request.query_params)
     filter: Optional[str] = request.query_params.get("filter")  # Optional
-    
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
-    
-    try: 
-        device_id = int(device_id)
-    except Exception:    
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)   
-    
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
@@ -64,19 +56,10 @@ async def get_node_additional_info(
     request: Request, safety: HTTPSafety = Depends(services.get_safety), device_manager: DeviceManager = Depends(services.get_device_manager)
 ) -> JSONResponse:
 
-    device_id = objects.require_field(request.query_params, "id", str)
-    name = objects.require_field(request.query_params, "node_name", str)
-
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
-    
-    if name is None:
+    device_id = device_parser.parse_device_id(request.query_params)
+    name = request.query_params.get("node_name")
+    if name is None or not objects.validate_field_type(request.query_params, "node_name", str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_NAME)
-    
-    try: 
-        device_id = int(device_id)
-    except Exception:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)  
     
     device = device_manager.get_device(device_id)
     if not device:
@@ -102,17 +85,8 @@ async def get_nodes_config(
 ) -> JSONResponse:
     """Retrieves configuration of device nodes with optional filtering."""
 
-    device_id = objects.require_field(request.query_params, "id", str)
+    device_id = device_parser.parse_device_id(request.query_params)
     filter: Optional[str] = request.query_params.get("filter")  # Optional
-    
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
-    
-    try: 
-        device_id = int(device_id)
-    except Exception:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)  
-
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
@@ -144,21 +118,11 @@ async def get_logs_from_node(
 ) -> JSONResponse:
     """Retrieves historical logs from a specific device node within time range."""
 
-    device_id = objects.require_field(request.query_params, "id", str)
-    name = objects.require_field(request.query_params, "node_name", str)
-    formatted = objects.check_bool_str(request.query_params.get("formatted"))
-    
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
-    
-    if name is None:
+    device_id = device_parser.parse_device_id(request.query_params)
+    name = request.query_params.get("node_name")
+    if name is None or not objects.validate_field_type(request.query_params, "node_name", str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_NAME)
-    
-    try: 
-        device_id = int(device_id)
-    except Exception:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)  
-    
+    formatted = objects.check_bool_str(request.query_params.get("formatted"))
     time_span = await nodes_parser.parse_formatted_time_span(request, formatted)
     device = device_manager.get_device(device_id)
     if not device:
@@ -184,23 +148,15 @@ async def get_energy_consumption(
     """Retrieves active and reactive energy data for a specific device phase and direction,
     and computes the corresponding average power factor within the selected time range."""
 
-    device_id = objects.require_field(request.query_params, "device_id", str)
-    phase = objects.require_field(request.query_params, "phase", str)
-    direction = NodeDirection(objects.require_field(request.query_params, "direction", str))
+    device_id = device_parser.parse_device_id(request.query_params)
     
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
-    
-    if phase is None:
+    phase = request.query_params.get("phase")
+    if phase is None or not objects.validate_field_type(request.query_params, "phase", str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_PHASE)
-        
-    if direction is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_ENERGY_DIRECTION)
     
-    try: 
-        device_id = int(device_id)
-    except Exception:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)  
+    direction = request.query_params.get("direction")
+    if direction is None or not objects.validate_field_type(request.query_params, "direction", str):
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_ENERGY_DIRECTION)
     
     try:
         phase = NodePhase(phase)
@@ -235,20 +191,11 @@ async def get_peak_demand_power(
     """Retrieves peak power metrics (min, max, avg) for active and apparent power
     of a specific device phase within the selected time range."""
 
-    device_id = objects.require_field(request.query_params, "device_id", str)
-    phase = objects.require_field(request.query_params, "phase", str)
-    
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
-    
-    if phase is None:
+    device_id = device_parser.parse_device_id(request.query_params)
+    phase = request.query_params.get("phase")
+    if phase is None or not objects.validate_field_type(request.query_params, "phase", str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_PHASE)
-    
-    try: 
-        device_id = int(device_id)
-    except Exception:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)  
-    
+
     try:
         phase = NodePhase(phase)
     except Exception:
@@ -280,13 +227,9 @@ async def delete_logs_from_node(
     except Exception as e:
         raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
     
-    device_id = objects.require_field(payload, "device_id", int)
-    name = objects.require_field(payload, "node_name", str)
-    
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
-    
-    if name is None:
+    device_id = device_parser.parse_device_id(request.query_params)
+    name = request.query_params.get("node_name")
+    if name is None or not objects.validate_field_type(request.query_params, "node_name", str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_NAME)
     
     device = device_manager.get_device(device_id)
@@ -319,11 +262,7 @@ async def delete_all_logs(
     except Exception as e:
         raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
     
-    device_id = objects.require_field(payload, "device_id", int)
-    
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
-    
+    device_id = device_parser.parse_device_id(request.query_params)
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")

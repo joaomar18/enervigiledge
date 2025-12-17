@@ -68,15 +68,12 @@ class EnergyMeterOptions:
 @dataclass
 class BaseCommunicationOptions:
     """
-    Base configuration options for communication.
+    Base type for protocol-specific communication option models.
 
-    Attributes:
-        read_period (int): Interval in seconds between read operations. Defaults to 5.
-        timeout (int): Timeout in seconds for communication attempts. Defaults to 5.
+    Acts as a common interface for all communication option subclasses.
+    This class does not define any concrete attributes itself but provides
+    shared behavior for serialization and type consistency across protocols.
     """
-
-    read_period: int = 5
-    timeout: int = 5
 
     def get_communication_options(self) -> Dict[str, Any]:
         """

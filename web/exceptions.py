@@ -233,20 +233,24 @@ class Errors:
             error_id="DEVICE.MISSING_DEVICE_FIELDS",
             default_message="There are missing fields in the device configuration."
         )
-
         MISSING_DEVICE_OPTIONS = APIErrorDef(
             status_code=400,
             error_id="DEVICE.MISSING_OPTIONS",
             default_message="Device options is missing or in an invalid format.",
+        )
+        MISSING_DEVICE_COMUNICATION = APIErrorDef(
+            status_code=400,
+            error_id="DEVICE.MISSING_DEVICE_COMUNICATION",
+            default_message="Device communication options is missing or in an invalid format.",
         )
         MISSING_DEVICE_OPTIONS_FIELDS = APIErrorDef(
             status_code=400,
             error_id="DEVICE.MISSING_OPTIONS_FIELDS",
             default_message="There are missing fields in the device options.",
         )
-        MISSING_DEVICE_COMMUNICATION_FIELDS = APIErrorDef(
+        MISSING_DEVICE_COMUNICATION_FIELDS = APIErrorDef(
             status_code=400,
-            error_id="DEVICE.MISSING_DEVICE_COMMUNICATION_FIELDS",
+            error_id="DEVICE.MISSING_DEVICE_COMUNICATION_FIELDS",
             default_message="There are missing fields in the device communication options.",
         )
         MISSING_PROTOCOL = APIErrorDef(
@@ -289,9 +293,9 @@ class Errors:
             error_id="DEVICE.INVALID_OPTIONS_FIELDS",
             default_message="Invalid field value in the device options.",
         )
-        INVALID_DEVICE_COMMUNICATION_FIELDS = APIErrorDef(
+        INVALID_DEVICE_COMUNICATION_FIELDS = APIErrorDef(
             status_code=400,
-            error_id="DEVICE.INVALID_COMMUNICATION_FIELDS",
+            error_id="DEVICE.INVALID_COMUNICATION_FIELDS",
             default_message="Invalid field value in the device communication options.",
         )
         DEVICE_STORAGE_FAILED = APIErrorDef(

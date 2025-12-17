@@ -40,11 +40,10 @@ async def add_device(
     """Adds a new device with configuration and optional image."""
 
     device_data, device_nodes, device_image = await device_parser.parse_device_request(request)
-    device_name = objects.require_field(device_data, "name", str)
-    
-    if device_name is None:
+    if not objects.validate_field_type(device_data, "name", str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_NAME)
-
+    device_name: str = device_data["name"]
+    
     record = device_parser.parse_device(new_device=True, dict_device=device_data, dict_nodes=device_nodes)
     # NEEDS VALIDATION BETWEEN PARSING AND INSTANTIATION. MOVE CREATION TO END OF TRY BLOCK WHEN VALIDATION EXISTS
     new_device = device_manager.create_device_from_record(record)
@@ -90,10 +89,7 @@ async def edit_device(
     """Updates existing device configuration and optional image."""
 
     device_data, device_nodes, device_image = await device_parser.parse_device_request(request)
-    device_id = objects.require_field(device_data, "id", int)
-    
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    device_id = device_parser.parse_device_id(device_data)
 
     record = device_parser.parse_device(new_device=True, dict_device=device_data, dict_nodes=device_nodes)
     # NEEDS VALIDATION BETWEEN PARSING AND INSTANTIATION. MOVE CREATION TO END OF TRY BLOCK WHEN VALIDATION EXISTS
@@ -142,10 +138,7 @@ async def delete_device(
     except Exception as e:
         raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
     
-    device_id = objects.require_field(payload, "device_id", int)
-    
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
+    device_id = device_parser.parse_device_id(payload)
 
     device = device_manager.get_device(device_id)
     if not device:
@@ -177,16 +170,7 @@ async def get_device(
 ) -> JSONResponse:
     """Retrieves object with configuration and state of a specific device."""
 
-    device_id = objects.require_field(request.query_params, "id", str)
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
-    
-    try: 
-        device_id = int(device_id)
-    except Exception:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)
-    
-    
+    device_id = device_parser.parse_device_id(request.query_params)
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
@@ -203,15 +187,7 @@ async def get_device_info(
 ) -> JSONResponse:
     """Retrieves comprehensive device information including history status of the device."""
 
-    device_id = objects.require_field(request.query_params, "id", str)
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
-    
-    try: 
-        device_id = int(device_id)
-    except Exception:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)    
-    
+    device_id = device_parser.parse_device_id(request.query_params)  
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
@@ -236,15 +212,7 @@ async def get_device_with_image(
 ) -> JSONResponse:
     """Retrieves object and image of a specific device."""
 
-    device_id = objects.require_field(request.query_params, "id", str)
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
-    
-    try: 
-        device_id = int(device_id)
-    except Exception:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)   
-    
+    device_id = device_parser.parse_device_id(request.query_params)
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
@@ -264,15 +232,7 @@ async def get_device_info_with_image(
 ) -> JSONResponse:
     """Retrieves device information including history status and image of a specific device."""
 
-    device_id = objects.require_field(request.query_params, "id", str)
-    if device_id is None:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
-    
-    try: 
-        device_id = int(device_id)
-    except Exception:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_DEVICE_ID)   
-    
+    device_id = device_parser.parse_device_id(request.query_params)    
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")

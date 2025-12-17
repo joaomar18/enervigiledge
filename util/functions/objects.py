@@ -1,6 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
 from typing import Dict, Any, Type, Union, Tuple, List, Optional, TypeVar, get_origin, get_args, cast
+from types import UnionType
 from enum import Enum
 import dataclasses
 import os
@@ -85,8 +86,7 @@ def add_value_to_dict(dict: Dict[str, Any], field: dataclasses.Field, value: Any
 
     try:
         dict[field.name] = value
-        real_type = resolve_type(field.type)
-        if require_field(dict, field.name, real_type) is None:
+        if not validate_field_type(dict, field.name, field.type):
             raise ValueError(f"{field.name} with invalid type or missing.")
     except (TypeError, ValueError) as e:
         raise ValueError(field.name) from e
@@ -128,40 +128,44 @@ def create_dict_from_fields(
     return output_dict
 
 
-def require_field(data: dict[str, Any] | FormData | QueryParams, key: str, expected_type: Type[T]) -> Optional[T]:
+def validate_field_type(data: dict[str, Any] | FormData | QueryParams, key: str, expected_type: Any) -> bool:
     """
-    Retrieves a field from a mapping-like object and validates its type.
+    Validate the runtime type of a value associated with a key in a mapping.
 
-    The function returns the field value if present and of the expected type,
-    otherwise returns None.
+    Checks whether the given key exists in the provided mapping and whether
+    its value conforms to the specified expected type. Supports basic runtime
+    validation for concrete types and simple union types (e.g. ``str | None``).
+
+    This function performs shallow runtime checks only and does not handle
+    complex typing constructs such as nested generics, containers, or
+    structural typing.
 
     Args:
-        data (dict[str, Any] | FormData | QueryParams): Source object to read from.
-        key (str): Field name to retrieve.
-        expected_type (Type[T]): Expected type of the field value.
+        data: Mapping-like object containing input values (e.g. request data).
+        key: Key whose associated value should be validated.
+        expected_type: Expected runtime type or union of types.
 
     Returns:
-        Optional[T]: The field value if present and valid, otherwise None.
-
-    Note:
-        - This function performs presence and type checks only.
-        - No runtime type conversion is performed.
+        bool: ``True`` if the key exists and the value matches the expected
+        type; ``False`` otherwise.
     """
 
     if key not in data:
-        return None
+        return False
     value = data[key]
 
     origin = get_origin(expected_type) or expected_type
-
-    if origin is Union:
+    if origin in (Union, UnionType):
         if not isinstance(value, get_args(expected_type)):
-            return None
+            return False
     elif isinstance(expected_type, type):
         if not isinstance(value, expected_type):
-            return None
+            return False
+    elif isinstance(expected_type, type) and issubclass(expected_type, Enum):
+        if value not in [e.value for e in expected_type]:
+            return False
 
-    return cast(T, value)
+    return True
 
 
 def require_env_variable(key: str) -> str:

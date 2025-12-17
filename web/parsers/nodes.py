@@ -56,11 +56,9 @@ async def parse_formatted_time_span(request: Request, formatted: bool, force_agg
     if formatted:
         time_step = request.query_params.get("time_step")
         time_step = FormattedTimeStep(time_step) if time_step is not None else None
-        start_time = objects.require_field(request.query_params, "start_time", str)
-        
-        if start_time is None:
+        if not objects.validate_field_type(request.query_params, "start_time", str):
             raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_START_TIME)
-        
+        start_time = request.query_params["start_time"]
         end_time = request.query_params.get("end_time")
         end_time = end_time if end_time is not None else datetime.isoformat(datetime.now())  # If None accounts end time is now
     else:
@@ -101,7 +99,7 @@ def parse_node_config(dict_node_config: Dict[str, Any]) -> BaseNodeRecordConfig:
             - If required configuration fields are missing.
             - If a configuration field has an invalid value or type.
     """
-    
+        
     try:
         dataclass_fields, optional_fields = objects.check_required_keys(dict_node_config, BaseNodeRecordConfig)
     except KeyError as e:
@@ -233,30 +231,30 @@ def parse_node(dict_node: Dict[str, Any], meter_type: EnergyMeterType) -> NodeRe
         raise api_exception.InvalidRequestPayload(error=api_exception.Errors.NODES.MISSING_NODE_FIELDS, details={"fields": missing_fields})
     
     # Name Parsing
-    device_name = objects.require_field(dict_node, "name", str)
-    if device_name is None:
+    if not objects.validate_field_type(dict_node, "name", str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_NAME)
+    device_name: str = dict_node["name"]
     
     # Protocol Parsing
-    protocol = objects.require_field(dict_node, "protocol", str)
-    if protocol is None:
+    if not objects.validate_field_type(dict_node, "protocol", str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_PROTOCOL)
+    protocol: str = dict_node["protocol"]
     try:
         protocol = Protocol(protocol)
     except Exception as e:
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.INVALID_PROTOCOL)
     
     # Node Configuration
-    node_config = objects.require_field(dict_node, "config", Dict[str, Any])
-    if node_config is None:
+    if not objects.validate_field_type(dict_node, "config", Dict[str, Any]):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_CONFIG)
-    node_config = parse_node_config(node_config)
+    node_config_dict: Dict[str, Any] = dict_node["config"]
+    node_config = parse_node_config(node_config_dict)
     
     # Node Protocol Options
-    node_protocol_options = objects.require_field(dict_node, "protocol_options", Dict[str, Any])
-    if node_protocol_options is None:
+    if not objects.validate_field_type(dict_node, "protocol_options", Dict[str, Any]):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_PROTOCOL_OPTIONS)
-    node_protocol_options = parse_node_protocol_options(node_protocol_options, protocol)
+    node_protocol_options_dict: Dict[str, Any] = dict_node["protocol_options"]
+    node_protocol_options = parse_node_protocol_options(node_protocol_options_dict, protocol)
     
     # Node Attributes
     node_dict_attributes: Optional[Dict[str, Any]] = dict_node.get("attributes") #Optional

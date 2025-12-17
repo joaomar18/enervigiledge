@@ -40,7 +40,7 @@ class ProtocolRegistry:
 
     _registry: Dict[Protocol, ProtocolPlugin] = {}
     base_node_factory: Optional[NodeFactory] = None
-    no_protocol_options: Type[BaseNodeProtocolOptions]  = NoProtocolNodeOptions
+    no_protocol_options: Type[BaseNodeProtocolOptions] = NoProtocolNodeOptions
 
     def __init__(self):
         raise TypeError("ProtocolRegistry is a static class and cannot be instantiated")

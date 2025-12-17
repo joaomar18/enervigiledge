@@ -129,12 +129,14 @@ class HTTPSafety:
             payload: Dict[str, Any] = await request.json()  # request payload
         except Exception as e:
             raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
-            
-        username = objects.require_field(payload, "username", str)
-        password = objects.require_field(payload, "password", str)
         
-        if username is None:
+        username: Optional[str] = payload.get("username")
+        if username is None or not objects.validate_field_type(payload, "username", str):
             raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_USERNAME)
+        
+        password: Optional[str] = payload.get("password")
+        if password is None or not objects.validate_field_type(payload, "password", str):
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_PASSWORD)
         
         if password is None:
             raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_PASSWORD)
@@ -183,21 +185,20 @@ class HTTPSafety:
         except Exception as e:
             raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
 
-        username = objects.require_field(payload, "username", str)
-        old_password = objects.require_field(payload, "old_password", str)
-        new_password = objects.require_field(payload, "new_password", str)
-        confirm_new_password = objects.require_field(payload, "confirm_new_password", str)
-        
-        if username is None:
+        username: Optional[str] = payload.get("username")
+        if username is None or not objects.validate_field_type(payload, "username", str):
             raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_USERNAME)
         
-        if old_password is None:
+        old_password: Optional[str] = payload.get("old_password")
+        if old_password is None or not objects.validate_field_type(payload, "old_password", str):
             raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_OLD_PASSWORD)
-
-        if new_password is None:
+        
+        new_password: Optional[str] = payload.get("new_password")
+        if new_password is None or not objects.validate_field_type(payload, "new_password", str):
             raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_NEW_PASSWORD)
         
-        if confirm_new_password is None:
+        confirm_new_password: Optional[str] = payload.get("confirm_new_password")
+        if confirm_new_password is None or not objects.validate_field_type(payload, "confirm_new_password", str):
             raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_NEW_PASSWORD_CONFIRM)
 
         if new_password != confirm_new_password:
@@ -214,10 +215,9 @@ class HTTPSafety:
         with open(HTTPSafety.USER_CONFIG_PATH, "r") as file:
             config: Dict[str, Any] = json.load(file)
 
-        stored_username = objects.require_field(config, "username", str)
-        stored_hash = objects.require_field(config, "password_hash", str)
-        
-        if stored_username is None or stored_hash is None:
+        stored_username: Optional[str] = config.get("username")
+        stored_hash: Optional[str] = config.get("password_hash")
+        if stored_username is None or stored_hash is None or not objects.validate_field_type(config, "stored_username", str) or not objects.validate_field_type(config, "password_hash", str):
             raise api_exception.UserConfigCorrupted(api_exception.Errors.AUTH.USER_CONFIG_CORRUPT)
         
         if username != stored_username:
@@ -293,8 +293,14 @@ class HTTPSafety:
         except Exception as e:
             raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
         
-        username = objects.require_field(payload, "username", str)
-        password = objects.require_field(payload, "password", str)
+        username: Optional[str] = payload.get("username")
+        if username is None or not objects.validate_field_type(payload, "username", str):
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_USERNAME)
+        
+        password: Optional[str] = payload.get("password")
+        if password is None or not objects.validate_field_type(payload, "password", str):
+            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_PASSWORD)
+
         auto_login: bool = payload.get("auto_login", False)
         
         if username is None:
@@ -315,8 +321,8 @@ class HTTPSafety:
         if username != config.get("username") or not validation.validate_password(password):
             raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_CREDENTIALS)
 
-        stored_hash = objects.require_field(config, "password_hash", str)
-        if stored_hash is None:
+        stored_hash: Optional[str] = config.get("password_hash")
+        if stored_hash is None or not objects.validate_field_type(config, "password_hash", str):
             raise api_exception.UserConfigCorrupted(api_exception.Errors.AUTH.USER_CONFIG_CORRUPT)
             
         try:

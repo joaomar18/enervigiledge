@@ -2,7 +2,7 @@
 
 from enum import Enum
 from dataclasses import dataclass
-from typing import List, TYPE_CHECKING
+from typing import List, Dict, Any, TYPE_CHECKING
 
 #######################################
 
@@ -113,6 +113,26 @@ class ModbusRTUFunction(str, Enum):
 
 
 @dataclass
+class ModbusRTUBatchGroup:
+    """
+    Defines a Modbus RTU batch read group.
+
+    Represents a contiguous range of Modbus addresses that can be read
+    in a single Modbus request, along with the node option definitions
+    that map to values within that address range.
+
+    Attributes:
+        start_addr (int): Starting Modbus address of the batch read.
+        size (int): Number of consecutive Modbus registers or data units to read.
+        nodes (List[ModbusRTUNode]): List of Modbus RTU nodes whose values are contained within this batch read range.
+    """
+
+    start_addr: int
+    size: int
+    nodes: List["ModbusRTUNode"]
+    
+
+@dataclass
 class ModbusRTUNodeOptions(BaseNodeProtocolOptions):
     """
     Protocol-specific configuration for a Modbus RTU node.
@@ -136,29 +156,34 @@ class ModbusRTUNodeOptions(BaseNodeProtocolOptions):
     type: ModbusRTUNodeType
     endian_mode: ModbusRTUNodeMode | None = None
     bit: int | None = None
+    
+    @staticmethod
+    def cast_from_dict(options_dict: Dict[str, Any]) -> "ModbusRTUNodeOptions":
+        """
+        Construct a ModbusRTUNodeOptions instance from a persisted options dictionary.
 
+        Converts stored primitive values (e.g. strings, integers) into their
+        corresponding domain enums and types. Assumes the input dictionary has
+        already been validated.
 
+        Raises:
+            ValueError: If the dictionary cannot be cast into valid Modbus RTU
+            node options (e.g. due to invalid enum values or corrupted data).
+        """
+        
+        try:
+            function = ModbusRTUFunction(options_dict["function"])
+            address = int(options_dict["address"])
+            type = ModbusRTUNodeType(options_dict["type"])
+            endian_mode = ModbusRTUNodeMode(options_dict["endian_mode"]) if options_dict["endian_node"] is not None else None
+            bit = int(options_dict["bit"]) if options_dict["bit"] is not None else None
+            return ModbusRTUNodeOptions(function, address, type, endian_mode, bit)
+                    
+        except Exception as e:
+            raise ValueError(f"Couldn't cast dictionary into Modbus RTU Node Options: {e}.")
+        
+        
 @dataclass
-class ModbusRTUBatchGroup:
-    """
-    Defines a Modbus RTU batch read group.
-
-    Represents a contiguous range of Modbus addresses that can be read
-    in a single Modbus request, along with the node option definitions
-    that map to values within that address range.
-
-    Attributes:
-        start_addr (int): Starting Modbus address of the batch read.
-        size (int): Number of consecutive Modbus registers or data units to read.
-        nodes (List[ModbusRTUNode]): List of Modbus RTU nodes whose values are contained within this batch read range.
-    """
-
-    start_addr: int
-    size: int
-    nodes: List["ModbusRTUNode"]
-
-
-@dataclass(kw_only=True)
 class ModbusRTUOptions(BaseCommunicationOptions):
     """
     Configuration options for Modbus RTU communication.
@@ -171,6 +196,8 @@ class ModbusRTUOptions(BaseCommunicationOptions):
         parity (str): Parity mode (e.g., 'N', 'E', 'O').
         bytesize (int): Number of data bits.
         retries (int): Number of retry attempts on failure. Defaults to 3.
+        read_period (int): Interval in seconds between read operations. Defaults to 5.
+        timeout (int): Timeout in seconds for communication attempts. Defaults to 5.
     """
 
     slave_id: int
@@ -179,4 +206,35 @@ class ModbusRTUOptions(BaseCommunicationOptions):
     stopbits: int
     parity: str
     bytesize: int
+    read_period: int = 5
+    timeout: int = 5
     retries: int = 3
+
+    @staticmethod
+    def cast_from_dict(options_dict: Dict[str, Any]) -> "ModbusRTUOptions":
+        """
+        Construct ModbusRTUOptions from a persisted communication options dictionary.
+
+        Converts stored primitive values into strongly typed Modbus RTU
+        communication options. Assumes the input dictionary has already been
+        validated.
+
+        Raises:
+            ValueError: If the dictionary cannot be cast into valid Modbus RTU
+            communication options (e.g. due to corrupted or incompatible data).
+        """
+                
+        try:
+            slave_id = int(options_dict["slave_id"])
+            port = str(options_dict["port"])
+            baudrate = int(options_dict["baudrate"])
+            stopbits = int(options_dict["stopbits"])
+            parity = str(options_dict["parity"])
+            bytesize = int(options_dict["bytesize"])
+            read_period: int = int(options_dict["read_period"])
+            timeout: int = int(options_dict["timeout"])
+            retries = int(options_dict["retries"])
+            return ModbusRTUOptions(slave_id, port, baudrate, stopbits, parity, bytesize, read_period, timeout, retries)
+                    
+        except Exception as e:
+            raise ValueError(f"Couldn't cast dictionary into Modbus RTU Device Options: {e}.")

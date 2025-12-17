@@ -438,6 +438,8 @@ class SQLiteDBClient:
                         protocol_options=protocol_options,
                         attributes=NodeAttributes(**json.loads(attributes_str)),
                     )
+                    for key, value in protocol_options.get_options().items():
+                        print(f"Value: {value}, Type: {type(value)}")
                     nodes.add(node)
                     
                 meter = EnergyMeterRecord(
