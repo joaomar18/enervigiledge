@@ -77,10 +77,6 @@ async def get_node_additional_info(
         raise api_exception.NodeNotFound(api_exception.Errors.NODES.NOT_FOUND)
 
     node_detailed_state = node.get_additional_info()
-
-    if isinstance(device, EnergyMeter):
-        node_detailed_state.update({"read_period": device.communication_options.read_period})
-
     return JSONResponse(content=node_detailed_state)
 
 

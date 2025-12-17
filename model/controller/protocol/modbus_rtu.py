@@ -176,7 +176,7 @@ class ModbusRTUNodeOptions(BaseNodeProtocolOptions):
             function = ModbusRTUFunction(options_dict["function"])
             address = int(options_dict["address"])
             type = ModbusRTUNodeType(options_dict["type"])
-            endian_mode = ModbusRTUNodeMode(options_dict["endian_mode"]) if options_dict["endian_node"] is not None else None
+            endian_mode = ModbusRTUNodeMode(options_dict["endian_mode"]) if options_dict["endian_mode"] is not None else None
             bit = int(options_dict["bit"]) if options_dict["bit"] is not None else None
             return ModbusRTUNodeOptions(function, address, type, endian_mode, bit)
 
@@ -232,8 +232,8 @@ class ModbusRTUOptions(BaseCommunicationOptions):
             stopbits = int(options_dict["stopbits"])
             parity = str(options_dict["parity"])
             bytesize = int(options_dict["bytesize"])
-            read_period: int = int(options_dict["read_period"])
-            timeout: int = int(options_dict["timeout"])
+            read_period = int(options_dict["read_period"])
+            timeout = int(options_dict["timeout"])
             retries = int(options_dict["retries"])
             return ModbusRTUOptions(slave_id, port, baudrate, stopbits, parity, bytesize, read_period, timeout, retries)
 

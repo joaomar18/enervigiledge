@@ -221,17 +221,17 @@ class BaseNodeRecordConfig:
             publish = bool(config_dict["publish"])
             calculated = bool(config_dict["calculated"])
             custom = bool(config_dict["custom"])
-            decimal_places = bool(config_dict["decimal_places"]) if config_dict["decimal_places"] is not None else None
+            decimal_places = int(config_dict["decimal_places"]) if config_dict["decimal_places"] is not None else None
             logging = bool(config_dict["logging"])
             logging_period = int(config_dict["logging_period"])
             min_alarm = bool(config_dict["min_alarm"])
             max_alarm = bool(config_dict["max_alarm"])
-            min_alarm_value = bool(config_dict["min_alarm_value"]) if config_dict["min_alarm_value"] is not None else None
-            max_alarm_value = bool(config_dict["max_alarm_value"]) if config_dict["max_alarm_value"] is not None else None
+            min_alarm_value = float(config_dict["min_alarm_value"]) if config_dict["min_alarm_value"] is not None else None
+            max_alarm_value = float(config_dict["max_alarm_value"]) if config_dict["max_alarm_value"] is not None else None
             min_warning = bool(config_dict["min_warning"])
             max_warning = bool(config_dict["max_warning"])
-            min_warning_value = bool(config_dict["min_warning_value"]) if config_dict["min_warning_value"] is not None else None
-            max_warning_value = bool(config_dict["max_warning_value"]) if config_dict["max_warning_value"] is not None else None
+            min_warning_value = float(config_dict["min_warning_value"]) if config_dict["min_warning_value"] is not None else None
+            max_warning_value = float(config_dict["max_warning_value"]) if config_dict["max_warning_value"] is not None else None
             is_counter = bool(config_dict["is_counter"]) if config_dict["is_counter"] is not None else None
             counter_mode = CounterMode(config_dict["counter_mode"]) if config_dict["counter_mode"] is not None else None
             return BaseNodeRecordConfig(
