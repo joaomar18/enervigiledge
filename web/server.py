@@ -96,7 +96,9 @@ class HTTPServer:
         self.server.include_router(auth.router)  # Authorization router (handles authorization endpoints)
         self.server.include_router(device.router)  # Device router (handles device endpoints)
         self.server.include_router(nodes.router)  # Nodes router (handles nodes endpoints)
-        self.server.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8080"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+        self.server.add_middleware(
+            CORSMiddleware, allow_origins=["http://localhost:8080"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
+        )
         self.run_task: Optional[asyncio.Task] = None
 
     async def start(self) -> None:

@@ -16,7 +16,9 @@ import util.functions.meter as meter_util
 #######################################
 
 
-def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: NodeDirection, timedb: TimeDBClient, time_span: TimeSpanParameters) -> Dict[str, Any]:
+def get_meter_energy_consumption(
+    device: Device, phase: NodePhase, direction: NodeDirection, timedb: TimeDBClient, time_span: TimeSpanParameters
+) -> Dict[str, Any]:
     """
     Retrieves energy consumption and derived power factor data for a meter.
 
@@ -56,11 +58,11 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
     active_energy_node = next((n for n in device.nodes if n.config.name == active_energy_node_name), None)
     reactive_energy_node = next((n for n in device.nodes if n.config.name == reactive_energy_node_name), None)
     pf_node = next((n for n in device.nodes if n.config.name == pf_node_name), None)
-    
+
     if active_energy_node:
         active_energy_logs = timedb.get_variable_logs(device.name, device.id, active_energy_node, time_span)
     else:
-        
+
         active_energy_logs = NodeLogs(
             unit=None,
             decimal_places=None,
@@ -68,11 +70,11 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
             is_counter=True,
             points=meter_util.get_empty_log_points(numeric=True, incremental=True, time_span=time_span),
             time_step=time_span.time_step,
-            global_metrics=meter_util.get_empty_log_global_metrics(numeric=True, incremental=True)
+            global_metrics=meter_util.get_empty_log_global_metrics(numeric=True, incremental=True),
         )
 
     if reactive_energy_node:
-        reactive_energy_logs = timedb.get_variable_logs(device.name, device.id, reactive_energy_node, time_span) 
+        reactive_energy_logs = timedb.get_variable_logs(device.name, device.id, reactive_energy_node, time_span)
     else:
         reactive_energy_logs = NodeLogs(
             unit=None,
@@ -81,13 +83,13 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
             is_counter=True,
             points=meter_util.get_empty_log_points(numeric=True, incremental=True, time_span=time_span),
             time_step=time_span.time_step,
-            global_metrics=meter_util.get_empty_log_global_metrics(numeric=True, incremental=True)
+            global_metrics=meter_util.get_empty_log_global_metrics(numeric=True, incremental=True),
         )
-    
+
     if pf_node:
         pf_dp = pf_node.config.decimal_places
     else:
-        pf_dp = 2 # Default to two decimal places if there is no known configuration for the power factor
+        pf_dp = 2  # Default to two decimal places if there is no known configuration for the power factor
 
     pf_logs = NodeLogs(
         unit=None,
@@ -96,7 +98,7 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
         is_counter=False,
         points=meter_util.get_empty_log_points(numeric=True, incremental=False, time_span=time_span),
         time_step=time_span.time_step,
-        global_metrics=meter_util.get_empty_log_global_metrics(numeric=False, incremental=False)
+        global_metrics=meter_util.get_empty_log_global_metrics(numeric=False, incremental=False),
     )
 
     pf_direction_logs = NodeLogs(
@@ -106,35 +108,41 @@ def get_meter_energy_consumption(device: Device, phase: NodePhase, direction: No
         is_counter=None,
         points=meter_util.get_empty_log_points(numeric=False, incremental=False, time_span=time_span),
         time_step=time_span.time_step,
-        global_metrics=meter_util.get_empty_log_global_metrics(numeric=False, incremental=False)
+        global_metrics=meter_util.get_empty_log_global_metrics(numeric=False, incremental=False),
     )
 
     if time_span.formatted:
-        
+
         pf_logs.points.clear()
         pf_direction_logs.points.clear()
-        
+
         for active_point, reactive_point in zip(active_energy_logs.points, reactive_energy_logs.points):
             active_value: Optional[int | float] = active_point.get("value")
             reactive_value: Optional[int | float] = reactive_point.get("value")
             (pf, pf_direction) = meter_calc.calculate_pf_and_dir_with_energy(active_value, reactive_value)
             pf_logs.points.append({"start_time": active_point.get("start_time"), "end_time": active_point.get("end_time"), "value": pf})
-            pf_direction_logs.points.append({"start_time": active_point.get("start_time"), "end_time": active_point.get("end_time"), "value": pf_direction})
+            pf_direction_logs.points.append(
+                {"start_time": active_point.get("start_time"), "end_time": active_point.get("end_time"), "value": pf_direction}
+            )
 
-    global_active_value: Optional[int | float] = active_energy_logs.global_metrics.get("value") if active_energy_logs.global_metrics else None
-    global_reactive_value: Optional[int | float] = reactive_energy_logs.global_metrics.get("value") if reactive_energy_logs.global_metrics else None
+    global_active_value: Optional[int | float] = (
+        active_energy_logs.global_metrics.get("value") if active_energy_logs.global_metrics else None
+    )
+    global_reactive_value: Optional[int | float] = (
+        reactive_energy_logs.global_metrics.get("value") if reactive_energy_logs.global_metrics else None
+    )
     (global_pf, global_pf_direction) = meter_calc.calculate_pf_and_dir_with_energy(global_active_value, global_reactive_value)
     if pf_logs.global_metrics:
         pf_logs.global_metrics["value"] = global_pf
     if pf_direction_logs.global_metrics:
         pf_direction_logs.global_metrics["value"] = global_pf_direction
-        
+
     output: Dict[str, Any] = {}
     output["active_energy"] = active_energy_logs.get_logs()
     output["reactive_energy"] = reactive_energy_logs.get_logs()
     output["power_factor"] = pf_logs.get_logs()
     output["power_factor_direction"] = pf_direction_logs.get_logs()
-    
+
     return output
 
 
@@ -187,7 +195,7 @@ def get_meter_peak_power(device: Device, phase: NodePhase, timedb: TimeDBClient,
             is_counter=False,
             points=[],
             time_step=time_span.time_step,
-            global_metrics=meter_util.get_empty_log_global_metrics(numeric=True, incremental=False)
+            global_metrics=meter_util.get_empty_log_global_metrics(numeric=True, incremental=False),
         )
 
     if reactive_power_node:
@@ -200,7 +208,7 @@ def get_meter_peak_power(device: Device, phase: NodePhase, timedb: TimeDBClient,
             is_counter=False,
             points=[],
             time_step=time_span.time_step,
-            global_metrics=meter_util.get_empty_log_global_metrics(numeric=True, incremental=False)
+            global_metrics=meter_util.get_empty_log_global_metrics(numeric=True, incremental=False),
         )
 
     if apparent_power_node:
@@ -213,7 +221,7 @@ def get_meter_peak_power(device: Device, phase: NodePhase, timedb: TimeDBClient,
             is_counter=False,
             points=[],
             time_step=time_span.time_step,
-            global_metrics=meter_util.get_empty_log_global_metrics(numeric=True, incremental=False)
+            global_metrics=meter_util.get_empty_log_global_metrics(numeric=True, incremental=False),
         )
 
     output: Dict[str, Any] = {}

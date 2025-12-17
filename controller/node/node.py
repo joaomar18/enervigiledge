@@ -53,10 +53,7 @@ class Node:
     def get_additional_info(self) -> Dict[str, Any]:
         """Returns merged processor and protocol-specific metadata."""
 
-        return {
-            **self.processor.create_additional_info(),
-            "protocol_type": self.protocol_options.get_options().get("type") or "Not found"
-        }
+        return {**self.processor.create_additional_info(), "protocol_type": self.protocol_options.get_options().get("type") or "Not found"}
 
     def get_node_record(self) -> NodeRecord:
         """
@@ -89,8 +86,15 @@ class Node:
             is_counter=self.config.is_counter,
             counter_mode=self.config.counter_mode,
         )
-        
-        return NodeRecord(device_id=None, name=self.config.name, protocol=self.config.protocol, config=base_config, protocol_options=self.protocol_options, attributes=self.config.attributes)
+
+        return NodeRecord(
+            device_id=None,
+            name=self.config.name,
+            protocol=self.config.protocol,
+            config=base_config,
+            protocol_options=self.protocol_options,
+            attributes=self.config.attributes,
+        )
 
 
 ###########     P R O T O C O L     S P E C I F I C     N O D E S     ###########
@@ -111,7 +115,7 @@ class ModbusRTUNode(Node):
         options (ModbusRTUNodeOptions): Modbus-specific options
             including register address, data type, and endianness.
     """
-    
+
     MAX_NUMBER_FAILS = 3
 
     def __init__(self, configuration: NodeConfig, protocol_options: ModbusRTUNodeOptions):
@@ -124,31 +128,30 @@ class ModbusRTUNode(Node):
     def set_connection_state(self, state: bool):
         """
         Update the node's connection state and adjust its failure counter based on the result.
-        
+
         Args:
             state (bool): True if the node read succeeded, False if it failed.
         """
-        
+
         if state:
             self.reset_fails()
         elif not state and self.enable_batch_read:
             self.increment_fails()
-            
+
         self.connected = state
-        
+
     def increment_fails(self) -> None:
         """Increase failure count and disable batch reading if limit exceeded."""
 
         self.number_fails += 1
         if self.number_fails > ModbusRTUNode.MAX_NUMBER_FAILS:
             self.enable_batch_read = False
-        
+
     def reset_fails(self) -> None:
         """Reset the failure counter and re-enable batch reading."""
 
         self.number_fails = 0
         self.enable_batch_read = True
-        
 
 
 # OPC UA Node
@@ -178,7 +181,7 @@ class OPCUANode(Node):
     def set_connection_state(self, state: bool):
         """
         Update the node's connection state and adjust its failure counter based on the result.
-        
+
         Args:
             state (bool): True if the node read succeeded, False if it failed.
         """
@@ -187,16 +190,16 @@ class OPCUANode(Node):
             self.reset_fails()
         elif not state and self.enable_batch_read:
             self.increment_fails()
-        
+
         self.connected = state
-        
+
     def increment_fails(self) -> None:
         """Increase failure count and disable batch reading if limit exceeded."""
 
         self.number_fails += 1
         if self.number_fails > OPCUANode.MAX_NUMBER_FAILS:
             self.enable_batch_read = False
-        
+
     def reset_fails(self) -> None:
         """Reset the failure counter and re-enable batch reading."""
 

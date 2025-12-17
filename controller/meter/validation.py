@@ -104,7 +104,12 @@ def validate_logging_consistency(nodes: Dict[str, Node], node_to_check: Optional
 
 
 def validate_energy_nodes(
-    phase: str, energy_type: str, energy_direction: NodeDirection, nodes: Dict[str, Node], meter_type: EnergyMeterType, meter_options: EnergyMeterOptions
+    phase: str,
+    energy_type: str,
+    energy_direction: NodeDirection,
+    nodes: Dict[str, Node],
+    meter_type: EnergyMeterType,
+    meter_options: EnergyMeterOptions,
 ) -> None:
     """
     Validates that calculated energy nodes have required dependency nodes based on meter configuration. Verifies that all energy nodes are of counter type
@@ -129,13 +134,13 @@ def validate_energy_nodes(
 
     if not node:
         return
-    
+
     if not node.config.is_counter or node.config.custom:
         raise NodeInvalidOptionError(f"Energy node {node_name} needs to be of counter type and not a custom variable.")
-    
+
     if not node.config.calculated:
         return
-    
+
     if energy_direction is not NodeDirection.TOTAL:
         raise NodeInvalidOptionError(f"Node {node_name} with direction of type {energy_direction} cannot be a calculated variable.")
 
@@ -161,8 +166,9 @@ def validate_energy_nodes(
         if not power_node:
             raise NodeMissingError(f"Missing node for {node_name} calculation: expected {phase}{energy_type}_power.")
     else:
-        raise NodeInvalidOptionError(f"Invalid counter mode {node.config.counter_mode} for node {node_name}. Not supported for calculation.")
-
+        raise NodeInvalidOptionError(
+            f"Invalid counter mode {node.config.counter_mode} for node {node_name}. Not supported for calculation."
+        )
 
 
 def validate_power_nodes(phase: str, power_type: str, nodes: Dict[str, Node], meter_type: EnergyMeterType) -> None:

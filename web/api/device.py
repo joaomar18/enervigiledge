@@ -43,7 +43,7 @@ async def add_device(
     if not objects.validate_field_type(device_data, "name", str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_NAME)
     device_name: str = device_data["name"]
-    
+
     record = device_parser.parse_device(new_device=True, dict_device=device_data, dict_nodes=device_nodes)
     # NEEDS VALIDATION BETWEEN PARSING AND INSTANTIATION. MOVE CREATION TO END OF TRY BLOCK WHEN VALIDATION EXISTS
     new_device = device_manager.create_device_from_record(record)
@@ -51,7 +51,7 @@ async def add_device(
     # DB Update
     conn, cursor = database.require_client()
     device_id = None
-    
+
     try:
         device_id = database.insert_energy_meter(record, conn, cursor)
         if device_id is None:
@@ -62,18 +62,18 @@ async def add_device(
         if device_image:
             if not process_and_save_image(device_image, device_id, 200, "db/device_img/"):
                 raise api_exception.DeviceCreationError(api_exception.Errors.DEVICE.SAVE_IMAGE_FAILED)
-            
+
         if not timedb.create_db(device_name, device_id):
             raise api_exception.DeviceCreationError(api_exception.Errors.DEVICE.DEVICE_STORAGE_FAILED)
 
         conn.commit()
-    
+
     except Exception:
         conn.rollback()
         if device_id:
             delete_device_image(device_id, "db/device_img/")
         raise
-    
+
     await device_manager.add_device(new_device)
     return JSONResponse(content={"message": "Device added sucessfully."})
 
@@ -94,29 +94,29 @@ async def edit_device(
     record = device_parser.parse_device(new_device=True, dict_device=device_data, dict_nodes=device_nodes)
     # NEEDS VALIDATION BETWEEN PARSING AND INSTANTIATION. MOVE CREATION TO END OF TRY BLOCK WHEN VALIDATION EXISTS
     updated_device = device_manager.create_device_from_record(record)
-    
+
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     # DB Update
     conn, cursor = database.require_client()
-    
+
     try:
         if not database.update_energy_meter(record, conn, cursor):
             raise api_exception.DeviceUpdateError(api_exception.Errors.DEVICE.UPDATE_STORAGE_FAILED)
         if device_image:
             if not process_and_save_image(device_image, device_id, 200, "db/device_img/", "db/device_img/.bin/"):
                 raise api_exception.DeviceUpdateError(api_exception.Errors.DEVICE.SAVE_IMAGE_FAILED)
-        
+
         conn.commit()
         flush_bin_images("db/device_img/.bin/")
-        
+
     except Exception:
         conn.rollback()
         rollback_image(device_id, "db/device_img/", "db/device_img/.bin/")
         raise
-    
+
     await device_manager.delete_device(device)
     await device_manager.add_device(updated_device)
     return JSONResponse(content={"message": "Device edited sucessfully."})
@@ -137,7 +137,7 @@ async def delete_device(
         payload: Dict[str, Any] = await request.json()  # request payload
     except Exception as e:
         raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
-    
+
     device_id = device_parser.parse_device_id(payload)
 
     device = device_manager.get_device(device_id)
@@ -146,11 +146,11 @@ async def delete_device(
 
     # DB Update
     conn, cursor = database.require_client()
-    
+
     try:
         if not database.delete_device(device.id, conn, cursor):
             raise api_exception.DeviceDeleteError(api_exception.Errors.DEVICE.DELETE_STORAGE_FAILED)
-        
+
         conn.commit()
 
     except Exception:
@@ -166,7 +166,9 @@ async def delete_device(
 @router.get("/get_device")
 @auth_endpoint(AuthConfigs.PROTECTED)
 async def get_device(
-    request: Request, safety: HTTPSafety = Depends(services.get_safety), device_manager: DeviceManager = Depends(services.get_device_manager)
+    request: Request,
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
 ) -> JSONResponse:
     """Retrieves object with configuration and state of a specific device."""
 
@@ -187,7 +189,7 @@ async def get_device_info(
 ) -> JSONResponse:
     """Retrieves comprehensive device information including history status of the device."""
 
-    device_id = device_parser.parse_device_id(request.query_params)  
+    device_id = device_parser.parse_device_id(request.query_params)
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
@@ -197,7 +199,9 @@ async def get_device_info(
 @router.get("/get_all_devices")
 @auth_endpoint(AuthConfigs.PROTECTED)
 async def get_all_devices(
-    request: Request, safety: HTTPSafety = Depends(services.get_safety), device_manager: DeviceManager = Depends(services.get_device_manager)
+    request: Request,
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
 ) -> JSONResponse:
     """Retrieves objects of all devices."""
 
@@ -208,7 +212,9 @@ async def get_all_devices(
 @router.get("/get_device_with_image")
 @auth_endpoint(AuthConfigs.PROTECTED)
 async def get_device_with_image(
-    request: Request, safety: HTTPSafety = Depends(services.get_safety), device_manager: DeviceManager = Depends(services.get_device_manager)
+    request: Request,
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
 ) -> JSONResponse:
     """Retrieves object and image of a specific device."""
 
@@ -232,7 +238,7 @@ async def get_device_info_with_image(
 ) -> JSONResponse:
     """Retrieves device information including history status and image of a specific device."""
 
-    device_id = device_parser.parse_device_id(request.query_params)    
+    device_id = device_parser.parse_device_id(request.query_params)
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
@@ -245,7 +251,9 @@ async def get_device_info_with_image(
 @router.get("/get_all_devices_with_image")
 @auth_endpoint(AuthConfigs.PROTECTED)
 async def get_all_devices_with_image(
-    request: Request, safety: HTTPSafety = Depends(services.get_safety), device_manager: DeviceManager = Depends(services.get_device_manager)
+    request: Request,
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
 ) -> JSONResponse:
     """Retrieves current state and images of all devices."""
 

@@ -319,9 +319,11 @@ def calculate_pf(prefix: str, node: Node, meter_nodes: Dict[str, Node]) -> None:
         node.processor.set_value(0.0)
     else:
         node.processor.set_value(math.cos(math.atan(q_val / p_val)))
-    
 
-def calculate_pf_and_dir_with_energy(active_energy_value: Optional[int | float], reactive_energy_value: Optional[int | float]) -> Tuple[Optional[float], Optional[PowerFactorDirection]]:
+
+def calculate_pf_and_dir_with_energy(
+    active_energy_value: Optional[int | float], reactive_energy_value: Optional[int | float]
+) -> Tuple[Optional[float], Optional[PowerFactorDirection]]:
     """
     Calculate the power factor and its direction based on active and reactive energy values.
 
@@ -354,7 +356,7 @@ def calculate_pf_and_dir_with_energy(active_energy_value: Optional[int | float],
             power_factor_direction = PowerFactorDirection.UNITARY
         elif reactive_energy_value > 0:
             power_factor_direction = PowerFactorDirection.LAGGING
-        elif reactive_energy_value < 0: 
+        elif reactive_energy_value < 0:
             power_factor_direction = PowerFactorDirection.LEADING
         else:
             power_factor_direction = PowerFactorDirection.UNKNOWN

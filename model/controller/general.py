@@ -12,7 +12,7 @@ from enum import Enum
 class Protocol(str, Enum):
     """
     Enumeration of supported communication protocols.
-    
+
     Attributes:
         NONE (str): No protocol specified.
         OPC_UA (str): OPC Unified Architecture protocol.
@@ -31,7 +31,7 @@ class Protocol(str, Enum):
     def valid_protocols(cls) -> set[str]:
         """
         Returns a set of all valid protocol string values.
-        
+
         Returns:
             set[str]: Set containing all protocol enum values as strings.
         """

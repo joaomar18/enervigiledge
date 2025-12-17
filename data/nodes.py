@@ -21,79 +21,449 @@ from protocol.opcua.opcua_device import OPCUAOptions, OPCUANode
 
 def get_orno_we_516_db() -> EnergyMeterRecord:
     meter_options = EnergyMeterOptions()
-    communication_options = ModbusRTUOptions(slave_id=1, port="/dev/ttyAMA0", baudrate=9600, stopbits=1, parity="E", bytesize=8, read_period=5, timeout=1, retries=0)
+    communication_options = ModbusRTUOptions(
+        slave_id=1, port="/dev/ttyAMA0", baudrate=9600, stopbits=1, parity="E", bytesize=8, read_period=5, timeout=1, retries=0
+    )
 
     def cfg(name: str, unit: str, phase: NodePhase, logging: bool = False, logging_period: int = 15, **extra) -> NodeConfig:
         protocol = Protocol.MODBUS_RTU if not extra.get("calculated", None) else Protocol.NONE
         return NodeConfig(
-            name=name, unit=unit, type=NodeType.FLOAT, protocol=protocol, logging=logging, logging_period=logging_period, attributes=NodeAttributes(phase=phase), **extra
+            name=name,
+            unit=unit,
+            type=NodeType.FLOAT,
+            protocol=protocol,
+            logging=logging,
+            logging_period=logging_period,
+            attributes=NodeAttributes(phase=phase),
+            **extra
         )
 
     nodes: Set[Node] = set()
-    
-    # L1
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_voltage", "V", phase=NodePhase.L1, logging=True, logging_period=1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x000E, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_current", "A", phase=NodePhase.L1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0016, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_active_power", "kW", phase=NodePhase.L1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x001E, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_reactive_power", "kVAr", phase=NodePhase.L1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0026, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_forward_active_energy", "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x010A, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_reverse_active_energy", "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0112, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_forward_reactive_energy", "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0122, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l1_reverse_reactive_energy", "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x012A, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    
-    nodes.add(Node(configuration=cfg("l1_active_energy", "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    nodes.add(Node(configuration=cfg("l1_reactive_energy", "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
 
-    nodes.add(Node(configuration=cfg("l1_apparent_power", "kVA", phase=NodePhase.L1, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    nodes.add(Node(configuration=cfg("l1_power_factor", "", phase=NodePhase.L1, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
+    # L1
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l1_voltage", "V", phase=NodePhase.L1, logging=True, logging_period=1),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x000E,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l1_current", "A", phase=NodePhase.L1),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0016,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l1_active_power", "kW", phase=NodePhase.L1),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x001E,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l1_reactive_power", "kVAr", phase=NodePhase.L1),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0026,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l1_forward_active_energy", "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x010A,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l1_reverse_active_energy", "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0112,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l1_forward_reactive_energy", "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0122,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l1_reverse_reactive_energy", "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DIRECT),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x012A,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "l1_active_energy", "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "l1_reactive_energy", "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+
+    nodes.add(
+        Node(
+            configuration=cfg("l1_apparent_power", "kVA", phase=NodePhase.L1, calculated=True),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg("l1_power_factor", "", phase=NodePhase.L1, calculated=True),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
 
     # L2
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_voltage", "V", phase=NodePhase.L2, logging=True, logging_period=1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0010, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_current", "A", phase=NodePhase.L2), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0018, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_active_power", "kW", phase=NodePhase.L2), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0020, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_reactive_power", "kVAr", phase=NodePhase.L2), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0028, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_forward_active_energy", "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x010C, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_reverse_active_energy", "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0114, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_forward_reactive_energy", "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0124, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l2_reverse_reactive_energy", "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x012C, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    
-    nodes.add(Node(configuration=cfg("l2_active_energy", "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    nodes.add(Node(configuration=cfg("l2_reactive_energy", "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l2_voltage", "V", phase=NodePhase.L2, logging=True, logging_period=1),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0010,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l2_current", "A", phase=NodePhase.L2),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0018,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l2_active_power", "kW", phase=NodePhase.L2),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0020,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l2_reactive_power", "kVAr", phase=NodePhase.L2),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0028,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
 
-    nodes.add(Node(configuration=cfg("l2_apparent_power", "kVA", phase=NodePhase.L2, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    nodes.add(Node(configuration=cfg("l2_power_factor", "", phase=NodePhase.L2, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l2_forward_active_energy", "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x010C,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l2_reverse_active_energy", "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0114,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l2_forward_reactive_energy", "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0124,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l2_reverse_reactive_energy", "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DIRECT),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x012C,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "l2_active_energy", "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "l2_reactive_energy", "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+
+    nodes.add(
+        Node(
+            configuration=cfg("l2_apparent_power", "kVA", phase=NodePhase.L2, calculated=True),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg("l2_power_factor", "", phase=NodePhase.L2, calculated=True),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+
     # L3
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_voltage", "V", phase=NodePhase.L3, logging=True, logging_period=1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0012, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_current", "A", phase=NodePhase.L3), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x001A, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_active_power", "kW", phase=NodePhase.L3), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0022, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_reactive_power", "kVAr", phase=NodePhase.L3), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x002A, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_forward_active_energy", "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x010E, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_reverse_active_energy", "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0116, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_forward_reactive_energy", "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0126, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    nodes.add(ModbusRTUNode(configuration=cfg("l3_reverse_reactive_energy", "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x012E, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
-    
-    nodes.add(Node(configuration=cfg("l3_active_energy", "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    nodes.add(Node(configuration=cfg("l3_reactive_energy", "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l3_voltage", "V", phase=NodePhase.L3, logging=True, logging_period=1),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0012,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l3_current", "A", phase=NodePhase.L3),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x001A,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l3_active_power", "kW", phase=NodePhase.L3),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0022,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l3_reactive_power", "kVAr", phase=NodePhase.L3),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x002A,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
 
-    nodes.add(Node(configuration=cfg("l3_apparent_power", "kVA", phase=NodePhase.L3, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    nodes.add(Node(configuration=cfg("l3_power_factor", "", phase=NodePhase.L3, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))    
-    
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l3_forward_active_energy", "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x010E,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l3_reverse_active_energy", "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0116,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l3_forward_reactive_energy", "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0126,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("l3_reverse_reactive_energy", "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DIRECT),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x012E,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
+
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "l3_active_energy", "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "l3_reactive_energy", "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+
+    nodes.add(
+        Node(
+            configuration=cfg("l3_apparent_power", "kVA", phase=NodePhase.L3, calculated=True),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg("l3_power_factor", "", phase=NodePhase.L3, calculated=True),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+
     # Total
-    nodes.add(Node(configuration=cfg("total_active_energy", "kWh", phase=NodePhase.TOTAL, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    nodes.add(Node(configuration=cfg("total_reactive_energy", "kVArh", phase=NodePhase.TOTAL, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    
-    nodes.add(Node(configuration=cfg("total_power_factor", "", phase=NodePhase.TOTAL, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))    
-    nodes.add(Node(configuration=cfg("total_active_power", "kW", phase=NodePhase.TOTAL, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))    
-    nodes.add(Node(configuration=cfg("total_reactive_power", "kVAr", phase=NodePhase.TOTAL, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))    
-    nodes.add(Node(configuration=cfg("total_apparent_power", "kVA", phase=NodePhase.TOTAL, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))    
-    
-    # General    
-    
-    nodes.add(ModbusRTUNode(configuration=cfg("frequency", "Hz", phase=NodePhase.GENERAL, logging=True, logging_period=1), protocol_options=ModbusRTUNodeOptions(function=ModbusRTUFunction.READ_HOLDING_REGISTERS, address=0x0014, type=ModbusRTUNodeType.FLOAT_32, endian_mode=ModbusRTUNodeMode.BIG_ENDIAN)))
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "total_active_energy", "kWh", phase=NodePhase.TOTAL, is_counter=True, counter_mode=CounterMode.CUMULATIVE, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "total_reactive_energy",
+                "kVArh",
+                phase=NodePhase.TOTAL,
+                is_counter=True,
+                counter_mode=CounterMode.CUMULATIVE,
+                calculated=True,
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+
+    nodes.add(
+        Node(
+            configuration=cfg("total_power_factor", "", phase=NodePhase.TOTAL, calculated=True),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg("total_active_power", "kW", phase=NodePhase.TOTAL, calculated=True),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg("total_reactive_power", "kVAr", phase=NodePhase.TOTAL, calculated=True),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg("total_apparent_power", "kVA", phase=NodePhase.TOTAL, calculated=True),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+
+    # General
+
+    nodes.add(
+        ModbusRTUNode(
+            configuration=cfg("frequency", "Hz", phase=NodePhase.GENERAL, logging=True, logging_period=1),
+            protocol_options=ModbusRTUNodeOptions(
+                function=ModbusRTUFunction.READ_HOLDING_REGISTERS,
+                address=0x0014,
+                type=ModbusRTUNodeType.FLOAT_32,
+                endian_mode=ModbusRTUNodeMode.BIG_ENDIAN,
+            ),
+        )
+    )
 
     node_records: set[NodeRecord] = {node.get_node_record() for node in nodes}
 
@@ -115,54 +485,247 @@ def get_sm1238_db() -> EnergyMeterRecord:
     def cfg(name: str, unit: str, phase: NodePhase, logging: bool = False, logging_period: int = 15, **extra) -> NodeConfig:
         protocol = Protocol.OPC_UA if not extra.get("calculated", None) else Protocol.NONE
         return NodeConfig(
-            name=name, protocol=protocol, type=NodeType.FLOAT, unit=unit, logging=logging, logging_period=logging_period, attributes=NodeAttributes(phase=phase), **extra
+            name=name,
+            protocol=protocol,
+            type=NodeType.FLOAT,
+            unit=unit,
+            logging=logging,
+            logging_period=logging_period,
+            attributes=NodeAttributes(phase=phase),
+            **extra
         )
 
     nodes: Set[Node] = set()
 
     # L1
-    nodes.add(OPCUANode(configuration=cfg("l1_voltage", "V", phase=NodePhase.L1, logging=True, logging_period=15), protocol_options=OPCUANodeOptions(node_id="ns=4;i=7", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l1_current", "mA", phase=NodePhase.L1), protocol_options=OPCUANodeOptions(node_id="ns=4;i=6", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l1_active_power", "W", phase=NodePhase.L1), protocol_options=OPCUANodeOptions(node_id="ns=4;i=8", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l1_reactive_power", "VAr", phase=NodePhase.L1), protocol_options=OPCUANodeOptions(node_id="ns=4;i=9", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l1_apparent_power", "VA", phase=NodePhase.L1), protocol_options=OPCUANodeOptions(node_id="ns=4;i=10", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l1_power_factor", "", phase=NodePhase.L1), protocol_options=OPCUANodeOptions(node_id="ns=4;i=11", type=OPCUANodeType.FLOAT)))    
-    nodes.add(Node(configuration=cfg("l1_active_energy", "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))    
-    nodes.add(Node(configuration=cfg("l1_reactive_energy", "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l1_voltage", "V", phase=NodePhase.L1, logging=True, logging_period=15),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=7", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l1_current", "mA", phase=NodePhase.L1),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=6", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l1_active_power", "W", phase=NodePhase.L1),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=8", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l1_reactive_power", "VAr", phase=NodePhase.L1),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=9", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l1_apparent_power", "VA", phase=NodePhase.L1),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=10", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l1_power_factor", "", phase=NodePhase.L1),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=11", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "l1_active_energy", "kWh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "l1_reactive_energy", "kVArh", phase=NodePhase.L1, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
 
     # L2
-    nodes.add(OPCUANode(configuration=cfg("l2_voltage", "V", phase=NodePhase.L2, logging=True, logging_period=15), protocol_options=OPCUANodeOptions(node_id="ns=4;i=14", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l2_current", "mA", phase=NodePhase.L2), protocol_options=OPCUANodeOptions(node_id="ns=4;i=13", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l2_active_power", "W", phase=NodePhase.L2), protocol_options=OPCUANodeOptions(node_id="ns=4;i=15", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l2_reactive_power", "VAr", phase=NodePhase.L2), protocol_options=OPCUANodeOptions(node_id="ns=4;i=16", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l2_apparent_power", "VA", phase=NodePhase.L2), protocol_options=OPCUANodeOptions(node_id="ns=4;i=17", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l2_power_factor", "", phase=NodePhase.L2), protocol_options=OPCUANodeOptions(node_id="ns=4;i=18", type=OPCUANodeType.FLOAT)))    
-    nodes.add(Node(configuration=cfg("l2_active_energy", "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))    
-    nodes.add(Node(configuration=cfg("l2_reactive_energy", "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l2_voltage", "V", phase=NodePhase.L2, logging=True, logging_period=15),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=14", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l2_current", "mA", phase=NodePhase.L2),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=13", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l2_active_power", "W", phase=NodePhase.L2),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=15", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l2_reactive_power", "VAr", phase=NodePhase.L2),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=16", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l2_apparent_power", "VA", phase=NodePhase.L2),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=17", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l2_power_factor", "", phase=NodePhase.L2),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=18", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "l2_active_energy", "kWh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "l2_reactive_energy", "kVArh", phase=NodePhase.L2, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+
     # L3
-    nodes.add(OPCUANode(configuration=cfg("l3_voltage", "V", phase=NodePhase.L3, logging=True, logging_period=15), protocol_options=OPCUANodeOptions(node_id="ns=4;i=21", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l3_current", "mA", phase=NodePhase.L3), protocol_options=OPCUANodeOptions(node_id="ns=4;i=20", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l3_active_power", "W", phase=NodePhase.L3), protocol_options=OPCUANodeOptions(node_id="ns=4;i=22", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l3_reactive_power", "VAr", phase=NodePhase.L3), protocol_options=OPCUANodeOptions(node_id="ns=4;i=23", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l3_apparent_power", "VA", phase=NodePhase.L3), protocol_options=OPCUANodeOptions(node_id="ns=4;i=24", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l3_power_factor", "", phase=NodePhase.L3), protocol_options=OPCUANodeOptions(node_id="ns=4;i=25", type=OPCUANodeType.FLOAT)))    
-    nodes.add(Node(configuration=cfg("l3_active_energy", "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))    
-    nodes.add(Node(configuration=cfg("l3_reactive_energy", "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l3_voltage", "V", phase=NodePhase.L3, logging=True, logging_period=15),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=21", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l3_current", "mA", phase=NodePhase.L3),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=20", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l3_active_power", "W", phase=NodePhase.L3),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=22", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l3_reactive_power", "VAr", phase=NodePhase.L3),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=23", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l3_apparent_power", "VA", phase=NodePhase.L3),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=24", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l3_power_factor", "", phase=NodePhase.L3),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=25", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "l3_active_energy", "kWh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "l3_reactive_energy", "kVArh", phase=NodePhase.L3, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+
     # Total
-    nodes.add(OPCUANode(configuration=cfg("total_power_factor", "", phase=NodePhase.TOTAL), protocol_options=OPCUANodeOptions(node_id="ns=4;i=29", type=OPCUANodeType.FLOAT)))    
-    nodes.add(Node(configuration=cfg("total_active_energy", "kWh", phase=NodePhase.TOTAL, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))    
-    nodes.add(Node(configuration=cfg("total_reactive_energy", "kVArh", phase=NodePhase.TOTAL, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    nodes.add(Node(configuration=cfg("total_active_power", "kW", phase=NodePhase.TOTAL, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    nodes.add(Node(configuration=cfg("total_reactive_power", "kVAr", phase=NodePhase.TOTAL, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    nodes.add(Node(configuration=cfg("total_apparent_power", "kVA", phase=NodePhase.TOTAL, calculated=True), protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT)))
-    
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("total_power_factor", "", phase=NodePhase.TOTAL),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=29", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "total_active_energy", "kWh", phase=NodePhase.TOTAL, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg(
+                "total_reactive_energy", "kVArh", phase=NodePhase.TOTAL, is_counter=True, counter_mode=CounterMode.DELTA, calculated=True
+            ),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg("total_active_power", "kW", phase=NodePhase.TOTAL, calculated=True),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg("total_reactive_power", "kVAr", phase=NodePhase.TOTAL, calculated=True),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+    nodes.add(
+        Node(
+            configuration=cfg("total_apparent_power", "kVA", phase=NodePhase.TOTAL, calculated=True),
+            protocol_options=NoProtocolNodeOptions(type=NoProtocolType.FLOAT),
+        )
+    )
+
     # General
-    nodes.add(OPCUANode(configuration=cfg("frequency", "Hz", phase=NodePhase.GENERAL), protocol_options=OPCUANodeOptions(node_id="ns=4;i=33", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l1_l2_voltage", "V", phase=NodePhase.GENERAL), protocol_options=OPCUANodeOptions(node_id="ns=4;i=26", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l2_l3_voltage", "V", phase=NodePhase.GENERAL), protocol_options=OPCUANodeOptions(node_id="ns=4;i=27", type=OPCUANodeType.FLOAT)))    
-    nodes.add(OPCUANode(configuration=cfg("l3_l1_voltage", "V", phase=NodePhase.GENERAL), protocol_options=OPCUANodeOptions(node_id="ns=4;i=28", type=OPCUANodeType.FLOAT)))    
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("frequency", "Hz", phase=NodePhase.GENERAL),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=33", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l1_l2_voltage", "V", phase=NodePhase.GENERAL),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=26", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l2_l3_voltage", "V", phase=NodePhase.GENERAL),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=27", type=OPCUANodeType.FLOAT),
+        )
+    )
+    nodes.add(
+        OPCUANode(
+            configuration=cfg("l3_l1_voltage", "V", phase=NodePhase.GENERAL),
+            protocol_options=OPCUANodeOptions(node_id="ns=4;i=28", type=OPCUANodeType.FLOAT),
+        )
+    )
 
     node_records: set[NodeRecord] = {node.get_node_record() for node in nodes}
 

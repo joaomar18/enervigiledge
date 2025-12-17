@@ -156,22 +156,30 @@ class DeviceManager:
 
     def create_device_from_record(self, record: EnergyMeterRecord) -> EnergyMeter:
         """
-        Creates an EnergyMeter instance from a database record.
+        Instantiate an EnergyMeter from a persisted device record.
+
+        Uses the protocol registry to resolve the appropriate meter class and
+        constructs a fully initialized EnergyMeter instance, including its
+        nodes and communication options.
 
         Args:
-            record (EnergyMeterRecord): The database record containing the energy meter's configuration.
+            record: Persisted energy meter configuration record.
 
         Returns:
-            EnergyMeter: An instance of the energy meter created from the record.
+            EnergyMeter: Runtime energy meter instance created from the record.
 
         Raises:
-            ValueError: If the record has a None ID or contains invalid data.
+            ValueError: If the record does not have a valid device ID.
+            RuntimeError: If no meter class is registered for the record's protocol.
         """
 
         if record.id is None:
             raise ValueError(f"Cannot add device {record.name} with none id to the device manager")
 
         plugin = ProtocolRegistry.get_protocol_plugin(record.protocol)
+
+        if not plugin.meter_class:
+            raise RuntimeError(f"No meter class registered for protocol {record.protocol}.")
 
         return plugin.meter_class(
             id=record.id,
@@ -201,12 +209,6 @@ class DeviceManager:
         for node_record in record.nodes:
 
             protocol = node_record.protocol
-
-            if protocol is Protocol.NONE:
-                node_factory = ProtocolRegistry.get_base_node_factory()
-                created_nodes.add(node_factory(node_record))
-                continue
-
             plugin = ProtocolRegistry.get_protocol_plugin(protocol)
             created_nodes.add(plugin.node_factory(node_record))
 

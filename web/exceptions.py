@@ -36,6 +36,7 @@ class APIException(Exception):
 
 class InvalidRequestPayload(APIException):
     """Raised when a request body is malformed, invalid, or missing required fields."""
+
     pass
 
 
@@ -44,35 +45,43 @@ class InvalidRequestPayload(APIException):
 
 class TokenNotInRequest(APIException):
     """Raised when the safety token is not in the request"""
+
     pass
 
 
 class TokenInRequestInvalid(APIException):
     """Raised when the safety token in the request is invalid or doesn't exist in the registered safety tokens"""
+
     pass
 
 
 class UserConfigurationExists(APIException):
     """Raised when user configuration is trying to be created but the file already exists"""
+
     pass
 
 
 class UserConfigurationNotFound(APIException):
     """Raised when the user configuration does not exist or has not been initialized."""
+
     pass
+
 
 class UserConfigCorrupted(APIException):
     """Raised when the user configuration is corrupted or cannot be parsed."""
+
     pass
 
 
 class InvalidCredentials(APIException):
     """Raised when credentials (username and password) are invalid (not recognized)."""
+
     pass
 
 
 class InvalidRequest(APIException):
     """Raised when a request is malformed or contains invalid data."""
+
     pass
 
 
@@ -81,16 +90,19 @@ class InvalidRequest(APIException):
 
 class DeviceCreationError(APIException):
     """Raised when a device cannot be created or persisted in the system."""
+
     pass
 
 
 class DeviceUpdateError(APIException):
     """Raised when updating an existing device configuration or state fails."""
+
     pass
 
 
 class DeviceDeleteError(APIException):
     """Raised when deletion of a device or its associated resources fails."""
+
     pass
 
 
@@ -99,6 +111,7 @@ class DeviceDeleteError(APIException):
 
 class DeviceNotFound(APIException):
     """Raised when a requested device does not exist in the system."""
+
     pass
 
 
@@ -107,6 +120,7 @@ class DeviceNotFound(APIException):
 
 class NodeNotFound(APIException):
     """Raised when a requested node does not exist in the system."""
+
     pass
 
 
@@ -119,16 +133,8 @@ class Errors:
         error_id="INVALID_JSON",
         default_message="Request body must be valid JSON.",
     )
-    INVALID_FORM_DATA = APIErrorDef(
-        status_code=400,
-        error_id="INVALID_FORM_DATA",
-        default_message="Invalid or malformed form data."
-    )
-    MISSING_IP = APIErrorDef(
-        status_code=400,
-        error_id="INVALID_IP",
-        default_message="Missing or invalid IP from request."
-    )
+    INVALID_FORM_DATA = APIErrorDef(status_code=400, error_id="INVALID_FORM_DATA", default_message="Invalid or malformed form data.")
+    MISSING_IP = APIErrorDef(status_code=400, error_id="INVALID_IP", default_message="Missing or invalid IP from request.")
 
     class AUTH:
         MISSING_USERNAME = APIErrorDef(
@@ -189,7 +195,7 @@ class Errors:
         INVALID_CREDENTIALS = APIErrorDef(
             status_code=401,
             error_id="AUTH.INVALID_CREDENTIALS",
-            default_message="Invalid username or password.",            
+            default_message="Invalid username or password.",
         )
         INVALID_TOKEN = APIErrorDef(
             status_code=401,
@@ -201,7 +207,7 @@ class Errors:
             error_id="AUTH.TOKEN_MISSING",
             default_message="Authentication token is missing.",
         )
-    
+
     class DEVICE:
         MISSING_DEVICE_DATA = APIErrorDef(
             status_code=400,
@@ -231,7 +237,7 @@ class Errors:
         MISSING_DEVICE_FIELDS = APIErrorDef(
             status_code=400,
             error_id="DEVICE.MISSING_DEVICE_FIELDS",
-            default_message="There are missing fields in the device configuration."
+            default_message="There are missing fields in the device configuration.",
         )
         MISSING_DEVICE_OPTIONS = APIErrorDef(
             status_code=400,
@@ -273,7 +279,7 @@ class Errors:
             error_id="DEVICE.INVALID_DEVICE_NODES_JSON",
             default_message="The device nodes data is not in a valid JSON format.",
         )
-        INVALID_DEVICE_ID =  APIErrorDef(
+        INVALID_DEVICE_ID = APIErrorDef(
             status_code=400,
             error_id="DEVICE.INVALID_DEVICE_ID",
             default_message="Device ID must be a valid integer.",
@@ -323,16 +329,13 @@ class Errors:
             error_id="DEVICE.NOT_FOUND",
             default_message="Device not found.",
         )
+
     class NODES:
         MISSING_START_TIME = APIErrorDef(
-            status_code=400,
-            error_id="NODES.MISSING_START_TIME",
-            default_message="The start time date is required for formatted queries."
+            status_code=400, error_id="NODES.MISSING_START_TIME", default_message="The start time date is required for formatted queries."
         )
         MISSING_NODE_NAME = APIErrorDef(
-            status_code=400,
-            error_id="NODES.MISSING_NAME",
-            default_message="The node name is missing or in an invalid format."
+            status_code=400, error_id="NODES.MISSING_NAME", default_message="The node name is missing or in an invalid format."
         )
         MISSING_PHASE = APIErrorDef(
             status_code=400,
@@ -352,17 +355,15 @@ class Errors:
         MISSING_NODE_CONFIG = APIErrorDef(
             status_code=400,
             error_id="NODES.MISSING_NODE_CONFIG",
-            default_message="The node base configuration is missing or in an invalid format."
+            default_message="The node base configuration is missing or in an invalid format.",
         )
         MISSING_NODE_PROTOCOL_OPTIONS = APIErrorDef(
             status_code=400,
             error_id="NODES.MISSING_NODE_PROTOCOL_OPTIONS",
-            default_message="The node protocol options is missing or in an invalid format."
+            default_message="The node protocol options is missing or in an invalid format.",
         )
         MISSING_NODE_FIELDS = APIErrorDef(
-            status_code=400,
-            error_id="DEVICE.MISSING_NODE_FIELDS",
-            default_message="There are missing fields in the node record."
+            status_code=400, error_id="DEVICE.MISSING_NODE_FIELDS", default_message="There are missing fields in the node record."
         )
         MISSING_NODE_CONFIG_FIELDS = APIErrorDef(
             status_code=400,
@@ -379,20 +380,12 @@ class Errors:
             error_id="NODES.MISSING_NODE_ATTRIBUTES_FIELDS",
             default_message="There are missing fields in the node attributes.",
         )
-        INVALID_NODE = APIErrorDef(
-            status_code=400,
-            error_id="NODES.INVALID_NODE",
-            default_message="Invalid format for node record."
-        )
+        INVALID_NODE = APIErrorDef(status_code=400, error_id="NODES.INVALID_NODE", default_message="Invalid format for node record.")
         INVALID_START_TIME = APIErrorDef(
-            status_code=400,
-            error_id="TIME.INVALID_START_TIME",
-            default_message="The start time must be a valid ISO 8601 datetime."
+            status_code=400, error_id="TIME.INVALID_START_TIME", default_message="The start time must be a valid ISO 8601 datetime."
         )
         INVALID_END_TIME = APIErrorDef(
-            status_code=400,
-            error_id="TIME.INVALID_END_TIME",
-            default_message="The end time must be a valid ISO 8601 datetime."
+            status_code=400, error_id="TIME.INVALID_END_TIME", default_message="The end time must be a valid ISO 8601 datetime."
         )
         INVALID_PHASE = APIErrorDef(
             status_code=400,
@@ -412,35 +405,25 @@ class Errors:
         INVALID_NODE_CONFIG_FIELDS = APIErrorDef(
             status_code=400,
             error_id="NODES.INVALID_NODE_CONFIG_FIELDS",
-            default_message="Invalid field value in the node base configuration."
+            default_message="Invalid field value in the node base configuration.",
         )
         INVALID_NODE_PROTOCOL_OPTIONS_FIELDS = APIErrorDef(
             status_code=400,
             error_id="NODES.INVALID_NODE_PROTOCOL_OPTIONS_FIELDS",
-            default_message="Invalid field value in the node protocol options."
+            default_message="Invalid field value in the node protocol options.",
         )
         INVALID_NODE_ATTRIBUTES_FIELDS = APIErrorDef(
-            status_code=400,
-            error_id="NODES.INVALID_NODE_ATTRIBUTES_FIELDS",
-            default_message="Invalid field value in the node attributes."
+            status_code=400, error_id="NODES.INVALID_NODE_ATTRIBUTES_FIELDS", default_message="Invalid field value in the node attributes."
         )
         INVALID_TIME_ZONE = APIErrorDef(
-            status_code=400,
-            error_id="TIME.INVALID_TIME_ZONE",
-            default_message="The provided time zone is not valid."
+            status_code=400, error_id="TIME.INVALID_TIME_ZONE", default_message="The provided time zone is not valid."
         )
         NOT_FOUND = APIErrorDef(
-            status_code=404,
-            error_id="NODES.NOT_FOUND",
-            default_message="The node was not found in the specified device."
+            status_code=404, error_id="NODES.NOT_FOUND", default_message="The node was not found in the specified device."
         )
         DELETE_LOGS_FAILED = APIErrorDef(
-            status_code=500,
-            error_id="NODES.DELETE_LOGS_FAILED",
-            default_message="Failed to delete log points for the specified variable."
+            status_code=500, error_id="NODES.DELETE_LOGS_FAILED", default_message="Failed to delete log points for the specified variable."
         )
         DELETE_ALL_LOGS_FAILED = APIErrorDef(
-            status_code=500,
-            error_id="NODES.DELETE_ALL_LOGS_FAILED",
-            default_message="Failed to delete all log points in the device."
+            status_code=500, error_id="NODES.DELETE_ALL_LOGS_FAILED", default_message="Failed to delete all log points in the device."
         )

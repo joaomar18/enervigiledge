@@ -16,7 +16,12 @@ import io
 
 
 def get_device_image(
-    device_id: int, default_image_str: str, directory: str, image_extension: str = "png", decode_type: str = "utf-8", force_default: bool = False
+    device_id: int,
+    default_image_str: str,
+    directory: str,
+    image_extension: str = "png",
+    decode_type: str = "utf-8",
+    force_default: bool = False,
 ) -> Dict[str, str]:
     """
     Retrieves a device image or falls back to a default image, encoded as base64.
@@ -63,7 +68,9 @@ def get_device_image(
     return output_dict
 
 
-def process_and_save_image(image: UploadFile, device_id: int, min_px: int, directory: str, bin_directory: Optional[str] = None, image_extension: str = "png") -> bool:
+def process_and_save_image(
+    image: UploadFile, device_id: int, min_px: int, directory: str, bin_directory: Optional[str] = None, image_extension: str = "png"
+) -> bool:
     """
     Processes and saves an uploaded image with resizing and optimization.
 
@@ -97,22 +104,21 @@ def process_and_save_image(image: UploadFile, device_id: int, min_px: int, direc
     """
 
     # Validate content type
-    if not image.content_type or not image.content_type.startswith('image/'):
+    if not image.content_type or not image.content_type.startswith("image/"):
         return False
 
-    
     success = False
 
     try:
         os.makedirs(directory, exist_ok=True)
         if bin_directory:
             os.makedirs(bin_directory, exist_ok=True)
-        
+
         image_data = image.file.read()
 
         with Image.open(io.BytesIO(image_data)) as img:
-            if img.mode == 'P':
-                img = img.convert('RGBA')
+            if img.mode == "P":
+                img = img.convert("RGBA")
 
             original_width, original_height = img.size
 
@@ -129,15 +135,15 @@ def process_and_save_image(image: UploadFile, device_id: int, min_px: int, direc
                 bin_path = os.path.join(bin_directory, f"{device_id}.{image_extension}")
                 if os.path.exists(image_path):
                     shutil.move(image_path, bin_path)
-            
-            resized_img.save(image_path, format='PNG', optimize=True)
+
+            resized_img.save(image_path, format="PNG", optimize=True)
             success = True
 
     except Exception as e:
         success = False
     finally:
         image.file.seek(0)
-    
+
     return success
 
 
@@ -168,7 +174,7 @@ def delete_device_image(device_id: int, directory: str, bin_directory: Optional[
             if bin_directory:
                 bin_path = os.path.join(bin_directory, f"{device_id}.{image_extension}")
                 shutil.move(image_path, bin_path)
-                
+
             os.remove(image_path)
             return True
         else:
@@ -193,10 +199,10 @@ def rollback_image(device_id: int, directory: str, bin_directory: str, image_ext
     Returns:
         bool: True if the image was successfully restored or no action was performed, False if an error occurred.
     """
-    
+
     image_path = f"{directory}{device_id}.{image_extension}"
     bin_path = f"{bin_directory}{device_id}.{image_extension}"
-    
+
     try:
         if os.path.exists(directory) and not os.path.exists(image_path) and os.path.exists(bin_path):
             delete_device_image(device_id=device_id, directory=directory, bin_directory=None, image_extension=image_extension)
@@ -206,7 +212,7 @@ def rollback_image(device_id: int, directory: str, bin_directory: str, image_ext
             return True
     except Exception:
         return False
-    
+
 
 def flush_bin_images(bin_directory: str) -> bool:
     """
@@ -224,12 +230,12 @@ def flush_bin_images(bin_directory: str) -> bool:
         if os.path.exists(bin_directory):
             for filename in os.listdir(bin_directory):
                 file_path = os.path.join(bin_directory, filename)
-    
+
                 if os.path.isfile(file_path):
                     os.remove(file_path)
                 elif os.path.isdir(file_path):
                     shutil.rmtree(file_path)
-            
+
             return True
         else:
             return True

@@ -9,6 +9,7 @@ from typing import List, Optional
 
 #######################################
 
+
 @dataclass
 class QueryVariableLogs:
     variable: str
@@ -20,7 +21,7 @@ class QueryVariableLogs:
 
     def render(self) -> str:
         select = ", ".join(self.fields) if self.fields else "*"
-        q = [f'SELECT {select}', f'FROM "{self.variable}"']
+        q = [f"SELECT {select}", f'FROM "{self.variable}"']
         if self.where:
             q.append(f"WHERE {' AND '.join(self.where)}")
         if self.group_by:

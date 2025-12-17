@@ -10,6 +10,7 @@ from typing import List, Dict, Any, TYPE_CHECKING
 
 from model.controller.node import BaseNodeProtocolOptions, NodeType
 from model.controller.device import BaseCommunicationOptions
+
 if TYPE_CHECKING:
     from controller.node.node import ModbusRTUNode
 
@@ -130,7 +131,7 @@ class ModbusRTUBatchGroup:
     start_addr: int
     size: int
     nodes: List["ModbusRTUNode"]
-    
+
 
 @dataclass
 class ModbusRTUNodeOptions(BaseNodeProtocolOptions):
@@ -156,7 +157,7 @@ class ModbusRTUNodeOptions(BaseNodeProtocolOptions):
     type: ModbusRTUNodeType
     endian_mode: ModbusRTUNodeMode | None = None
     bit: int | None = None
-    
+
     @staticmethod
     def cast_from_dict(options_dict: Dict[str, Any]) -> "ModbusRTUNodeOptions":
         """
@@ -170,7 +171,7 @@ class ModbusRTUNodeOptions(BaseNodeProtocolOptions):
             ValueError: If the dictionary cannot be cast into valid Modbus RTU
             node options (e.g. due to invalid enum values or corrupted data).
         """
-        
+
         try:
             function = ModbusRTUFunction(options_dict["function"])
             address = int(options_dict["address"])
@@ -178,11 +179,11 @@ class ModbusRTUNodeOptions(BaseNodeProtocolOptions):
             endian_mode = ModbusRTUNodeMode(options_dict["endian_mode"]) if options_dict["endian_node"] is not None else None
             bit = int(options_dict["bit"]) if options_dict["bit"] is not None else None
             return ModbusRTUNodeOptions(function, address, type, endian_mode, bit)
-                    
+
         except Exception as e:
             raise ValueError(f"Couldn't cast dictionary into Modbus RTU Node Options: {e}.")
-        
-        
+
+
 @dataclass
 class ModbusRTUOptions(BaseCommunicationOptions):
     """
@@ -223,7 +224,7 @@ class ModbusRTUOptions(BaseCommunicationOptions):
             ValueError: If the dictionary cannot be cast into valid Modbus RTU
             communication options (e.g. due to corrupted or incompatible data).
         """
-                
+
         try:
             slave_id = int(options_dict["slave_id"])
             port = str(options_dict["port"])
@@ -235,6 +236,6 @@ class ModbusRTUOptions(BaseCommunicationOptions):
             timeout: int = int(options_dict["timeout"])
             retries = int(options_dict["retries"])
             return ModbusRTUOptions(slave_id, port, baudrate, stopbits, parity, bytesize, read_period, timeout, retries)
-                    
+
         except Exception as e:
             raise ValueError(f"Couldn't cast dictionary into Modbus RTU Device Options: {e}.")

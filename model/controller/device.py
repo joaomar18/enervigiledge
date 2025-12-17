@@ -1,7 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
 from enum import Enum
-import datetime
+from datetime import datetime
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any, Set
 
@@ -61,8 +61,27 @@ class EnergyMeterOptions:
         Returns:
             Dict[str, Any]: All configuration flags and values.
         """
-        
+
         return asdict(self)
+
+    @staticmethod
+    def cast_from_dict(options_dict: Dict[str, Any]) -> "EnergyMeterOptions":
+        """
+        Construct EnergyMeterOptions from a persisted options dictionary.
+
+        Currently returns an empty EnergyMeterOptions instance, as no concrete
+        meter-level options are defined yet. This method exists to maintain a
+        consistent casting interface and support future extensions.
+
+        Raises:
+            ValueError: If the options dictionary cannot be cast into valid
+            energy meter options.
+        """
+
+        try:
+            return EnergyMeterOptions()
+        except Exception as e:
+            raise ValueError(f"Couldn't cast dictionary into Energy Meter Options: {e}.")
 
 
 @dataclass
@@ -126,16 +145,16 @@ class DeviceHistoryStatus:
     device availability and operational status over time.
 
     Attributes:
-        connection_on_datetime (Optional[datetime.datetime]): Timestamp when was the device last connection.
-        connection_off_datetime (Optional[datetime.datetime]): Timestamp when was the device last disconnection.
-        created_at (Optional[datetime.datetime]): Timestamp when the device was first created.
-        updated_at (Optional[datetime.datetime]): Timestamp when the device was last modified.
+        connection_on_datetime (Optional[datetime]): Timestamp when was the device last connection.
+        connection_off_datetime (Optional[datetime]): Timestamp when was the device last disconnection.
+        created_at (Optional[datetime]): Timestamp when the device was first created.
+        updated_at (Optional[datetime]): Timestamp when the device was last modified.
     """
 
-    connection_on_datetime: Optional[datetime.datetime]
-    connection_off_datetime: Optional[datetime.datetime]
-    created_at: Optional[datetime.datetime]
-    updated_at: Optional[datetime.datetime]
+    connection_on_datetime: Optional[datetime]
+    connection_off_datetime: Optional[datetime]
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
 
     def get_status(self) -> Dict[str, Any]:
         """

@@ -23,6 +23,7 @@ class FormattedTimeStep(str, Enum):
     _1M = "1M"  # 1 Month
     _1Y = "1Y"  # 1 Year
 
+
 @dataclass
 class TimeSpanParameters:
     """
@@ -31,7 +32,7 @@ class TimeSpanParameters:
     Holds validated start and end timestamps, optional formatting and
     aggregation settings, and timezone information used when querying
     and processing time-series data.
-    
+
     Attributes:
         start_time: Start of the time span (timezone-aware datetime), or None.
         end_time: End of the time span (timezone-aware datetime), or None.

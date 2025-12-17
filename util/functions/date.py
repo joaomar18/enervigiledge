@@ -126,7 +126,7 @@ def to_iso(date: datetime) -> str:
 
     if date.tzinfo is None:
         date = date.replace(tzinfo=timezone.utc)
-    
+
     return date.isoformat()
 
 
@@ -339,7 +339,9 @@ def time_step_grouping(reference_date: datetime, formatted_time_step: FormattedT
         raise ValueError(f"Unknown formatted time_step {formatted_time_step}.")
 
 
-def check_time_step(check: List[bool], time_step_01: FormattedTimeStep, time_step_02: FormattedTimeStep, current_time_step: FormattedTimeStep) -> bool:
+def check_time_step(
+    check: List[bool], time_step_01: FormattedTimeStep, time_step_02: FormattedTimeStep, current_time_step: FormattedTimeStep
+) -> bool:
     """
     Helper to check if two time steps match a current time step.
 
@@ -363,7 +365,7 @@ def check_time_step(check: List[bool], time_step_01: FormattedTimeStep, time_ste
 
     if check[0] and check[1]:
         return True
-    
+
     return False
 
 
@@ -386,7 +388,7 @@ def bigger_time_step(time_step_01: FormattedTimeStep, time_step_02: FormattedTim
 
     if time_step_01 == time_step_02:
         return time_step_01
-    
+
     time_step_check: List[bool] = [False, False]
 
     if check_time_step(time_step_check, time_step_01, time_step_02, FormattedTimeStep._1m):
@@ -401,8 +403,8 @@ def bigger_time_step(time_step_01: FormattedTimeStep, time_step_02: FormattedTim
         return FormattedTimeStep._1M
     elif check_time_step(time_step_check, time_step_01, time_step_02, FormattedTimeStep._1Y):
         return FormattedTimeStep._1Y
-    
-    raise RuntimeError(f'One of the following time steps is invalid: {time_step_01}, {time_step_02}')
+
+    raise RuntimeError(f"One of the following time steps is invalid: {time_step_01}, {time_step_02}")
 
 
 def align_start_time(start_time: datetime, formatted_time_step: FormattedTimeStep) -> datetime:
@@ -560,7 +562,10 @@ def find_bucket_for_time(time: datetime, aligned_buckets: List[Tuple[datetime, d
 
     raise ValueError(f"Didn't find an aligned bucket for time: {time}.")
 
-def get_aligned_time_buckets(start_time: datetime, end_time: datetime, time_step: FormattedTimeStep, time_zone: Optional[ZoneInfo] = None) -> List[Tuple[datetime, datetime]]:
+
+def get_aligned_time_buckets(
+    start_time: datetime, end_time: datetime, time_step: FormattedTimeStep, time_zone: Optional[ZoneInfo] = None
+) -> List[Tuple[datetime, datetime]]:
     """
     Generates list of aligned time buckets covering a time range.
 
@@ -585,5 +590,5 @@ def get_aligned_time_buckets(start_time: datetime, end_time: datetime, time_step
         time_buckets.append((current_st, current_et))
         current_st = calculate_date_delta(current_st, time_step, time_zone)
         current_et = calculate_date_delta(current_et, time_step, time_zone)
-    
+
     return time_buckets

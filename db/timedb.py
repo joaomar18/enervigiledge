@@ -249,7 +249,6 @@ class TimeDBClient:
         except Exception as e:
             logger.exception(f"Failed to write data to DB '{measurement.db}': {e}")
             return False
-        
 
     def __iter_points(self, res: ResultSet | Iterable[ResultSet]) -> Iterator[Dict[str, Any]]:
         """
@@ -300,23 +299,27 @@ class TimeDBClient:
 
             if not variable.config.is_counter:
                 query.where.append('"mean_count" > 0')
-                if aggregated: # aggregated/bucketed
-                    query.fields.extend([
-                        f'SUM("mean_sum") AS mean_sum',
-                        f'SUM("mean_count") AS mean_count',
-                        f'(SUM("mean_sum") / SUM("mean_count")) / {unit_factor} AS average_value',
-                        f'MIN("min_value") / {unit_factor} AS min_value',
-                        f'MAX("max_value") / {unit_factor} AS max_value',
-                    ])
-                else: # raw/non-formatted
-                    query.fields.extend([
-                        f'"mean_sum" AS mean_sum',
-                        f'"mean_count" AS mean_count',
-                        f'("mean_sum" / "mean_count") / {unit_factor} AS average_value',
-                        f'"min_value" / {unit_factor} AS min_value',
-                        f'"max_value" / {unit_factor} AS max_value',
-                ])
-            else: # incremental node
+                if aggregated:  # aggregated/bucketed
+                    query.fields.extend(
+                        [
+                            f'SUM("mean_sum") AS mean_sum',
+                            f'SUM("mean_count") AS mean_count',
+                            f'(SUM("mean_sum") / SUM("mean_count")) / {unit_factor} AS average_value',
+                            f'MIN("min_value") / {unit_factor} AS min_value',
+                            f'MAX("max_value") / {unit_factor} AS max_value',
+                        ]
+                    )
+                else:  # raw/non-formatted
+                    query.fields.extend(
+                        [
+                            f'"mean_sum" AS mean_sum',
+                            f'"mean_count" AS mean_count',
+                            f'("mean_sum" / "mean_count") / {unit_factor} AS average_value',
+                            f'"min_value" / {unit_factor} AS min_value',
+                            f'"max_value" / {unit_factor} AS max_value',
+                        ]
+                    )
+            else:  # incremental node
                 if aggregated:
                     query.fields.extend([f'SUM("value") / {unit_factor} AS value'])
 
@@ -339,11 +342,15 @@ class TimeDBClient:
             str: Rendered InfluxDB query string.
         """
 
-        query = QueryVariableLogs(variable=variable.config.name, fields=["start_time", "end_time"], timezone=time_zone.key if time_zone else None)
+        query = QueryVariableLogs(
+            variable=variable.config.name, fields=["start_time", "end_time"], timezone=time_zone.key if time_zone else None
+        )
         self.__extend_query(query, variable, False)
         return query.render()
 
-    def __build_query_with_time_span_non_aggregated(self, variable: Node, start_time_str: str, end_time_str: str, time_zone: Optional[ZoneInfo]) -> str:
+    def __build_query_with_time_span_non_aggregated(
+        self, variable: Node, start_time_str: str, end_time_str: str, time_zone: Optional[ZoneInfo]
+    ) -> str:
         """
         Builds a raw InfluxDB query to retrieve variable logs within a time range.
 
@@ -357,11 +364,18 @@ class TimeDBClient:
             str: Rendered InfluxDB query string with time range filter.
         """
 
-        query = QueryVariableLogs(variable=variable.config.name, fields=["start_time", "end_time"], where=[f"time >= '{start_time_str}'", f"time < '{end_time_str}'"], timezone=time_zone.key if time_zone else None)
+        query = QueryVariableLogs(
+            variable=variable.config.name,
+            fields=["start_time", "end_time"],
+            where=[f"time >= '{start_time_str}'", f"time < '{end_time_str}'"],
+            timezone=time_zone.key if time_zone else None,
+        )
         self.__extend_query(query, variable, False)
         return query.render()
 
-    def __build_query_with_time_span_aggregated(self, variable: Node, start_time_str: str, end_time_str: str, group_by_time: Optional[str], time_zone: Optional[ZoneInfo]) -> str:
+    def __build_query_with_time_span_aggregated(
+        self, variable: Node, start_time_str: str, end_time_str: str, group_by_time: Optional[str], time_zone: Optional[ZoneInfo]
+    ) -> str:
         """
         Builds an aggregated InfluxDB query to retrieve variable logs grouped into time buckets.
 
@@ -375,16 +389,28 @@ class TimeDBClient:
 
         Returns:
             str: Rendered InfluxDB query string with aggregations and optional time bucketing.
-        """ 
+        """
 
-        query = QueryVariableLogs(variable=variable.config.name, fields=['FIRST("start_time") AS start_time', 'LAST("end_time") AS end_time'], where=[f"time >= '{start_time_str}'", f"time < '{end_time_str}'"], fill="null", timezone=time_zone.key if time_zone else None)
+        query = QueryVariableLogs(
+            variable=variable.config.name,
+            fields=['FIRST("start_time") AS start_time', 'LAST("end_time") AS end_time'],
+            where=[f"time >= '{start_time_str}'", f"time < '{end_time_str}'"],
+            fill="null",
+            timezone=time_zone.key if time_zone else None,
+        )
         if group_by_time:
             query.group_by = [f"time({group_by_time})"]
         self.__extend_query(query, variable, True)
         return query.render()
 
     def __build_query_with_time_span(
-        self, variable: Node, start_time_str: str, end_time_str: str, aggregated: Optional[bool], group_by_time: Optional[str], time_zone: Optional[ZoneInfo]
+        self,
+        variable: Node,
+        start_time_str: str,
+        end_time_str: str,
+        aggregated: Optional[bool],
+        group_by_time: Optional[str],
+        time_zone: Optional[ZoneInfo],
     ) -> str:
         """
         Builds an InfluxDB query with time range filtering, either raw or aggregated.
@@ -410,7 +436,13 @@ class TimeDBClient:
         return query
 
     def __build_query(
-        self, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime], aggregated: Optional[bool], group_by_time: Optional[str], time_zone: Optional[ZoneInfo]
+        self,
+        variable: Node,
+        start_time: Optional[datetime],
+        end_time: Optional[datetime],
+        aggregated: Optional[bool],
+        group_by_time: Optional[str],
+        time_zone: Optional[ZoneInfo],
     ) -> str:
         """
         Builds an InfluxDB query for variable logs with optional time filtering and aggregation.
@@ -514,22 +546,22 @@ class TimeDBClient:
         for bucket_start, bucket_end in aligned_time_buckets:
             if bucket_start in existing_data:
                 point = existing_data[bucket_start]
-                point['start_time'] = date.to_iso_minutes(bucket_start)
-                point['end_time'] = date.to_iso_minutes(bucket_end)
+                point["start_time"] = date.to_iso_minutes(bucket_start)
+                point["end_time"] = date.to_iso_minutes(bucket_end)
             else:
                 if not variable.config.is_counter:
                     point = {
-                        'start_time': date.to_iso_minutes(bucket_start),
-                        'end_time': date.to_iso_minutes(bucket_end),
-                        'average_value': None,
-                        'min_value': None,
-                        'max_value': None,
+                        "start_time": date.to_iso_minutes(bucket_start),
+                        "end_time": date.to_iso_minutes(bucket_end),
+                        "average_value": None,
+                        "min_value": None,
+                        "max_value": None,
                     }
                 else:
                     point = {
-                        'start_time': date.to_iso_minutes(bucket_start),
-                        'end_time': date.to_iso_minutes(bucket_end),
-                        'value': None,
+                        "start_time": date.to_iso_minutes(bucket_start),
+                        "end_time": date.to_iso_minutes(bucket_end),
+                        "value": None,
                     }
 
             points.append(point)
@@ -602,7 +634,7 @@ class TimeDBClient:
             Returns None for non-numeric variables (no processing applied).
         """
 
-        if not isinstance(variable.processor, NumericNodeProcessor): 
+        if not isinstance(variable.processor, NumericNodeProcessor):
             return None
 
         global_metrics: Dict[str, Any] = {}
@@ -622,7 +654,7 @@ class TimeDBClient:
             for point in points:
                 if point["average_value"] is not None and variable.config.decimal_places is not None:
                     point["average_value"] = round(point["average_value"], variable.config.decimal_places)
-                
+
                 global_mean_sum += point.pop("mean_sum", 0)
                 global_mean_count += point.pop("mean_count", 0)
 
@@ -637,7 +669,7 @@ class TimeDBClient:
                         global_min_value = point["min_value"]
                         global_min_st = point["start_time"]
                         global_min_et = point["end_time"]
-                
+
                 if point["max_value"] is not None:
                     if global_max_value is not None:
                         if point["max_value"] > global_max_value:
@@ -653,8 +685,12 @@ class TimeDBClient:
             global_mean_value = (global_mean_sum / global_mean_count) if global_mean_count != 0 else None
             if global_mean_value is not None:
                 global_mean_value /= calculation.get_unit_factor(variable.config.unit)
-                global_mean_value = round(global_mean_value, variable.config.decimal_places) if variable.config.decimal_places is not None else global_mean_value
-            
+                global_mean_value = (
+                    round(global_mean_value, variable.config.decimal_places)
+                    if variable.config.decimal_places is not None
+                    else global_mean_value
+                )
+
             global_metrics["average_value"] = global_mean_value
             global_metrics["min_value"] = global_min_value
             global_metrics["max_value"] = global_max_value
@@ -668,12 +704,20 @@ class TimeDBClient:
 
             for point in points:
                 global_sum += point["value"] if point["value"] is not None else 0
-            
+
             global_metrics["value"] = global_sum
 
-        return global_metrics      
+        return global_metrics
 
-    def __get_formatted_variable_logs(self, client: InfluxDBClient, variable: Node, start_time: datetime, end_time: datetime, time_step: FormattedTimeStep, time_zone: Optional[ZoneInfo] = None) -> List[Dict[str, Any]]:
+    def __get_formatted_variable_logs(
+        self,
+        client: InfluxDBClient,
+        variable: Node,
+        start_time: datetime,
+        end_time: datetime,
+        time_step: FormattedTimeStep,
+        time_zone: Optional[ZoneInfo] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Retrieves aggregated variable logs grouped by time buckets.
 
@@ -698,25 +742,37 @@ class TimeDBClient:
         query_iterator = date.iterate_time_periods(start_time, end_time, time_step, time_zone)
         if query_iterator:
             for st, group_by_time in query_iterator:
-                query = self.__build_query(variable, st, date.calculate_date_delta(st, time_step, time_zone), True, group_by_time, time_zone)
+                query = self.__build_query(
+                    variable, st, date.calculate_date_delta(st, time_step, time_zone), True, group_by_time, time_zone
+                )
 
                 result = client.query(query)
                 points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
                 variable_logs.extend(points)
         else:
-            query = self.__build_query(variable, start_time, end_time, True, date.time_step_grouping(start_time, time_step, time_zone), time_zone)
+            query = self.__build_query(
+                variable, start_time, end_time, True, date.time_step_grouping(start_time, time_step, time_zone), time_zone
+            )
             result = client.query(query)
             points = [{k: v for k, v in point.items() if k not in {"time"}} for point in self.__iter_points(result)]
             variable_logs.extend(points)
 
         return variable_logs
 
-    def __get_raw_variable_logs(self, client: InfluxDBClient, variable: Node, start_time: Optional[datetime], end_time: Optional[datetime], time_zone: Optional[ZoneInfo], force_aggregation: Optional[bool]) -> List[Dict[str, Any]]:
+    def __get_raw_variable_logs(
+        self,
+        client: InfluxDBClient,
+        variable: Node,
+        start_time: Optional[datetime],
+        end_time: Optional[datetime],
+        time_zone: Optional[ZoneInfo],
+        force_aggregation: Optional[bool],
+    ) -> List[Dict[str, Any]]:
         """
         Retrieves variable logs, typically without aggregation or time bucketing.
 
         Executes a non-formatted query to get data points within the optional
-        time range. Aggregation can be forced if specified. Filters out the 
+        time range. Aggregation can be forced if specified. Filters out the
         internal 'time' field from results.
 
         Args:
@@ -744,11 +800,11 @@ class TimeDBClient:
         remove_points: bool = False,
     ) -> NodeLogs:
         """
-        Retrieve historical logs for a specific variable from a device's InfluxDB, with optional 
+        Retrieve historical logs for a specific variable from a device's InfluxDB, with optional
         time filtering, aggregation, and formatting.
 
-        The method ensures the device's database exists, then fetches variable logs either as raw 
-        time series points or as time-bucketed (formatted) results. Formatted logs fill missing 
+        The method ensures the device's database exists, then fetches variable logs either as raw
+        time series points or as time-bucketed (formatted) results. Formatted logs fill missing
         buckets with `None` and compute global statistics for numeric variables.
 
         Args:
@@ -775,7 +831,7 @@ class TimeDBClient:
                 - global_metrics (Optional[dict]): Computed statistics for numeric variables.
 
         Raises:
-            ValueError: If only one of `start_time` or `end_time` is provided, or if `end_time` 
+            ValueError: If only one of `start_time` or `end_time` is provided, or if `end_time`
                         is not after `start_time`.
         """
 
@@ -793,14 +849,22 @@ class TimeDBClient:
 
         client.switch_database(db_name)
 
-        if time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step: # Logs are to be Formatted
-            points = self.__get_formatted_variable_logs(client, variable, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone)
+        if time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step:  # Logs are to be Formatted
+            points = self.__get_formatted_variable_logs(
+                client, variable, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone
+            )
 
         else:
-            points = self.__get_raw_variable_logs(client, variable, time_span.start_time, time_span.end_time, time_span.time_zone, time_span.force_aggregation)
+            points = self.__get_raw_variable_logs(
+                client, variable, time_span.start_time, time_span.end_time, time_span.time_zone, time_span.force_aggregation
+            )
 
-        if time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step: # Apply post logs processing if logs are Formatted
-            time_span.time_step = self.__formatted_post_processing(variable, points, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone)
+        if (
+            time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step
+        ):  # Apply post logs processing if logs are Formatted
+            time_span.time_step = self.__formatted_post_processing(
+                variable, points, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone
+            )
         global_metrics = self.__post_process_points(variable, points)
 
         variable_logs = NodeLogs(
@@ -810,12 +874,12 @@ class TimeDBClient:
             is_counter=variable.config.is_counter,
             points=points if not remove_points else [],
             time_step=time_span.time_step,
-            global_metrics=global_metrics
+            global_metrics=global_metrics,
         )
 
         return variable_logs
-    
-    def create_db(self, device_name:str, device_id: int) -> bool:
+
+    def create_db(self, device_name: str, device_id: int) -> bool:
         """
         Creates an InfluxDB database for a specific device.
 
@@ -831,12 +895,12 @@ class TimeDBClient:
             bool: True if the database was created successfully, False if it already
             exists or if creation fails.
         """
-        
+
         logger = LoggerManager.get_logger(__name__)
         client = self.__require_client()
 
         db_name = f"{device_name}_{device_id}"
-        if self.check_db_exists(db_name):  
+        if self.check_db_exists(db_name):
             logger.warning(f"Database for device with name {device_name} and id {device_id} already exists.")
             return False
         try:
@@ -874,7 +938,7 @@ class TimeDBClient:
         except Exception as e:
             logger.warning(f"Failed to delete measurement '{variable.config.name}' from DB '{db_name}': {e}")
             return False
-        
+
     def delete_all_data(self, device_name: str, device_id: int) -> bool:
         """
         Deletes all time-series data for a device without dropping the database.
@@ -889,7 +953,7 @@ class TimeDBClient:
         Returns:
             bool: True if data was deleted successfully, False otherwise.
         """
-        
+
         logger = LoggerManager.get_logger(__name__)
         client = self.__require_client()
 
@@ -900,7 +964,7 @@ class TimeDBClient:
 
         try:
             client.switch_database(db_name)
-            client.query(f'DROP SERIES FROM /.*/')
+            client.query(f"DROP SERIES FROM /.*/")
             return True
 
         except Exception as e:
@@ -932,7 +996,7 @@ class TimeDBClient:
 
         try:
             client.drop_database(db_name)
-            
+
             return True
         except Exception as e:
             logger.exception(f"Failed to delete DB '{db_name}': {e}")
@@ -964,6 +1028,6 @@ class TimeDBClient:
         Returns:
             bool: True if logs exist for the variable, False otherwise.
         """
-        
+
         logs = self.get_variable_logs(device_name, device_id, variable, TimeSpanParameters())
         return len(logs.points) > 0

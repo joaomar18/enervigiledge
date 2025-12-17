@@ -40,7 +40,9 @@ def test_incremental_node_logic():
 
 def test_publish_format_with_alarms_and_rounding():
     node = Node(
-        NodeConfig("voltage", NodeType.FLOAT, "V", min_alarm=True, max_alarm=True, min_alarm_value=5.0, max_alarm_value=15.0, decimal_places=2)
+        NodeConfig(
+            "voltage", NodeType.FLOAT, "V", min_alarm=True, max_alarm=True, min_alarm_value=5.0, max_alarm_value=15.0, decimal_places=2
+        )
     )
     node.processor.set_value(3.14159)
     publish = node.get_publish_format()

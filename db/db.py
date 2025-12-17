@@ -2,8 +2,7 @@
 
 import sqlite3
 import json
-from typing import List, Tuple, Set, Optional
-from dataclasses import dataclass
+from typing import List, Dict, Tuple, Set, Any, Optional
 
 #################################################
 
@@ -11,9 +10,8 @@ from dataclasses import dataclass
 
 from util.debug import LoggerManager
 from controller.registry.protocol import ProtocolRegistry
-from model.controller.general import Protocol
-from model.controller.device import EnergyMeterType, EnergyMeterRecord, DeviceHistoryStatus, EnergyMeterOptions, BaseCommunicationOptions
-from model.controller.node import NodeRecord, BaseNodeRecordConfig, BaseNodeProtocolOptions, NodeAttributes
+from model.controller.device import EnergyMeterRecord, DeviceHistoryStatus
+from model.controller.node import NodeRecord
 
 #################################################
 
@@ -184,7 +182,7 @@ class SQLiteDBClient:
 
             Transaction commit or rollback must be handled by the caller.
         """
-        
+
         logger = LoggerManager.get_logger(__name__)
 
         try:
@@ -193,7 +191,13 @@ class SQLiteDBClient:
                 INSERT INTO devices (name, protocol, device_type, meter_options, communication_options)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (record.name, record.protocol, record.type, json.dumps(record.options.get_meter_options()), json.dumps(record.communication_options.get_communication_options())),
+                (
+                    record.name,
+                    record.protocol,
+                    record.type,
+                    json.dumps(record.options.get_meter_options()),
+                    json.dumps(record.communication_options.get_communication_options()),
+                ),
             )
             device_id = cursor.lastrowid
 
@@ -204,7 +208,14 @@ class SQLiteDBClient:
                     INSERT INTO nodes (device_id, name, protocol, config, protocol_options, attributes)
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (device_id, node.name, node.protocol, json.dumps(node.config.get_config()), json.dumps(node.protocol_options.get_options()), json.dumps(node.attributes.get_attributes())),
+                    (
+                        device_id,
+                        node.name,
+                        node.protocol,
+                        json.dumps(node.config.get_config()),
+                        json.dumps(node.protocol_options.get_options()),
+                        json.dumps(node.attributes.get_attributes()),
+                    ),
                 )
 
             # Create initial device status entry
@@ -292,7 +303,14 @@ class SQLiteDBClient:
                 INSERT INTO devices (id, name, protocol, device_type, meter_options, communication_options)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (record.id, record.name, record.protocol, record.type, json.dumps(record.options.get_meter_options()), json.dumps(record.communication_options.get_communication_options())),
+                (
+                    record.id,
+                    record.name,
+                    record.protocol,
+                    record.type,
+                    json.dumps(record.options.get_meter_options()),
+                    json.dumps(record.communication_options.get_communication_options()),
+                ),
             )
 
             # Insert all associated nodes
@@ -303,7 +321,14 @@ class SQLiteDBClient:
                     INSERT INTO nodes (device_id, name, protocol, config, protocol_options, attributes)
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (record.id, node.name, node.protocol, json.dumps(node.config.get_config()), json.dumps(node.protocol_options.get_options()), json.dumps(node.attributes.get_attributes())),
+                    (
+                        record.id,
+                        node.name,
+                        node.protocol,
+                        json.dumps(node.config.get_config()),
+                        json.dumps(node.protocol_options.get_options()),
+                        json.dumps(node.attributes.get_attributes()),
+                    ),
                 )
 
             # Restore device status with preserved created_at and updated updated_at
@@ -405,8 +430,8 @@ class SQLiteDBClient:
                     name,
                     protocol,
                     device_type,
-                    meter_opts_str,
-                    comm_opts_str,
+                    meter_opts_json,
+                    comm_opts_json,
                 ) = device_row
 
                 cursor.execute(
@@ -416,43 +441,23 @@ class SQLiteDBClient:
                     (device_id,),
                 )
                 node_rows = cursor.fetchall()
-                
-                protocol = Protocol(protocol)
-                plugin = ProtocolRegistry.get_protocol_plugin(protocol)
-
                 nodes: Set[NodeRecord] = set()
-                for node_name, node_protocol, config_str, protocol_options_str, attributes_str in node_rows:
-                    
-                    node_protocol = Protocol(node_protocol)
-                    if node_protocol is Protocol.NONE:
-                        protocol_options=ProtocolRegistry.no_protocol_options(**json.loads(protocol_options_str))
-                    else:
-                        node_plugin = ProtocolRegistry.get_protocol_plugin(node_protocol)
-                        protocol_options = node_plugin.node_options_class(**json.loads(protocol_options_str))
-                        
-                    node = NodeRecord(
-                        device_id=device_id,
-                        name=node_name,
-                        protocol=node_protocol,
-                        config=BaseNodeRecordConfig(**json.loads(config_str)),
-                        protocol_options=protocol_options,
-                        attributes=NodeAttributes(**json.loads(attributes_str)),
+                for node_name, node_protocol, config_json, protocol_options_json, attributes_json in node_rows:
+                    config: Dict[str, Any] = json.loads(config_json)
+                    protocol_options: Dict[str, Any] = json.loads(protocol_options_json)
+                    attributes: Dict[str, Any] = json.loads(attributes_json)
+                    nodes.add(
+                        ProtocolRegistry.get_protocol_plugin(node_protocol).node_record_factory(
+                            node_name, node_protocol, config, protocol_options, attributes
+                        )
                     )
-                    for key, value in protocol_options.get_options().items():
-                        print(f"Value: {value}, Type: {type(value)}")
-                    nodes.add(node)
-                    
-                meter = EnergyMeterRecord(
-                    id=device_id,
-                    name=name,
-                    protocol=protocol,
-                    type=EnergyMeterType(device_type),
-                    options=EnergyMeterOptions(**json.loads(meter_opts_str)),
-                    communication_options=plugin.options_class(**json.loads(comm_opts_str)),
-                    nodes=nodes,
-                )
 
-                meters.append(meter)
+                meter_opts: Dict[str, Any] = json.loads(meter_opts_json)
+                comm_opts: Dict[str, Any] = json.loads(comm_opts_json)
+                meter_factory = ProtocolRegistry.get_protocol_plugin(protocol).meter_record_factory
+                if meter_factory is None:
+                    raise RuntimeError(f"No meter record factory registered for protocol {protocol}.")
+                meters.append(meter_factory(device_id, name, protocol, device_type, meter_opts, comm_opts, nodes))
 
         except Exception as e:
             logger.exception(f"Failed to retrieve energy meters: {e}")

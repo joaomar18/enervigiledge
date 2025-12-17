@@ -20,7 +20,7 @@ def get_unit_factor(unit_str: Optional[str]) -> float:
         Scaling factor to convert to base unit.
     """
 
-    UNIT_PREFIXES = {'m': 1e-3, '': 1.0, 'k': 1e3, 'M': 1e6, 'G': 1e9}
+    UNIT_PREFIXES = {"m": 1e-3, "": 1.0, "k": 1e3, "M": 1e6, "G": 1e9}
 
     if not unit_str:
         return 1.0

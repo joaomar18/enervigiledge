@@ -84,7 +84,8 @@ class MQTTClient:
         self.port = int(objects.require_env_variable("MQTT_PORT"))
         self.username = objects.require_env_variable("MQTT_USERNAME")
         self.password = auth_util.decrypt_password(
-            password_encrypted=objects.require_env_variable("MQTT_PASSWORD_ENCRYPTED"), key=objects.require_env_variable("MQTT_PASSWORD_KEY")
+            password_encrypted=objects.require_env_variable("MQTT_PASSWORD_ENCRYPTED"),
+            key=objects.require_env_variable("MQTT_PASSWORD_KEY"),
         )
         self.publish_queue: asyncio.Queue[MQTTMessage] = asyncio.Queue(maxsize=1000)
         self.publish_task: Optional[asyncio.Task] = None

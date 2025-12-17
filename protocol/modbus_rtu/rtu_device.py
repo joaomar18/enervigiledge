@@ -16,7 +16,15 @@ from util.debug import LoggerManager
 from controller.node.node import Node, ModbusRTUNode
 from model.controller.general import Protocol
 from model.controller.device import EnergyMeterType, EnergyMeterOptions
-from model.controller.protocol.modbus_rtu import ModbusRTUOptions, ModbusRTUNodeOptions, ModbusRTUNodeType, ModbusRTUFunction, ModbusRTUNodeMode, ModbusRTUBatchGroup, MODBUS_RTU_TYPE_TO_SIZE_MAP 
+from model.controller.protocol.modbus_rtu import (
+    ModbusRTUOptions,
+    ModbusRTUNodeOptions,
+    ModbusRTUNodeType,
+    ModbusRTUFunction,
+    ModbusRTUNodeMode,
+    ModbusRTUBatchGroup,
+    MODBUS_RTU_TYPE_TO_SIZE_MAP,
+)
 from controller.meter.meter import EnergyMeter
 
 #######################################
@@ -55,7 +63,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         MAX_BATCH_SPAN(int):Maximum number of consecutive Modbus data units read in a single batch request.
         MAX_ADDRESS_GAP(int):Maximum allowed gap between node addresses within a batch group.
     """
-    
+
     MAX_BATCH_SPAN = 16
     MAX_ADDRESS_GAP = 2
 
@@ -96,25 +104,22 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
         self.connection_task: asyncio.Task | None = None
         self.receiver_task: asyncio.Task | None = None
-        
+
         self.modbus_function_map: Dict[ModbusRTUFunction, ModbusCall] = {
-            ModbusRTUFunction.READ_COILS:
-                lambda client, address, size, device_id, no_response_expected:
-                    client.read_coils(address, count=size, device_id=device_id, no_response_expected=no_response_expected),
-
-            ModbusRTUFunction.READ_DISCRETE_INPUTS:
-                lambda client, address, size, device_id, no_response_expected:
-                    client.read_discrete_inputs(address, count=size, device_id=device_id, no_response_expected=no_response_expected),
-
-            ModbusRTUFunction.READ_HOLDING_REGISTERS:
-                lambda client, address, size, device_id, no_response_expected:
-                    client.read_holding_registers(address, count=size, device_id=device_id, no_response_expected=no_response_expected),
-
-            ModbusRTUFunction.READ_INPUT_REGISTERS:
-                lambda client, address, size, device_id, no_response_expected:
-                    client.read_input_registers(address, count=size, device_id=device_id, no_response_expected=no_response_expected),
+            ModbusRTUFunction.READ_COILS: lambda client, address, size, device_id, no_response_expected: client.read_coils(
+                address, count=size, device_id=device_id, no_response_expected=no_response_expected
+            ),
+            ModbusRTUFunction.READ_DISCRETE_INPUTS: lambda client, address, size, device_id, no_response_expected: client.read_discrete_inputs(
+                address, count=size, device_id=device_id, no_response_expected=no_response_expected
+            ),
+            ModbusRTUFunction.READ_HOLDING_REGISTERS: lambda client, address, size, device_id, no_response_expected: client.read_holding_registers(
+                address, count=size, device_id=device_id, no_response_expected=no_response_expected
+            ),
+            ModbusRTUFunction.READ_INPUT_REGISTERS: lambda client, address, size, device_id, no_response_expected: client.read_input_registers(
+                address, count=size, device_id=device_id, no_response_expected=no_response_expected
+            ),
         }
-        
+
         self.get_value_map: Dict[ModbusRTUNodeType, Callable[[ModbusRTUNodeOptions, ModbusPDU, int, int], float | int | bool]] = {
             ModbusRTUNodeType.BOOL: self.get_bool,
             ModbusRTUNodeType.INT_16: self.get_int,
@@ -126,7 +131,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             ModbusRTUNodeType.FLOAT_32: self.get_float,
             ModbusRTUNodeType.FLOAT_64: self.get_float,
         }
-        
+
     async def start(self) -> None:
         """
         Starts the Modbus RTU energy meter background tasks for connection management and data polling.
@@ -222,10 +227,10 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                     enabled_nodes = [node for node in self.modbus_rtu_nodes if node.config.enabled]
                     batch_read_nodes = [node for node in enabled_nodes if node.enable_batch_read]
                     single_read_nodes = [node for node in enabled_nodes if not node.enable_batch_read]
-                    
+
                     await self.process_batch_read(client, batch_read_nodes, single_read_nodes)
                     await self.process_single_reads(client, single_read_nodes)
-                    
+
                     if not enabled_nodes or any(node.connected for node in enabled_nodes):
                         self.set_connection_state(True)
                     else:
@@ -242,8 +247,10 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                 self.set_network_state(False)
 
             await asyncio.sleep(self.communication_options.read_period)
-            
-    async def process_batch_read(self, client: ModbusRTUClient, batch_read_nodes: List[ModbusRTUNode], single_read_nodes: List[ModbusRTUNode]) -> None:
+
+    async def process_batch_read(
+        self, client: ModbusRTUClient, batch_read_nodes: List[ModbusRTUNode], single_read_nodes: List[ModbusRTUNode]
+    ) -> None:
         """
         Perform batch reads for eligible Modbus RTU nodes.
 
@@ -251,30 +258,40 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         batch Modbus requests. If a batch read fails, all nodes in the affected
         batch group are scheduled for fallback single reads.
         """
-        
+
         logger = LoggerManager.get_logger(__name__)
-        
+
         if not batch_read_nodes:
             return
-        
+
         batch_by_function: Dict[ModbusRTUFunction, List[ModbusRTUBatchGroup]] = {}
-        batch_by_function[ModbusRTUFunction.READ_COILS] = self.create_batch_groups([node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_COILS])
-        batch_by_function[ModbusRTUFunction.READ_DISCRETE_INPUTS] = self.create_batch_groups([node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_DISCRETE_INPUTS])
-        batch_by_function[ModbusRTUFunction.READ_HOLDING_REGISTERS] = self.create_batch_groups([node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_HOLDING_REGISTERS])
-        batch_by_function[ModbusRTUFunction.READ_INPUT_REGISTERS] = self.create_batch_groups([node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_INPUT_REGISTERS])
-        
+        batch_by_function[ModbusRTUFunction.READ_COILS] = self.create_batch_groups(
+            [node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_COILS]
+        )
+        batch_by_function[ModbusRTUFunction.READ_DISCRETE_INPUTS] = self.create_batch_groups(
+            [node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_DISCRETE_INPUTS]
+        )
+        batch_by_function[ModbusRTUFunction.READ_HOLDING_REGISTERS] = self.create_batch_groups(
+            [node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_HOLDING_REGISTERS]
+        )
+        batch_by_function[ModbusRTUFunction.READ_INPUT_REGISTERS] = self.create_batch_groups(
+            [node for node in batch_read_nodes if node.options.function is ModbusRTUFunction.READ_INPUT_REGISTERS]
+        )
+
         for function, batch_groups in batch_by_function.items():
             for group in batch_groups:
                 try:
                     results = await self.batch_read_nodes(client, function, group)
-                
+
                     for node, value in results.items():
                         node.processor.set_value(value)
 
                 except Exception as e:
                     single_read_nodes.extend(group.nodes)
-                    logger.warning(f"Batch read failed for {function.name} (addr={group.start_addr}, size={group.size}) on device {self.name}: {e}")
-            
+                    logger.warning(
+                        f"Batch read failed for {function.name} (addr={group.start_addr}, size={group.size}) on device {self.name}: {e}"
+                    )
+
     async def process_single_reads(self, client: ModbusRTUClient, single_read_nodes: List[ModbusRTUNode]) -> None:
         """
         Perform individual Modbus reads for nodes not handled by batch reads.
@@ -282,27 +299,27 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         Executes per-node Modbus reads concurrently and updates node values.
         Failed reads are logged and result values are set to None.
         """
-        
+
         logger = LoggerManager.get_logger(__name__)
-        
+
         if not single_read_nodes:
             return
-        
+
         tasks = [asyncio.to_thread(self.read_node, client, node) for node in single_read_nodes]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         failed_nodes = []
-        
+
         for node, result in zip(single_read_nodes, results):
             if isinstance(result, Exception):
                 failed_nodes.append(node.config.name)
                 node.processor.set_value(None)
                 continue
-            
+
             node.processor.set_value(result)
-            
+
         if failed_nodes:
             logger.warning(f"Failed to read {len(failed_nodes)} nodes from device {self.name} with id {self.id}: {', '.join(failed_nodes)}")
-            
+
     def create_batch_groups(self, nodes: List[ModbusRTUNode]) -> List[ModbusRTUBatchGroup]:
         """
         Create Modbus RTU batch read groups from a list of nodes.
@@ -329,25 +346,25 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                 List of batch groups defining contiguous address ranges and
                 the nodes associated with each Modbus read operation.
         """
-        
+
         if not nodes:
             return []
-        
+
         nodes = sorted(nodes, key=lambda node: node.options.address)
         groups: List[ModbusRTUBatchGroup] = []
-        
+
         start_addr = nodes[0].options.address
         end_addr = start_addr + MODBUS_RTU_TYPE_TO_SIZE_MAP[nodes[0].options.type]
         current_group: List[ModbusRTUNode] = [nodes[0]]
-        
+
         for node in nodes[1:]:
             addr = node.options.address
             size = MODBUS_RTU_TYPE_TO_SIZE_MAP[node.options.type]
-        
+
             gap = addr - end_addr
             new_end = addr + size
             new_span = new_end - start_addr
-            
+
             if gap <= ModbusRTUEnergyMeter.MAX_ADDRESS_GAP and new_span <= ModbusRTUEnergyMeter.MAX_BATCH_SPAN:
                 end_addr = max(end_addr, new_end)
                 current_group.append(node)
@@ -356,11 +373,13 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                 start_addr = addr
                 end_addr = addr + size
                 current_group = [node]
-                
+
         groups.append(ModbusRTUBatchGroup(start_addr=start_addr, size=end_addr - start_addr, nodes=current_group))
         return groups
-            
-    async def batch_read_nodes(self, client: ModbusRTUClient, function: ModbusRTUFunction, batch_group: ModbusRTUBatchGroup) -> Dict[ModbusRTUNode,float | int | bool]:
+
+    async def batch_read_nodes(
+        self, client: ModbusRTUClient, function: ModbusRTUFunction, batch_group: ModbusRTUBatchGroup
+    ) -> Dict[ModbusRTUNode, float | int | bool]:
         """
         Perform a batch Modbus RTU read for a group of nodes.
 
@@ -386,11 +405,13 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             ModbusException:
                 If the batch read or value decoding fails.
         """
-        
+
         if function not in self.modbus_function_map:
             raise ModbusException(f"Unknown modbus function {function} while trying to read batch group: {batch_group.nodes}.")
 
-        response = await asyncio.to_thread(self.modbus_function_map[function], client, batch_group.start_addr, batch_group.size, self.communication_options.slave_id, False)
+        response = await asyncio.to_thread(
+            self.modbus_function_map[function], client, batch_group.start_addr, batch_group.size, self.communication_options.slave_id, False
+        )
         results: Dict[ModbusRTUNode, float | int | bool] = {}
 
         for node in batch_group.nodes:
@@ -404,7 +425,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                 raise ModbusException(f"Batch read failed for {self.name} on batch group {batch_group.nodes}: {e}")
 
         return results
-        
+
     def read_node(self, client: ModbusRTUClient, node: ModbusRTUNode) -> float | int | bool:
         """
         Read and decode a single Modbus address for the given node.
@@ -433,8 +454,10 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             size = MODBUS_RTU_TYPE_TO_SIZE_MAP[node.options.type]
             if node.options.function not in self.modbus_function_map:
                 raise ModbusException(f"Unknown modbus function {node.options.function} while trying to read node {node.config.name}.")
-            
-            response = self.modbus_function_map[node.options.function](client, node.options.address, size, self.communication_options.slave_id, False)
+
+            response = self.modbus_function_map[node.options.function](
+                client, node.options.address, size, self.communication_options.slave_id, False
+            )
             value = self.get_value_map[node.options.type](node.options, response, 0, size)
             node.set_connection_state(True)
             return value
@@ -446,7 +469,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         except Exception as e:
             node.set_connection_state(False)
             raise ModbusException(f"Unexpected error reading node {node.config.name} from device {self.name} with id {self.id}") from e
-        
+
     def build_buffer(self, registers: List[int], endian_mode: ModbusRTUNodeMode, index: int, size: int) -> bytes:
         """
         Build a byte buffer from a slice of Modbus registers using the specified endian mode.
@@ -480,8 +503,8 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             ModbusException:
                 If an unsupported endian mode is specified or the register slice is invalid.
         """
-        
-        words = [reg.to_bytes(2, "big") for reg in registers[index:index+size]]
+
+        words = [reg.to_bytes(2, "big") for reg in registers[index : index + size]]
 
         if endian_mode == ModbusRTUNodeMode.BIG_ENDIAN:
             ordered = words
@@ -498,8 +521,8 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         else:
             raise ModbusException(f"Unsupported endian mode {endian_mode}")
 
-        return b"".join(ordered)        
-        
+        return b"".join(ordered)
+
     def get_float(self, options: ModbusRTUNodeOptions, value: ModbusPDU, index: int, size: int) -> float:
         """
         Extract a floating-point value from a Modbus register response.
@@ -534,19 +557,19 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                 out of bounds, the endian mode is undefined, or the size or type
                 is unsupported.
         """
-        
+
         if options.function in (ModbusRTUFunction.READ_HOLDING_REGISTERS, ModbusRTUFunction.READ_INPUT_REGISTERS):
             if not hasattr(value, "registers") or value.registers is None:
                 raise ModbusException("Empty register response from Modbus device.")
-            
+
             if index < 0 or (index + size) > len(value.registers):
                 raise ModbusException(f"Register index {index} is out of bound for float value extraction with size {size}.")
-            
+
             if options.endian_mode is None:
                 raise ModbusException(f"Endian Mode needs to be defined for float value extraction.")
-            
+
             buffer = self.build_buffer(value.registers, options.endian_mode, index, size)
-            
+
             if size == 2:
                 if options.type is ModbusRTUNodeType.FLOAT_32:
                     return float(struct.unpack(">f", buffer)[0])
@@ -558,13 +581,13 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                     return float(struct.unpack(">d", buffer)[0])
                 else:
                     raise ModbusException(f"Incorrect type {options.type} for float value extraction of size 4.")
-                    
+
             else:
                 raise ModbusException(f"Incompatible size {size} for float value extraction.")
-            
+
         else:
             raise ModbusException(f"Invalid modbus function {options.function} while trying to extract float value.")
-            
+
     def get_int(self, options: ModbusRTUNodeOptions, value: ModbusPDU, index: int, size: int) -> int:
         """
         Extract an integer value from a Modbus register response.
@@ -599,32 +622,32 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                 out of bounds, the node configuration is inconsistent, or the size
                 or type is unsupported.
         """
-        
+
         if options.function in (ModbusRTUFunction.READ_HOLDING_REGISTERS, ModbusRTUFunction.READ_INPUT_REGISTERS):
             if not hasattr(value, "registers") or value.registers is None:
                 raise ModbusException("Empty register response from Modbus device.")
-            
+
             if index < 0 or (index + size) > len(value.registers):
                 raise ModbusException(f"Register index {index} is out of bound for int value extraction with size {size}.")
-            
+
             if size == 1:
                 if options.endian_mode is not None:
-                   raise ModbusException(f"Endian Mode is not applicable for single register value extraction.")
-                               
+                    raise ModbusException(f"Endian Mode is not applicable for single register value extraction.")
+
                 if options.type is ModbusRTUNodeType.INT_16:
                     return int(struct.unpack(">h", struct.pack(">H", value.registers[index]))[0])
-                
+
                 elif options.type is ModbusRTUNodeType.UINT_16:
                     return int(struct.unpack(">H", struct.pack(">H", value.registers[index]))[0])
                 else:
                     raise ModbusException(f"Incorrect type {options.type} for int value extraction with single register.")
-            
+
             else:
                 if options.endian_mode is None:
                     raise ModbusException(f"Endian Mode needs to be defined for multiple registers value extraction.")
-                
+
                 buffer = self.build_buffer(value.registers, options.endian_mode, index, size)
-            
+
                 if size == 2:
                     if options.type is ModbusRTUNodeType.INT_32:
                         return int(struct.unpack(">i", buffer)[0])
@@ -640,10 +663,10 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                         return int(struct.unpack(">Q", buffer)[0])
                     else:
                         raise ModbusException(f"Incorrect type {options.type} for int value extraction of size 4.")
-                    
+
                 else:
                     raise ModbusException(f"Incompatible size {size} for int value extraction.")
-            
+
         else:
             raise ModbusException(f"Invalid modbus function {options.function} while trying to extract int value.")
 
@@ -660,39 +683,39 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         Raises ModbusException on invalid configuration, response payload,
         or out-of-range access.
         """
-        
+
         if size != 1:
             raise ModbusException(f"Wrong size {size} for boolean value extraction.")
-        
+
         if options.endian_mode is not None:
             raise ModbusException(f"Endian Mode is not applicable for boolean value extraction.")
-        
+
         if options.function in (ModbusRTUFunction.READ_COILS, ModbusRTUFunction.READ_DISCRETE_INPUTS):
-            
+
             if not hasattr(value, "bits") or value.bits is None:
                 raise ModbusException("Empty bit response from Modbus device")
-            
+
             if index < 0 or index >= len(value.bits):
                 raise ModbusException(f"Index {index} is out of range for boolean value extraction.")
-            
+
             return bool(value.bits[index])
-            
+
         elif options.function in (ModbusRTUFunction.READ_HOLDING_REGISTERS, ModbusRTUFunction.READ_INPUT_REGISTERS):
-                              
+
             if options.bit is None or options.bit < 0 or options.bit > 15:
                 raise ModbusException(f"The modbus register bit needs to be an integer between 0 and 15.")
-            
+
             if not hasattr(value, "registers") or value.registers is None:
                 raise ModbusException("Empty register response from Modbus device")
-            
+
             if index < 0 or index >= len(value.registers):
                 raise ModbusException(f"Couldn't find the register with index {index} for boolean value extraction.")
-            
+
             return bool((value.registers[index] >> options.bit) & 1)
 
         else:
             raise ModbusException(f"Unknown modbus function {options.function} while trying to extract boolean value.")
-    
+
     async def close_connection(self) -> None:
         """
         Closes the Modbus RTU client connection and updates connection state.

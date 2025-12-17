@@ -101,7 +101,7 @@ class NodeType(str, Enum):
     FLOAT = "FLOAT"
     BOOL = "BOOL"
     STRING = "STRING"
-    
+
 
 class CounterMode(str, Enum):
     """
@@ -149,7 +149,7 @@ class BaseNodeProtocolOptions:
     This class intentionally contains no attributes and acts solely as a
     structural and typing anchor for protocol option subclasses.
     """
-    
+
     pass
 
     def get_options(self) -> Dict[str, Any]:
@@ -201,6 +201,63 @@ class BaseNodeRecordConfig:
 
         return asdict(self)
 
+    @staticmethod
+    def cast_from_dict(config_dict: Dict[str, Any]) -> "BaseNodeRecordConfig":
+        """
+        Construct BaseNodeRecordConfig from a persisted configuration dictionary.
+
+        Converts stored primitive values into strongly typed base node configuration
+        attributes, including counters, logging, and alarm thresholds. Assumes the
+        input dictionary has already been validated.
+
+        Raises:
+            ValueError: If the dictionary cannot be cast into a valid base node
+            configuration (e.g. due to corrupted or incompatible data).
+        """
+
+        try:
+            enabled = bool(config_dict["enabled"])
+            unit = str(config_dict["unit"]) if config_dict["unit"] is not None else None
+            publish = bool(config_dict["publish"])
+            calculated = bool(config_dict["calculated"])
+            custom = bool(config_dict["custom"])
+            decimal_places = bool(config_dict["decimal_places"]) if config_dict["decimal_places"] is not None else None
+            logging = bool(config_dict["logging"])
+            logging_period = int(config_dict["logging_period"])
+            min_alarm = bool(config_dict["min_alarm"])
+            max_alarm = bool(config_dict["max_alarm"])
+            min_alarm_value = bool(config_dict["min_alarm_value"]) if config_dict["min_alarm_value"] is not None else None
+            max_alarm_value = bool(config_dict["max_alarm_value"]) if config_dict["max_alarm_value"] is not None else None
+            min_warning = bool(config_dict["min_warning"])
+            max_warning = bool(config_dict["max_warning"])
+            min_warning_value = bool(config_dict["min_warning_value"]) if config_dict["min_warning_value"] is not None else None
+            max_warning_value = bool(config_dict["max_warning_value"]) if config_dict["max_warning_value"] is not None else None
+            is_counter = bool(config_dict["is_counter"]) if config_dict["is_counter"] is not None else None
+            counter_mode = CounterMode(config_dict["counter_mode"]) if config_dict["counter_mode"] is not None else None
+            return BaseNodeRecordConfig(
+                enabled,
+                unit,
+                publish,
+                calculated,
+                custom,
+                decimal_places,
+                logging,
+                logging_period,
+                min_alarm,
+                max_alarm,
+                min_alarm_value,
+                max_alarm_value,
+                min_warning,
+                max_warning,
+                min_warning_value,
+                max_warning_value,
+                is_counter,
+                counter_mode,
+            )
+
+        except Exception as e:
+            raise ValueError(f"Couldn't cast dictionary into Node Record Base Configuration: {e}.")
+
 
 @dataclass
 class NodeAttributes:
@@ -222,6 +279,26 @@ class NodeAttributes:
         """
 
         return asdict(self)
+
+    @staticmethod
+    def cast_from_dict(attributes_dict: Dict[str, Any]) -> "NodeAttributes":
+        """
+        Construct NodeAttributes from a persisted attributes dictionary.
+
+        Converts stored primitive values into strongly typed node attribute
+        representations. Assumes the input dictionary has already been validated.
+
+        Raises:
+            ValueError: If the dictionary cannot be cast into valid node
+            attributes (e.g. due to corrupted or incompatible data).
+        """
+
+        try:
+            phase = NodePhase(attributes_dict["phase"])
+            return NodeAttributes(phase)
+
+        except Exception as e:
+            raise ValueError(f"Couldn't cast dictionary into Node Attributes: {e}.")
 
 
 @dataclass
@@ -278,18 +355,19 @@ class NodeRecord:
         """
 
         return hash((self.device_id, self.name))
-    
+
     def get_attributes(self) -> Dict[str, Any]:
         """
         Return a dictionary representation of the node record for persistence or serialization.
         """
-        
-        return {"name": self.name, 
-                "protocol": self.protocol, 
-                "config": self.config.get_config(), 
-                "protocol_options": self.protocol_options.get_options(), 
-                "attributes": self.attributes.get_attributes(), 
-                "device_id": self.device_id
+
+        return {
+            "name": self.name,
+            "protocol": self.protocol,
+            "config": self.config.get_config(),
+            "protocol_options": self.protocol_options.get_options(),
+            "attributes": self.attributes.get_attributes(),
+            "device_id": self.device_id,
         }
 
 
@@ -404,7 +482,9 @@ class NodeConfig:
 
         config = record.config.get_config()
         valid_fields = set(NodeConfig.__dataclass_fields__.keys())
-        filtered_config = {k: v for k, v in config.items() if k in valid_fields and k not in ["unit", "name", "attributes", "protocol", "counter_mode"]}
+        filtered_config = {
+            k: v for k, v in config.items() if k in valid_fields and k not in ["unit", "name", "attributes", "protocol", "counter_mode"]
+        }
 
         return NodeConfig(
             name=record.name,
@@ -466,7 +546,16 @@ class NodeConfig:
                 raise ValueError(f"counter node is not valid for {self.type.name} nodes.")
             if self.counter_mode is not None:
                 raise ValueError("Counter mode is not applicable to non counter nodes.")
-            if self.min_alarm or self.max_alarm or self.min_warning or self.max_warning or self.min_alarm_value is not None or self.min_warning_value is not None or self.max_alarm_value is not None or self.max_warning_value is not None:
+            if (
+                self.min_alarm
+                or self.max_alarm
+                or self.min_warning
+                or self.max_warning
+                or self.min_alarm_value is not None
+                or self.min_warning_value is not None
+                or self.max_alarm_value is not None
+                or self.max_warning_value is not None
+            ):
                 raise ValueError(f"Alarms and Warnings are not supported for {self.type.name} nodes.")
             if self.unit is not None:
                 raise ValueError(f"Non null unit is not applicable to {self.type.name} nodes.")
@@ -480,10 +569,10 @@ class NodeConfig:
 
         if self.max_alarm and self.max_alarm_value is None:
             raise ValueError("max_alarm is enabled but max_alarm_value is None.")
-        
+
         if self.min_warning and self.min_warning_value is None:
             raise ValueError("min_warning is enabled but min_warning_value is None.")
-        
+
         if self.max_warning and self.max_warning_value is None:
             raise ValueError("max_warning is enabled but max_warning_value is None.")
 

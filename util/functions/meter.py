@@ -15,11 +15,12 @@ from model.controller.node import NodePhase, NodePrefix, NodeDirection, NodeAttr
 
 #######################################
 
+
 def get_node_prefix(node: Optional[Node] = None, phase: Optional[NodePhase] = None) -> str:
     """Returns the phase-related prefix from a node's name or for a specific phase.
 
-    Checks if the node's name starts with a known NodePrefix value (e.g. "l1_", "l2_", 
-    "total_") and returns it. If a phase is provided instead, returns the corresponding 
+    Checks if the node's name starts with a known NodePrefix value (e.g. "l1_", "l2_",
+    "total_") and returns it. If a phase is provided instead, returns the corresponding
     prefix for that phase using NODE_PHASE_TO_PREFIX_MAP.
 
     Args:
@@ -35,7 +36,7 @@ def get_node_prefix(node: Optional[Node] = None, phase: Optional[NodePhase] = No
         for prefix in NodePrefix:
             if node.config.name.startswith(prefix.value):
                 return prefix.value
-    
+
     if phase:
         return NODE_PHASE_TO_PREFIX_MAP[phase].value
 
@@ -171,65 +172,68 @@ def get_empty_log_points(numeric: bool, incremental: bool, time_span: TimeSpanPa
     Returns:
         List[Dict[str, Any]]: Empty points with null values and ISO-formatted timestamps.
     """
-    
+
     empty_points: List[Dict[str, Any]] = []
     if time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step:
-            
-        for bucket_start, bucket_end in date.get_aligned_time_buckets(start_time=time_span.start_time, end_time=time_span.end_time, time_step=time_span.time_step, time_zone=time_span.time_zone):
-            
+
+        for bucket_start, bucket_end in date.get_aligned_time_buckets(
+            start_time=time_span.start_time, end_time=time_span.end_time, time_step=time_span.time_step, time_zone=time_span.time_zone
+        ):
+
             if numeric and incremental:
-                
+
                 point = {
-                    'start_time': date.to_iso_minutes(bucket_start),
-                    'end_time': date.to_iso_minutes(bucket_end),
-                    'value': None,
+                    "start_time": date.to_iso_minutes(bucket_start),
+                    "end_time": date.to_iso_minutes(bucket_end),
+                    "value": None,
                 }
             elif numeric:
-                
+
                 point = {
-                    'start_time': date.to_iso_minutes(bucket_start),
-                    'end_time': date.to_iso_minutes(bucket_end),
-                    'average_value': None,
-                    'min_value': None,
-                    'max_value': None,
+                    "start_time": date.to_iso_minutes(bucket_start),
+                    "end_time": date.to_iso_minutes(bucket_end),
+                    "average_value": None,
+                    "min_value": None,
+                    "max_value": None,
                 }
-            else:                
-                
+            else:
+
                 point = {
-                    'start_time': date.to_iso_minutes(bucket_start),
-                    'end_time': date.to_iso_minutes(bucket_end),
-                    'value': None,
+                    "start_time": date.to_iso_minutes(bucket_start),
+                    "end_time": date.to_iso_minutes(bucket_end),
+                    "value": None,
                 }
-                
+
             empty_points.append(point)
-    
-    return empty_points    
+
+    return empty_points
+
 
 def get_empty_log_global_metrics(numeric: bool, incremental: bool) -> Dict[str, Any]:
     """Generates an empty placeholder dictionary for global log metrics.
 
     Args:
         numeric: If True, uses numeric metric fields; otherwise uses a generic value field.
-        incremental: If True with numeric, returns a single 'value' field; if False, 
+        incremental: If True with numeric, returns a single 'value' field; if False,
             returns aggregated numeric fields including averages and extrema.
 
     Returns:
         Dict[str, Any]: Dictionary containing global metric fields initialized to None.
     """
-    
+
     if numeric and incremental:
-        return {'value': None}
-    
+        return {"value": None}
+
     elif numeric:
         return {
-            'average_value': None,
-            'min_value': None,
-            'max_value': None,
-            'min_value_start_time': None,
-            'min_value_end_time': None,
-            'max_value_start_time': None,
-            'max_value_end_time': None,
+            "average_value": None,
+            "min_value": None,
+            "max_value": None,
+            "min_value_start_time": None,
+            "min_value_end_time": None,
+            "max_value_start_time": None,
+            "max_value_end_time": None,
         }
-    
-    else: 
-        return {'value': None}
+
+    else:
+        return {"value": None}

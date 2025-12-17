@@ -254,7 +254,7 @@ class EnergyMeter(Device):
 
         if failed_nodes:
             for name, e in failed_nodes:
-                tb = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+                tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
                 logger.exception(f"Failed to calculate node {name} from device {self.name} with id {self.id}:\n{tb}")
 
     def calculate_energy(self, prefix: str, energy_type: str, node: Node) -> None:

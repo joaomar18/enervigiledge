@@ -159,7 +159,7 @@ class NumericNodeProcessor(NodeProcessor[N]):
 
         if self.initial_value is None:
             self.initial_value = value
-            
+
         current_value = self.value if self.value is not None else self.ZERO
 
         if self.config.counter_mode is CounterMode.DIRECT:
@@ -234,13 +234,17 @@ class NumericNodeProcessor(NodeProcessor[N]):
             output["mean_count"] = self.mean_count
 
             if self.min_value is not None:
-                min_value = round(self.min_value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.min_value)
+                min_value = (
+                    round(self.min_value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.min_value)
+                )
                 output["min_value"] = calculation.get_scaled_value(min_value, self.config.unit)
             else:
                 output["min_value"] = self.min_value
 
             if self.max_value is not None:
-                max_value = round(self.max_value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.max_value)
+                max_value = (
+                    round(self.max_value, self.config.decimal_places) if self.config.decimal_places is not None else int(self.max_value)
+                )
                 output["max_value"] = calculation.get_scaled_value(max_value, self.config.unit)
             else:
                 output["max_value"] = self.max_value

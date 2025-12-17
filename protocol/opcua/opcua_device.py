@@ -199,10 +199,10 @@ class OPCUAEnergyMeter(EnergyMeter):
                     enabled_nodes = [node for node in self.opcua_nodes if node.config.enabled]
                     batch_read_nodes = [node for node in enabled_nodes if node.enable_batch_read]
                     single_read_nodes = [node for node in enabled_nodes if not node.enable_batch_read]
-                
+
                     await self.process_batch_read(client, batch_read_nodes, single_read_nodes)
                     await self.process_single_reads(client, single_read_nodes)
-                    
+
                     if not enabled_nodes or any(node.connected for node in enabled_nodes):
                         self.set_connection_state(True)
                     else:
@@ -215,8 +215,10 @@ class OPCUAEnergyMeter(EnergyMeter):
                 self.set_connection_state(False)
 
             await asyncio.sleep(self.communication_options.read_period)
-            
-    async def process_batch_read(self, client: asyncua.Client, batch_read_nodes: List[OPCUANode], single_read_nodes: List[OPCUANode]) -> None:
+
+    async def process_batch_read(
+        self, client: asyncua.Client, batch_read_nodes: List[OPCUANode], single_read_nodes: List[OPCUANode]
+    ) -> None:
         """
         Perform a batch read for the given OPC UA nodes. If the batch read succeeds,
         each node is assigned its corresponding typed value. If the batch read fails,
@@ -228,51 +230,51 @@ class OPCUAEnergyMeter(EnergyMeter):
             batch_read_nodes (List[OPCUANode]): Nodes intended for batch reading.
             single_read_nodes (List[OPCUANode]): Nodes that should fall back to individual reads.
         """
-        
+
         logger = LoggerManager.get_logger(__name__)
-        
+
         if not batch_read_nodes:
             return
-        
+
         try:
             batch_values = await self.batch_read_nodes(client, batch_read_nodes)
             for node, result in zip(batch_read_nodes, batch_values):
                 node.processor.set_value(result)
-                                
+
         except Exception as e:
             single_read_nodes.extend(batch_read_nodes)
             logger.warning(f"Batch read failed for device {self.name} with id {self.id}: {e}")
-            
+
     async def process_single_reads(self, client: asyncua.Client, single_read_nodes: List[OPCUANode]) -> None:
         """
         Read each provided OPC UA node individually using separate asynchronous tasks.
         Successful reads update the node’s value, while failed reads set the node value
         to None and trigger failure tracking.
-        
+
         Args:
             client (asyncua.Client): Active OPC UA client connection.
             single_read_nodes (List[OPCUANode]): Nodes to be read individually.
         """
-        
+
         logger = LoggerManager.get_logger(__name__)
-        
+
         if not single_read_nodes:
             return
-        
+
         tasks = [asyncio.create_task(self.read_node(client, node)) for node in single_read_nodes]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         failed_nodes = []
-        
+
         for node, result in zip(single_read_nodes, results):
             if isinstance(result, Exception):
                 failed_nodes.append(node.config.name)
                 node.processor.set_value(None)
                 continue
             node.processor.set_value(result)
-            
+
         if failed_nodes:
             logger.warning(f"Failed to read {len(failed_nodes)} nodes from device {self.name} with id {self.id}: {', '.join(failed_nodes)}")
-        
+
     async def batch_read_nodes(self, client: asyncua.Client, nodes: list[OPCUANode]) -> List[float | int | str | bool]:
         """
         Read multiple OPC UA nodes in a single batch request and convert each
@@ -293,11 +295,11 @@ class OPCUAEnergyMeter(EnergyMeter):
 
         try:
             values = await client.read_values(ua_nodes)
-            typed_values: List[float | int | str | bool] = [] 
+            typed_values: List[float | int | str | bool] = []
             for i, value in enumerate(values):
                 typed_values.append((self.get_value_map[nodes[i].options.type])(value))
             return typed_values
-        
+
         except Exception as e:
             raise Exception(f"Batch read failed for {self.name}: {e}")
 
@@ -325,11 +327,11 @@ class OPCUAEnergyMeter(EnergyMeter):
         except Exception as e:
             node.set_connection_state(False)
             raise Exception(f"Failed to read {node.config.name} from {self.name}") from e
-        
+
     def get_float(self, value: Any) -> float:
         """Convert a raw OPC UA value to float."""
         return float(value)
-    
+
     def get_int(self, value: Any) -> int:
         """Convert a raw OPC UA value to int."""
         return int(value)
