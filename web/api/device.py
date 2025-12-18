@@ -1,10 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
-import json
-import sqlite3
-from typing import Dict, Tuple, List, Any, Optional
+from typing import Dict, Any
 from fastapi import APIRouter, Request, Depends
-from starlette.datastructures import UploadFile
 from fastapi.responses import JSONResponse
 
 #######################################
@@ -18,7 +15,6 @@ from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
 from web.api.decorator import auth_endpoint, AuthConfigs
 from util.functions.images import process_and_save_image, get_device_image, delete_device_image, rollback_image, flush_bin_images
-import util.functions.objects as objects
 import web.exceptions as api_exception
 import web.parsers.device as device_parser
 from util.debug import LoggerManager
@@ -49,7 +45,6 @@ async def add_device(
 
     record = device_parser.parse_device(new_device=True, dict_device=device_data, dict_nodes=device_nodes)
     # NEEDS VALIDATION BETWEEN PARSING AND INSTANTIATION. MOVE CREATION TO END OF TRY BLOCK WHEN VALIDATION EXISTS
-    new_device = device_manager.create_device_from_record(record)
 
     # DB Update
     conn, cursor = database.require_client()
@@ -60,7 +55,8 @@ async def add_device(
         if device_id is None:
             raise api_exception.DeviceCreationError(api_exception.Errors.DEVICE.DEVICE_STORAGE_FAILED)
 
-        new_device.id = device_id
+        record.id = device_id
+        new_device = device_manager.create_device_from_record(record)
 
         if device_image:
             if not process_and_save_image(device_image, device_id, 200, "db/device_img/"):
