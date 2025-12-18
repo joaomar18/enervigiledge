@@ -186,6 +186,11 @@ class Errors:
             error_id="AUTH.MISSING_NEW_PASSWORD_CONFIRM",
             default_message="The new password confirmation is missing or in an invalid format.",
         )
+        INVALID_AUTO_LOGIN = APIErrorDef(
+            status_code=400,
+            error_id="AUTH.INVALID_AUTO_LOGIN",
+            default_message="The auto_login field must be a boolean value.",
+        )
         INVALID_PASSWORD = APIErrorDef(
             status_code=422,
             error_id="AUTH.INVALID_PASSWORD",
