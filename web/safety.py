@@ -219,19 +219,23 @@ class HTTPSafety:
         fingerprint = f"{ip}:{hash(user_agent)}"
         return fingerprint
 
-    async def create_jwt_token(self, username: str, password: str, auto_login: bool, ip: str) -> Tuple[str, str]:
+    async def create_jwt_token(self, username: str, password: str, auto_login: bool, request: Request) -> Tuple[str, str]:
         """
         Authenticate user credentials and issue a JWT access token.
 
-        Verifies the provided credentials against the stored user configuration,
-        generates a signed JWT token on success, and registers the active login
-        session with the associated client IP and auto-login preference.
+        Validates the provided username and password against the stored user
+        configuration. On successful authentication, generates and signs a JWT
+        token, registers the active session with the client IP, and applies the
+        requested auto-login behavior.
+
+        On authentication failure, remaining login attempts and unlock timing
+        information may be included in the raised exception details.
 
         Args:
             username: Username to authenticate.
             password: Plain-text password to verify.
             auto_login: Whether the session should persist across restarts.
-            ip: Client IP address associated with the login session.
+            request: Incoming request, used for client identification and rate tracking.
 
         Returns:
             Tuple[str, str]: The authenticated username and the generated JWT token.
@@ -239,7 +243,7 @@ class HTTPSafety:
         Raises:
             InvalidCredentials: If the username or password is incorrect.
             UserConfigurationNotFound: If the user configuration does not exist.
-            UserConfigCorrupted: If the stored user configuration is invalid.
+            UserConfigCorrupted: If the stored user configuration is invalid or unreadable.
         """
 
         # Checks if configuration file exists
@@ -250,24 +254,26 @@ class HTTPSafety:
         with open(HTTPSafety.USER_CONFIG_PATH, "r") as file:
             config: Dict[str, Any] = json.load(file)
 
-        # Verify credentials
-        if username != config.get("username") or not validation.validate_password(password):
-            raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_CREDENTIALS)
-
+        stored_username: Optional[str] = config.get("username")
         stored_hash: Optional[str] = config.get("password_hash")
-        if stored_hash is None or not isinstance(stored_hash, str):
+        if stored_username is None or stored_hash is None or not isinstance(stored_username, str) or not isinstance(stored_hash, str):
             raise api_exception.UserConfigCorrupted(api_exception.Errors.AUTH.USER_CONFIG_CORRUPT)
 
+        # Verify credentials
         try:
             self.ph.verify(stored_hash, password)
+            password_correct = True
         except (VerifyMismatchError, InvalidHashError):
+            password_correct = False
+
+        if username != config.get("username") or not validation.validate_password(password) or not password_correct:
             raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_CREDENTIALS)
 
         # Create token and return it
         token_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
         token = jwt.encode(token_payload, config["jwt_secret"], algorithm="HS256")
         self.active_tokens[token] = LoginToken(
-            token=token, user=username, ip=ip, auto_login=auto_login, keep_session_until=None
+            token=token, user=username, ip=web_util.get_ip_address(request), auto_login=auto_login, keep_session_until=None
         )
         return (username, token)
 

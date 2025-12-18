@@ -60,7 +60,7 @@ async def login(request: Request, safety: HTTPSafety = Depends(services.get_safe
         raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.INVALID_AUTO_LOGIN)
     auto_login = auto_login if auto_login is not None else False
 
-    username, token = await safety.create_jwt_token(username, password, auto_login, web_util.get_ip_address(request))
+    username, token = await safety.create_jwt_token(username, password, auto_login, request)
     response = JSONResponse(content={"message": "Login successful"})
     response.set_cookie(
         key="token",

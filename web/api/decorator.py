@@ -53,11 +53,7 @@ def auth_endpoint(config: APIMethodConfig):
 
                 # Check if client is blocked
                 if safety.is_blocked(request):
-                    raise api_exception.ToManyRequests(
-                        api_exception.Errors.AUTH.BLOCKED_CLIENT,
-                        None,
-                        details={"unlocked_date": safety.get_unlocked_date(request)},
-                    )
+                    raise api_exception.ToManyRequests(api_exception.Errors.AUTH.BLOCKED_CLIENT)
 
                 # Check authentication if required
                 if config.requires_auth:
@@ -70,16 +66,21 @@ def auth_endpoint(config: APIMethodConfig):
             except api_exception.APIException as e:
                 all_increment_exceptions = DEFAULT_INCREMENT_EXCEPTIONS + config.increment_exceptions  # Merge default icrement exceptions with config-specific ones
                 logger.warning(f"Failed {web_util.get_api_url(request)} API from IP: {web_util.get_ip_address(request)} due to error: {str(e.message)}")
+                content: Dict[str, Any] = {}
 
                 # Handle incrementing exceptions
                 if any(isinstance(e, exc) for exc in all_increment_exceptions):
                     if e.status_code != 429: # Avoid double incrementing for ToManyRequests exceptions
                         safety.increment_failed_requests(request, web_util.get_api_url(request))
+                    remaining_attempts = safety.get_remaining_requests(request)
+                    content["remaining_attempts"] = safety.get_remaining_requests(request)
+                    if remaining_attempts <= 0:
+                        content["unlocked_date"] = safety.get_unlocked_date(request)
+
                 else:
                     safety.clean_failed_requests(request, web_util.get_api_url(request))  # Clean failed requests if the exception was not of incrementing type
                     return JSONResponse(status_code=401, content={"error": str(e)})
 
-                content: Dict[str, Any] = {}
                 content["message"] = e.message
                 content["error_code"] = e.error_id
                 content.update(e.details)
