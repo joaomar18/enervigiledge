@@ -21,6 +21,7 @@ from util.functions.images import process_and_save_image, get_device_image, dele
 import util.functions.objects as objects
 import web.exceptions as api_exception
 import web.parsers.device as device_parser
+from util.debug import LoggerManager
 
 #######################################
 
@@ -39,8 +40,9 @@ async def add_device(
 ) -> JSONResponse:
     """Adds a new device with configuration and optional image."""
 
-    device_data, device_nodes, device_image = await device_parser.parse_device_request(request)
+    logger = LoggerManager.get_logger(__name__)
 
+    device_data, device_nodes, device_image = await device_parser.parse_device_request(request)
     device_name = device_data.get("name")
     if not device_name or not isinstance(device_name, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_NAME)
@@ -76,6 +78,7 @@ async def add_device(
         raise
 
     await device_manager.add_device(new_device)
+    logger.info(f"Added new device '{new_device.name}' with ID {new_device.id}.")
     return JSONResponse(content={"message": "Device added sucessfully."})
 
 
@@ -89,9 +92,11 @@ async def edit_device(
 ) -> JSONResponse:
     """Updates existing device configuration and optional image."""
 
+    logger = LoggerManager.get_logger(__name__)
+
     device_data, device_nodes, device_image = await device_parser.parse_device_request(request)
     device_id = device_parser.parse_device_id(device_data)
-    record = device_parser.parse_device(new_device=True, dict_device=device_data, dict_nodes=device_nodes)
+    record = device_parser.parse_device(new_device=False, dict_device=device_data, dict_nodes=device_nodes)
     # NEEDS VALIDATION BETWEEN PARSING AND INSTANTIATION. MOVE CREATION TO END OF TRY BLOCK WHEN VALIDATION EXISTS
     updated_device = device_manager.create_device_from_record(record)
 
@@ -119,6 +124,7 @@ async def edit_device(
 
     await device_manager.delete_device(device)
     await device_manager.add_device(updated_device)
+    logger.info(f"Updated device '{updated_device.name}' with ID {updated_device.id}.")
     return JSONResponse(content={"message": "Device edited sucessfully."})
 
 
@@ -132,6 +138,8 @@ async def delete_device(
     timedb: TimeDBClient = Depends(services.get_timedb),
 ) -> JSONResponse:
     """Removes device from system and deletes associated data."""
+
+    logger = LoggerManager.get_logger(__name__)
 
     try:
         payload: Dict[str, Any] = await request.json()  # request payload
@@ -159,6 +167,7 @@ async def delete_device(
     delete_device_image(device_id, "db/device_img/")
     timedb.delete_db(device.name, device_id)
     await device_manager.delete_device(device)
+    logger.info(f"Deleted device '{device.name}' with ID {device.id}.")
     return JSONResponse(content={"message": "Device deleted sucessfully."})
 
 

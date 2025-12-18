@@ -495,21 +495,7 @@ class NodeConfig:
             attributes=record.attributes,
             **filtered_config,
         )
-
-    def __post_init__(self):
-        """
-        Applies automatic adjustments to warning thresholds.
-
-        If warning limits are undefined but alarm limits exist, they are initialized
-        to slightly relaxed values relative to the alarm thresholds.
-        """
-
-        DEFAULT_WARNING_PERCENT = 0.02
-
-        if self.min_warning_value is None and self.min_alarm_value is not None:
-            self.min_warning_value = self.min_alarm_value * (1 + DEFAULT_WARNING_PERCENT)
-        if self.max_warning_value is None and self.max_alarm_value is not None:
-            self.max_warning_value = self.max_alarm_value * (1 - DEFAULT_WARNING_PERCENT)
+    
 
     def validate(self) -> None:
         """

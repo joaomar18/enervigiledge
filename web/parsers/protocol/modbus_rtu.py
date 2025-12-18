@@ -171,7 +171,7 @@ def parse_modbus_rtu_node_protocol_options(dict_protocol_options: Dict[str, Any]
         not isinstance(function, ModbusRTUFunction)
         or not isinstance(address, int)
         or not isinstance(type, ModbusRTUNodeType)
-        or not isinstance(endian_mode, (ModbusRTUNodeType, NoneType))
+        or not isinstance(endian_mode, (ModbusRTUNodeMode, NoneType))
         or not isinstance(bit, (int, NoneType))
     ):
         raise ValueError(f"Invalid types in Modbus RTU Node Protocol options.")
