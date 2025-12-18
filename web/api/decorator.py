@@ -1,7 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
 from functools import wraps
-from typing import Callable, Awaitable, List, Type
+from typing import Dict, Any, Callable, Awaitable, List, Type
 from dataclasses import dataclass, field
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -38,11 +38,11 @@ DEFAULT_INCREMENT_EXCEPTIONS = [
 @dataclass
 class APIMethodConfig:
     """
-    Configuration for API endpoint exception handling.
+    Configuration for API endpoint behavior related to authentication and request-rate safety.
 
     Attributes:
-        requires_auth: Whether the endpoint requires authentication (JWT Token)
-        increment_exceptions: Exception types that should increment failed requests
+        requires_auth: Whether the endpoint requires JWT-based authentication.
+        increment_exceptions: APIException types that should count toward failed request tracking (e.g., for client blocking).
     """
 
     requires_auth: bool = True
@@ -61,17 +61,10 @@ def auth_endpoint(config: APIMethodConfig):
 
                 # Check if client is blocked
                 if safety.is_blocked(request):
-                    raise api_exception.
-
-
-                    return 
-
-
-
-                if safety.is_blocked(request):
-                    return JSONResponse(
-                        status_code=429,
-                        content={"unlocked": safety.get_unlocked_date(request), "error": "Too many failed attempts. Try again later."},
+                    raise api_exception.ToManyRequests(
+                        api_exception.Errors.AUTH.BLOCKED_CLIENT,
+                        None,
+                        details={"unlocked_date": safety.get_unlocked_date(request)},
                     )
 
                 # Check authentication if required
@@ -80,46 +73,31 @@ def auth_endpoint(config: APIMethodConfig):
 
                 result = await func(request, safety, **kwargs)  # Call the core endpoint function
                 safety.clean_failed_requests(request, web_util.get_api_url(request))  # Clean failed requests on success
-
                 return result
 
             except APIException as e:
-                print("API Exception")
-                exception_name = e.__class__.__name__
-
-                all_increment_exceptions = (
-                    DEFAULT_INCREMENT_EXCEPTIONS + config.increment_exceptions
-                )  # Merge default icrement exceptions with config-specific ones
+                all_increment_exceptions = DEFAULT_INCREMENT_EXCEPTIONS + config.increment_exceptions  # Merge default icrement exceptions with config-specific ones
+                logger.warning(f"Failed {web_util.get_api_url(request)} API from IP: {web_util.get_ip_address(request)} due to error: {str(e.message)}")
 
                 # Handle incrementing exceptions
                 if any(isinstance(e, exc) for exc in all_increment_exceptions):
-                    logger.exception(
-                        f"Failed {web_util.get_api_url(request)} API due to exception {exception_name} from IP: {web_util.get_ip_address(request)} due to error: {str(e)}"
-                    )
                     safety.increment_failed_requests(request, web_util.get_api_url(request))
-
-                    # Check if now blocked after incrementing
-                    if safety.is_blocked(request):
-                        return JSONResponse(
-                            status_code=429,
-                            content={"unlocked": safety.get_unlocked_date(request), "error": "Too many failed attempts. Try again later."},
-                        )
-
-                    return JSONResponse(status_code=401, content={"remaining": safety.get_remaining_requests(request), "error": str(e)})
                 else:
-                    safety.clean_failed_requests(
-                        request, web_util.get_api_url(request)
-                    )  # Clean failed requests if the exception was not of incrementing type
-                    logger.exception(
-                        f"Failed {web_util.get_api_url(request)} API due to exception {exception_name} from IP: {web_util.get_ip_address(request)} due to error: {str(e)}, detail: {e.details}"
-                    )
+                    safety.clean_failed_requests(request, web_util.get_api_url(request))  # Clean failed requests if the exception was not of incrementing type
                     return JSONResponse(status_code=401, content={"error": str(e)})
 
+                content: Dict[str, Any] = {}
+                content["message"] = e.message
+                content["error_code"] = e.error_id
+                content.update(e.details)
+                return JSONResponse(status_code=e.status_code, content=content)
+
             except Exception as e:
-                print("Unexpected Exception")
-                # Handle unexpected exceptions
                 logger.exception(f"Failed {web_util.get_api_url(request)} API due to server error: {str(e)}")
-                return JSONResponse(status_code=500, content={"error": str(e)})
+                content: Dict[str, Any] = {}
+                content["message"] = str(e)
+                content["error_code"] = api_exception.Errors.INTERNAL_SERVER_ERROR.error_id
+                return JSONResponse(status_code=api_exception.Errors.INTERNAL_SERVER_ERROR.status_code, content=content)
 
         return wrapper
 
@@ -131,8 +109,14 @@ class AuthConfigs:
     """Simple presets for common auth endpoint patterns."""
 
     # Standard login endpoint
-    LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[InvalidCredentials, UserConfigurationNotFound])
-    AUTO_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[InvalidCredentials, UserConfigurationNotFound])
+    LOGIN = APIMethodConfig(
+        requires_auth=False,
+        increment_exceptions=[InvalidCredentials, UserConfigurationNotFound],
+    )
+    AUTO_LOGIN = APIMethodConfig(
+        requires_auth=False,
+        increment_exceptions=[InvalidCredentials, UserConfigurationNotFound],
+    )
     LOGOUT = APIMethodConfig(increment_exceptions=[InvalidCredentials, UserConfigurationNotFound])
     CREATE_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[UserConfigurationExists])
     CHANGE_PASSWORD = APIMethodConfig(increment_exceptions=[InvalidCredentials, UserConfigurationNotFound])
