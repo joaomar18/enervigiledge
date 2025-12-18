@@ -188,7 +188,7 @@ class BaseNodeRecordConfig:
     max_warning: bool
     min_warning_value: float | None
     max_warning_value: float | None
-    is_counter: bool | None
+    is_counter: bool
     counter_mode: CounterMode | None = None
 
     def get_config(self) -> Dict[str, Any]:
@@ -232,7 +232,7 @@ class BaseNodeRecordConfig:
             max_warning = bool(config_dict["max_warning"])
             min_warning_value = float(config_dict["min_warning_value"]) if config_dict["min_warning_value"] is not None else None
             max_warning_value = float(config_dict["max_warning_value"]) if config_dict["max_warning_value"] is not None else None
-            is_counter = bool(config_dict["is_counter"]) if config_dict["is_counter"] is not None else None
+            is_counter = bool(config_dict["is_counter"])
             counter_mode = CounterMode(config_dict["counter_mode"]) if config_dict["counter_mode"] is not None else None
             return BaseNodeRecordConfig(
                 enabled,
@@ -446,7 +446,7 @@ class NodeConfig:
     unit: str | None
     protocol: Protocol = Protocol.NONE
     enabled: bool = True
-    is_counter: bool | None = False
+    is_counter: bool = False
     counter_mode: CounterMode | None = None
     publish: bool = True
     calculated: bool = False

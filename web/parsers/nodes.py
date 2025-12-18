@@ -151,7 +151,7 @@ def parse_node_config(dict_node_config: Dict[str, Any]) -> BaseNodeRecordConfig:
     max_warning_value = parse_helper.parse_float_field_from_dict(dict_node_config, "max_warning_value", missing, True)
 
     # Parse Is Counter
-    is_counter = parse_helper.parse_bool_field_from_dict(dict_node_config, "is_counter", missing, True)
+    is_counter = parse_helper.parse_bool_field_from_dict(dict_node_config, "is_counter", missing)
 
     # Parse Counter Mode
     counter_mode = parse_helper.parse_str_field_from_dict(dict_node_config, "counter_mode", missing, True)
@@ -184,7 +184,7 @@ def parse_node_config(dict_node_config: Dict[str, Any]) -> BaseNodeRecordConfig:
         or not isinstance(max_warning, bool)
         or not isinstance(min_warning_value, (float, NoneType))
         or not isinstance(max_warning_value, (float, NoneType))
-        or not isinstance(is_counter, (bool, NoneType))
+        or not isinstance(is_counter, bool)
         or not isinstance(counter_mode, (CounterMode, NoneType))
     ):
         raise ValueError(f"Invalid types in Node Base Configuration.")
