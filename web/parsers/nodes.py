@@ -14,7 +14,6 @@ from model.controller.device import EnergyMeterType
 from model.controller.node import NodePhase, CounterMode, NodeRecord, BaseNodeRecordConfig, NodeAttributes
 from model.controller.general import Protocol
 from model.date import TimeSpanParameters, FormattedTimeStep
-import util.functions.objects as objects
 import web.exceptions as api_exception
 import util.functions.date as date
 import util.functions.meter as meter_util

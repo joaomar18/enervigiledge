@@ -11,8 +11,7 @@ from starlette.datastructures import UploadFile, QueryParams
 
 from controller.registry.protocol import ProtocolRegistry
 from model.controller.general import Protocol
-from model.controller.device import EnergyMeterType, EnergyMeterOptions, BaseCommunicationOptions, EnergyMeterRecord
-import util.functions.objects as objects
+from model.controller.device import EnergyMeterType, EnergyMeterOptions, EnergyMeterRecord
 from web.parsers.nodes import parse_nodes
 import web.exceptions as api_exception
 

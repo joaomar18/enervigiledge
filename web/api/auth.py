@@ -56,7 +56,8 @@ async def login(request: Request, safety: HTTPSafety = Depends(services.get_safe
     if password is None or not isinstance(password, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_PASSWORD)
 
-    auto_login: bool = objects.check_bool_str(payload.get("auto_login"))
+    print(f"Auto Login: {payload.get('auto_login')}, Type: {type(payload.get('auto_login'))}")
+    auto_login: bool = bool(payload.get("auto_login")) if payload.get("auto_login") is not None else False
 
     username, token = await safety.create_jwt_token(username, password, auto_login, web_util.get_ip_address(request))
     response = JSONResponse(content={"message": "Login successful", "username": username})
