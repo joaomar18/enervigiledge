@@ -13,7 +13,6 @@ from web.api.decorator import auth_endpoint, AuthConfigs
 from web.safety import HTTPSafety
 import web.exceptions as api_exception
 import util.functions.web as web_util
-import util.functions.objects as objects
 
 #######################################
 
@@ -62,7 +61,7 @@ async def login(request: Request, safety: HTTPSafety = Depends(services.get_safe
     auto_login = auto_login if auto_login is not None else False
 
     username, token = await safety.create_jwt_token(username, password, auto_login, web_util.get_ip_address(request))
-    response = JSONResponse(content={"message": "Login successful", "username": username})
+    response = JSONResponse(content={"message": "Login successful"})
     response.set_cookie(
         key="token",
         value=token,
