@@ -1,7 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
 from functools import wraps
-from typing import Callable, List, Type
+from typing import Callable, Awaitable, List, Type
 from dataclasses import dataclass, field
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -22,10 +22,12 @@ from web.exceptions import (
 from web.safety import HTTPSafety
 from util.debug import LoggerManager
 import util.functions.web as web_util
+import web.exceptions as api_exception
 
 #######################################
 
 
+EndpointFunc = Callable[[Request, HTTPSafety], Awaitable[JSONResponse]]
 DEFAULT_INCREMENT_EXCEPTIONS = [
     InvalidRequest,
     TokenNotInRequest,
@@ -48,19 +50,8 @@ class APIMethodConfig:
 
 
 def auth_endpoint(config: APIMethodConfig):
-    """
-    Decorator for authentication endpoints with proper exception handling.
 
-    Args:
-        increment_exceptions: Exception classes that should increment failed requests
-        no_increment_exceptions: Exception classes that should NOT increment failed requests
-        requires_auth: Whether endpoint requires existing authentication
-
-    Returns:
-        Decorator that wraps the endpoint with safety and exception handling
-    """
-
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: EndpointFunc) -> Callable:
         @wraps(func)
         async def wrapper(request: Request, safety: HTTPSafety, **kwargs) -> JSONResponse:
 
@@ -69,6 +60,14 @@ def auth_endpoint(config: APIMethodConfig):
             try:
 
                 # Check if client is blocked
+                if safety.is_blocked(request):
+                    raise api_exception.
+
+
+                    return 
+
+
+
                 if safety.is_blocked(request):
                     return JSONResponse(
                         status_code=429,

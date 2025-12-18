@@ -57,31 +57,26 @@ class TokenInRequestInvalid(APIException):
 
 class UserConfigurationExists(APIException):
     """Raised when user configuration is trying to be created but the file already exists"""
-
     pass
 
 
 class UserConfigurationNotFound(APIException):
     """Raised when the user configuration does not exist or has not been initialized."""
-
     pass
 
 
 class UserConfigCorrupted(APIException):
     """Raised when the user configuration is corrupted or cannot be parsed."""
-
     pass
 
 
 class InvalidCredentials(APIException):
     """Raised when credentials (username and password) are invalid (not recognized)."""
-
     pass
 
 
 class InvalidRequest(APIException):
     """Raised when a request is malformed or contains invalid data."""
-
     pass
 
 
