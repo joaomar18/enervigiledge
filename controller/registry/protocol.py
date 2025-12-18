@@ -14,9 +14,12 @@ from model.controller.device import BaseCommunicationOptions, EnergyMeterRecord,
 from model.controller.node import NodeRecord, NodeConfig, BaseNodeRecordConfig, BaseNodeProtocolOptions, NodeAttributes
 from model.controller.protocol.no_protocol import NoProtocolNodeOptions, NONE_TO_INTERNAL_TYPE_MAP
 from model.controller.protocol.modbus_rtu import ModbusRTUOptions, ModbusRTUNodeOptions, MODBUS_RTU_TO_INTERNAL_TYPE_MAP
-from model.controller.protocol.opcua import OPCUAOptions, OPCUANodeOptions, OPCUA_TO_INTERNAL_TYPE_MAP
+from model.controller.protocol.opc_ua import OPCUAOptions, OPCUANodeOptions, OPCUA_TO_INTERNAL_TYPE_MAP
 from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
 from protocol.opcua.opcua_device import OPCUAEnergyMeter
+from web.parsers.protocol.modbus_rtu import parse_modbus_rtu_meter_comm_options, parse_modbus_rtu_node_protocol_options
+from web.parsers.protocol.opc_ua import parse_opc_ua_meter_comm_options, parse_opc_ua_node_protocol_options
+from web.parsers.protocol.no_protocol import parse_no_protocol_node_protocol_options
 
 #######################################
 
@@ -35,6 +38,8 @@ class ProtocolPlugin:
     meter_record_factory: Optional[MeterRecordFactory]
     node_record_factory: NodeRecordFactory
     node_factory: NodeFactory
+    meter_comm_options_parser_method: Optional[Callable[[Dict[str, Any]], BaseCommunicationOptions]]
+    node_protocol_options_parser_method: Callable[[Dict[str, Any]], BaseNodeProtocolOptions]
 
 
 class ProtocolRegistry:
@@ -56,13 +61,19 @@ class ProtocolRegistry:
         meter_record_factory: Optional[MeterRecordFactory],
         node_record_factory: NodeRecordFactory,
         node_factory: NodeFactory,
+        meter_comm_options_parser_method: Optional[Callable[[Dict[str, Any]], BaseCommunicationOptions]],
+        node_protocol_options_parser_method: Callable[[Dict[str, Any]], BaseNodeProtocolOptions],
     ) -> None:
         """
-        Register a protocol and its associated domain factories in the registry.
+        Register a protocol and its domain-specific factories and parsers.
 
-        Binds a protocol identifier to the concrete energy meter class, communication
-        options, node protocol options, and factory functions required to construct
-        meter and node domain objects for that protocol.
+        Associates a protocol identifier with the concrete energy meter class,
+        communication and node option types, record factories, runtime node
+        factory, and API parsing functions required to fully support the
+        protocol across persistence, domain logic, and request handling.
+
+        This registration enables protocol-agnostic code paths to dynamically
+        construct and validate meters and nodes based on the selected protocol.
         """
 
         ProtocolRegistry._registry[protocol] = ProtocolPlugin(
@@ -72,6 +83,8 @@ class ProtocolRegistry:
             meter_record_factory=meter_record_factory,
             node_record_factory=node_record_factory,
             node_factory=node_factory,
+            meter_comm_options_parser_method=meter_comm_options_parser_method,
+            node_protocol_options_parser_method=node_protocol_options_parser_method,
         )
 
     @staticmethod
@@ -134,7 +147,15 @@ def _no_protocol_node_factory(record: NodeRecord) -> Node:
 
 
 ProtocolRegistry.register_protocol(
-    Protocol.NONE, None, None, NoProtocolNodeOptions, None, _no_protocol_node_record_factory, _no_protocol_node_factory
+    Protocol.NONE,
+    None,
+    None,
+    NoProtocolNodeOptions,
+    None,
+    _no_protocol_node_record_factory,
+    _no_protocol_node_factory,
+    None,
+    parse_no_protocol_node_protocol_options,
 )
 
 
@@ -198,6 +219,8 @@ ProtocolRegistry.register_protocol(
     _modbus_rtu_meter_record_factory,
     _modbus_rtu_node_record_factory,
     _modbus_rtu_node_factory,
+    parse_modbus_rtu_meter_comm_options,
+    parse_modbus_rtu_node_protocol_options,
 )
 
 
@@ -260,6 +283,8 @@ ProtocolRegistry.register_protocol(
     _opc_ua_meter_record_factory,
     _opc_ua_node_record_factory,
     _opcua_node_factory,
+    parse_opc_ua_meter_comm_options,
+    parse_opc_ua_node_protocol_options,
 )
 
 #############################################################################

@@ -287,22 +287,12 @@ class Errors:
         INVALID_PROTOCOL = APIErrorDef(
             status_code=400,
             error_id="DEVICE.INVALID_PROTOCOL",
-            default_message="Provided protocol is not supported.",
+            default_message="Provided protocol is invalid or not supported.",
         )
         INVALID_TYPE = APIErrorDef(
             status_code=400,
             error_id="DEVICE.INVALID_TYPE",
             default_message="Provided device type is not supported.",
-        )
-        INVALID_DEVICE_OPTIONS_FIELDS = APIErrorDef(
-            status_code=400,
-            error_id="DEVICE.INVALID_OPTIONS_FIELDS",
-            default_message="Invalid field value in the device options.",
-        )
-        INVALID_DEVICE_COMUNICATION_FIELDS = APIErrorDef(
-            status_code=400,
-            error_id="DEVICE.INVALID_COMUNICATION_FIELDS",
-            default_message="Invalid field value in the device communication options.",
         )
         DEVICE_STORAGE_FAILED = APIErrorDef(
             status_code=500,
@@ -401,19 +391,6 @@ class Errors:
             status_code=400,
             error_id="NODES.ENERGY_DIRECTION",
             default_message="The energy direction provided is not valid.",
-        )
-        INVALID_NODE_CONFIG_FIELDS = APIErrorDef(
-            status_code=400,
-            error_id="NODES.INVALID_NODE_CONFIG_FIELDS",
-            default_message="Invalid field value in the node base configuration.",
-        )
-        INVALID_NODE_PROTOCOL_OPTIONS_FIELDS = APIErrorDef(
-            status_code=400,
-            error_id="NODES.INVALID_NODE_PROTOCOL_OPTIONS_FIELDS",
-            default_message="Invalid field value in the node protocol options.",
-        )
-        INVALID_NODE_ATTRIBUTES_FIELDS = APIErrorDef(
-            status_code=400, error_id="NODES.INVALID_NODE_ATTRIBUTES_FIELDS", default_message="Invalid field value in the node attributes."
         )
         INVALID_TIME_ZONE = APIErrorDef(
             status_code=400, error_id="TIME.INVALID_TIME_ZONE", default_message="The provided time zone is not valid."

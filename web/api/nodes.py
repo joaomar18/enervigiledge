@@ -64,7 +64,7 @@ async def get_node_additional_info(
 
     device_id = device_parser.parse_device_id(request.query_params)
     name = request.query_params.get("node_name")
-    if name is None or not objects.validate_field_type(request.query_params, "node_name", str):
+    if name is None or not isinstance("name", str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_NAME)
 
     device = device_manager.get_device(device_id)
@@ -124,7 +124,7 @@ async def get_logs_from_node(
 
     device_id = device_parser.parse_device_id(request.query_params)
     name = request.query_params.get("node_name")
-    if name is None or not objects.validate_field_type(request.query_params, "node_name", str):
+    if name is None or not isinstance(name, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_NAME)
     formatted = objects.check_bool_str(request.query_params.get("formatted"))
     time_span = await nodes_parser.parse_formatted_time_span(request, formatted)
@@ -155,11 +155,11 @@ async def get_energy_consumption(
     device_id = device_parser.parse_device_id(request.query_params)
 
     phase = request.query_params.get("phase")
-    if phase is None or not objects.validate_field_type(request.query_params, "phase", str):
+    if phase is None or not isinstance(phase, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_PHASE)
 
     direction = request.query_params.get("direction")
-    if direction is None or not objects.validate_field_type(request.query_params, "direction", str):
+    if direction is None or not isinstance(direction, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_ENERGY_DIRECTION)
 
     try:
@@ -197,7 +197,7 @@ async def get_peak_demand_power(
 
     device_id = device_parser.parse_device_id(request.query_params)
     phase = request.query_params.get("phase")
-    if phase is None or not objects.validate_field_type(request.query_params, "phase", str):
+    if phase is None or not isinstance(phase, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_PHASE)
 
     try:
@@ -233,7 +233,7 @@ async def delete_logs_from_node(
 
     device_id = device_parser.parse_device_id(request.query_params)
     name = request.query_params.get("node_name")
-    if name is None or not objects.validate_field_type(request.query_params, "node_name", str):
+    if name is None or not isinstance(name, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_NAME)
 
     device = device_manager.get_device(device_id)

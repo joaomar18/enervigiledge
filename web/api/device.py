@@ -40,9 +40,10 @@ async def add_device(
     """Adds a new device with configuration and optional image."""
 
     device_data, device_nodes, device_image = await device_parser.parse_device_request(request)
-    if not objects.validate_field_type(device_data, "name", str):
+
+    device_name = device_data.get("name")
+    if not device_name or not isinstance(device_name, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_NAME)
-    device_name: str = device_data["name"]
 
     record = device_parser.parse_device(new_device=True, dict_device=device_data, dict_nodes=device_nodes)
     # NEEDS VALIDATION BETWEEN PARSING AND INSTANTIATION. MOVE CREATION TO END OF TRY BLOCK WHEN VALIDATION EXISTS
@@ -90,7 +91,6 @@ async def edit_device(
 
     device_data, device_nodes, device_image = await device_parser.parse_device_request(request)
     device_id = device_parser.parse_device_id(device_data)
-
     record = device_parser.parse_device(new_device=True, dict_device=device_data, dict_nodes=device_nodes)
     # NEEDS VALIDATION BETWEEN PARSING AND INSTANTIATION. MOVE CREATION TO END OF TRY BLOCK WHEN VALIDATION EXISTS
     updated_device = device_manager.create_device_from_record(record)
@@ -139,7 +139,6 @@ async def delete_device(
         raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
 
     device_id = device_parser.parse_device_id(payload)
-
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")

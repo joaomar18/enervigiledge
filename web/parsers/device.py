@@ -50,16 +50,16 @@ async def parse_device_request(request: Request) -> Tuple[Dict[str, Any], List[D
         except Exception as e:
             raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_FORM_DATA)
 
-        if not objects.validate_field_type(form, "device_data", str):
+        device_data_json = form.get("device_data")
+        if device_data_json is None or not isinstance(device_data_json, str):
             raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_DATA)
-        device_data_json = str(form.get("device_data"))
 
-        if not objects.validate_field_type(form, "device_nodes", str):
+        device_nodes_json = form.get("device_nodes")
+        if device_data_json is None or not isinstance(device_nodes_json, str):
             raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_NODES_DATA)
-        device_nodes_json = str(form.get("device_nodes"))
 
         device_image = form.get("device_image")
-        if not objects.validate_field_type(form, "device_image", UploadFile) or not isinstance(device_image, UploadFile):
+        if device_image is None or not isinstance(device_image, UploadFile):
             raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_UPLOADED_IMAGE)
 
         try:
@@ -77,14 +77,16 @@ async def parse_device_request(request: Request) -> Tuple[Dict[str, Any], List[D
         except Exception as e:
             raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
 
-        if not objects.validate_field_type(payload, "device_data", Dict[str, Any]):
+        device_data_req: Optional[Dict[str, Any]] = payload.get("device_data")
+        if device_data_req is None or not isinstance(device_data_req, dict):
             raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_DATA)
-        device_data: Dict[str, Any] = payload["device_data"]
 
-        if not objects.validate_field_type(payload, "device_nodes", Dict[str, Any]):
+        device_nodes_req: Optional[List[Dict[str, Any]]] = payload.get("device_nodes")
+        if device_nodes_req is None or not isinstance(device_nodes_req, list):
             raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_NODES_DATA)
-        device_nodes: List[Dict[str, Any]] = payload["device_nodes"]
 
+        device_data: Dict[str, Any] = device_data_req
+        device_nodes: List[Dict[str, Any]] = device_nodes_req
         device_image = None
 
     return device_data, device_nodes, device_image
@@ -108,7 +110,7 @@ def parse_device_id(request_dict: Dict[str, Any] | QueryParams) -> int:
     """
 
     device_id = request_dict.get("id")
-    if device_id is None or not objects.validate_field_type(request_dict, "id", int | str):
+    if device_id is None or not isinstance(device_id, (int, str)):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
 
     try:
@@ -121,97 +123,32 @@ def parse_device_id(request_dict: Dict[str, Any] | QueryParams) -> int:
 
 def parse_device_options(dict_meter_options: Dict[str, Any]) -> EnergyMeterOptions:
     """
-    Parse and validate energy meter options from a raw input dictionary.
+    Parse meter-level configuration options from a raw dictionary.
 
-    This function validates the provided meter options against the
-    EnergyMeterOptions schema, ensuring all required fields are present
-    and correctly typed. On validation failure, a structured
-    InvalidRequestPayload API exception is raised with detailed error
-    information suitable for frontend consumption.
+    Converts the provided dictionary into an EnergyMeterOptions instance
+    using explicit casting logic. Any failure during casting is reported
+    as an invalid request payload.
 
     Args:
-        dict_meter_options (Dict[str, Any]): Raw meter options payload,
-            typically originating from an API request.
+        dict_meter_options: Raw meter options dictionary, typically provided
+            by an external source such as an API request or database record.
 
     Returns:
-        EnergyMeterOptions: A validated and fully constructed meter
-        options object.
+        EnergyMeterOptions: Parsed meter options instance.
 
     Raises:
-        InvalidRequestPayload:
-            - If required option fields are missing.
-            - If one or more option fields have invalid types or values.
+        InvalidRequestPayload: If the options dictionary cannot be cast into
+            a valid EnergyMeterOptions object.
     """
 
+    missing_fields: List[str] = []
     try:
-        dataclass_fields, optional_fields = objects.check_required_keys(dict_meter_options, EnergyMeterOptions)
-    except KeyError as e:
-        missing_fields = list(e.args[0]) if e.args else []
+        return EnergyMeterOptions()
+
+    except Exception as e:
         raise api_exception.InvalidRequestPayload(
             error=api_exception.Errors.DEVICE.MISSING_DEVICE_OPTIONS_FIELDS, details={"fields": missing_fields}
         )
-
-    try:
-        arguments = objects.create_dict_from_fields(dict_meter_options, dataclass_fields, optional_fields)
-    except ValueError as e:
-        invalid_field = e.args[0] if e.args else None
-        raise api_exception.InvalidRequestPayload(
-            error=api_exception.Errors.DEVICE.INVALID_DEVICE_OPTIONS_FIELDS, details={"field": invalid_field}
-        )
-
-    return EnergyMeterOptions(**arguments)
-
-
-def parse_communication_options(dict_communication_options: Dict[str, Any], protocol: Protocol) -> BaseCommunicationOptions:
-    """
-    Parse and validate communication options for a specific protocol.
-
-    This function resolves the protocol-specific communication options
-    schema, validates the provided options against it, and returns a
-    fully constructed communication options instance. Validation errors
-    are reported using structured API exceptions suitable for frontend
-    consumption.
-
-    Args:
-        dict_communication_options (Dict[str, Any]): Raw communication
-            options payload, typically provided via an API request.
-        protocol (Protocol): Protocol used to select the appropriate
-            communication options schema.
-
-    Returns:
-        BaseCommunicationOptions: A validated communication options
-        instance corresponding to the given protocol.
-
-    Raises:
-        InvalidRequestPayload:
-            - If the protocol is not supported.
-            - If required communication option fields are missing.
-            - If one or more communication option fields are invalid.
-    """
-
-    # Get protocol plugin from registry
-    try:
-        plugin = ProtocolRegistry.get_protocol_plugin(protocol)
-    except NotImplementedError as e:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_PROTOCOL)
-
-    try:
-        dataclass_fields, optional_fields = objects.check_required_keys(dict_communication_options, plugin.options_class)
-    except KeyError as e:
-        missing_fields = list(e.args[0]) if e.args else []
-        raise api_exception.InvalidRequestPayload(
-            error=api_exception.Errors.DEVICE.MISSING_DEVICE_COMUNICATION_FIELDS, details={"fields": missing_fields}
-        )
-
-    try:
-        arguments = objects.create_dict_from_fields(dict_communication_options, dataclass_fields, optional_fields)
-    except ValueError as e:
-        invalid_field = e.args[0] if e.args else None
-        raise api_exception.InvalidRequestPayload(
-            error=api_exception.Errors.DEVICE.INVALID_DEVICE_COMUNICATION_FIELDS, details={"field": invalid_field}
-        )
-
-    return plugin.options_class(**arguments)
 
 
 def parse_device(new_device: bool, dict_device: Dict[str, Any], dict_nodes: List[Dict[str, Any]]) -> EnergyMeterRecord:
@@ -241,58 +178,53 @@ def parse_device(new_device: bool, dict_device: Dict[str, Any], dict_nodes: List
               are missing or invalid.
     """
 
-    # Check for Configuration fields
-    try:
-        objects.check_required_keys(dict_device, EnergyMeterRecord, ("nodes",))
-    except KeyError as e:
-        missing_fields = list(e.args[0]) if e.args else []
-        raise api_exception.InvalidRequestPayload(
-            error=api_exception.Errors.DEVICE.MISSING_DEVICE_FIELDS, details={"fields": missing_fields}
-        )
-
     # Device ID Parsing
     if not new_device:
-        if not objects.validate_field_type(dict_device, "id", int):
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_ID)
-        device_id = int(dict_device["id"])
+        device_id = parse_device_id(dict_device)
 
     else:
         device_id = None
 
     # Name Parsing
-    if not objects.validate_field_type(dict_device, "name", str):
+    device_name = dict_device.get("name")
+    if device_name is None or not isinstance(device_name, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_NAME)
-    device_name: str = dict_device["name"]
 
     # Protocol Parsing
-    if not objects.validate_field_type(dict_device, "protocol", str):
+    protocol = dict_device.get("protocol")
+    if protocol is None or not isinstance(protocol, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_PROTOCOL)
-    protocol: str = dict_device["protocol"]
     try:
         protocol = Protocol(protocol)
+        parser_comm_method = ProtocolRegistry.get_protocol_plugin(protocol).meter_comm_options_parser_method
+        if parser_comm_method is None:
+            raise RuntimeError(f"No communication options parser registered for protocol {protocol}.")
+
     except Exception as e:
         raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_PROTOCOL)
 
     # Type Parsing
-    if not objects.validate_field_type(dict_device, "type", str):
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_TYPE)
     device_type: str = dict_device["type"]
+    if device_type is None or not isinstance(device_type, str):
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_TYPE)
     try:
         device_type = EnergyMeterType(device_type)
     except Exception as e:
         raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.INVALID_TYPE)
 
     # Device Options
-    if not objects.validate_field_type(dict_device, "options", Dict[str, Any]):
+    device_options_dict_req = dict_device.get("options")
+    if device_options_dict_req is None or not isinstance(device_options_dict_req, dict):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_OPTIONS)
-    device_options_dict: Dict[str, Any] = dict_device["options"]
+    device_options_dict: Dict[str, Any] = device_options_dict_req
     device_options = parse_device_options(device_options_dict)
 
     # Communication Options
-    if not objects.validate_field_type(dict_device, "communication_options", Dict[str, Any]):
+    comm_options_dict_req = dict_device.get("communication_options")
+    if comm_options_dict_req is None or not isinstance(comm_options_dict_req, dict):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.DEVICE.MISSING_DEVICE_COMUNICATION)
-    communication_options_dict: Dict[str, Any] = dict_device["communication_options"]
-    communication_options = parse_communication_options(communication_options_dict, protocol)
+    comm_options_dict: Dict[str, Any] = comm_options_dict_req
+    comm_options = parser_comm_method(comm_options_dict)
 
     return EnergyMeterRecord(
         name=device_name,
@@ -300,6 +232,6 @@ def parse_device(new_device: bool, dict_device: Dict[str, Any], dict_nodes: List
         protocol=protocol,
         type=device_type,
         options=device_options,
-        communication_options=communication_options,
+        communication_options=comm_options,
         nodes=parse_nodes(dict_nodes, device_type),
     )

@@ -8,7 +8,7 @@ from typing import Dict, Any
 
 from model.controller.node import NodeConfig, BaseNodeRecordConfig, NodeRecord, BaseNodeProtocolOptions
 from model.controller.protocol.modbus_rtu import ModbusRTUNodeOptions
-from model.controller.protocol.opcua import OPCUANodeOptions
+from model.controller.protocol.opc_ua import OPCUANodeOptions
 from controller.registry.node_type import TypeRegistry
 
 #######################################

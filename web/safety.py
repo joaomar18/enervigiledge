@@ -103,43 +103,23 @@ class HTTPSafety:
         self.active_tokens: Dict[str, LoginToken] = {}
         self.ph = PasswordHasher()
 
-    async def create_user_configuration(self, request: Request) -> None:
+    async def create_user_configuration(self, username: str, password: str) -> None:
         """
-        Creates the initial user configuration with username and password.
+        Create the initial user authentication configuration.
 
-        This method initializes the authentication configuration by validating the
-        request payload, enforcing password requirements, and persisting the user
-        credentials and JWT secret. The operation is allowed only once.
+        Initializes the user configuration by validating the provided credentials,
+        generating a password hash and JWT secret, and persisting them to disk.
+        This operation is allowed only once.
 
         Args:
-            request (Request): HTTP request containing a JSON body with
-                `username` and `password` fields.
-
-        Returns:
-            None
+            username: Username to store in the authentication configuration.
+            password: Plain-text password to validate and hash.
 
         Raises:
-            UserConfigurationExists: If the user configuration already exists.
-            InvalidRequestPayload: If the request body is not valid JSON or required
-                fields are missing or invalid.
-            InvalidCredentials: If the password does not meet validation requirements.
+            UserConfigurationExists: If a user configuration already exists.
+            InvalidCredentials: If the provided password does not meet validation
+                requirements.
         """
-
-        try:
-            payload: Dict[str, Any] = await request.json()  # request payload
-        except Exception as e:
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
-
-        username: Optional[str] = payload.get("username")
-        if username is None or not objects.validate_field_type(payload, "username", str):
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_USERNAME)
-
-        password: Optional[str] = payload.get("password")
-        if password is None or not objects.validate_field_type(payload, "password", str):
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_PASSWORD)
-
-        if password is None:
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_PASSWORD)
 
         if not validation.validate_password(password):
             raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_PASSWORD)
@@ -155,51 +135,26 @@ class HTTPSafety:
         with open(HTTPSafety.USER_CONFIG_PATH, "w") as file:
             json.dump(config, file, indent=4)
 
-    async def change_user_password(self, request: Request) -> None:
+    async def change_user_password(self, username: str, old_password: str, new_password: str, confirm_new_password: str) -> None:
         """
-        Changes the user's password after validating authentication credentials
-        and request payload.
+        Update the stored user password after verifying existing credentials.
 
-        This method validates the JSON request body, ensures all authentication
-        fields are present, verifies the current credentials, enforces password
-        rules, and updates the stored password hash.
+        Validates the current credentials, enforces password rules, and replaces
+        the stored password hash with a new one. The user configuration must
+        already exist and be valid.
 
         Args:
-            request (Request): HTTP request containing a JSON body with
-                `username`, `old_password`, `new_password`, and
-                `confirm_new_password` fields.
-
-        Returns:
-            None
+            username: Username of the account to update.
+            old_password: Current password used for verification.
+            new_password: New password to store.
+            confirm_new_password: Confirmation of the new password.
 
         Raises:
-            InvalidRequestPayload: If the request body is invalid JSON or required
-                authentication fields are missing or malformed.
             InvalidCredentials: If authentication fails, passwords do not match,
-                or the new password violates validation rules.
+                or the new password does not meet validation requirements.
             UserConfigurationNotFound: If the user configuration does not exist.
+            UserConfigCorrupted: If the stored configuration is invalid or incomplete.
         """
-
-        try:
-            payload: Dict[str, Any] = await request.json()  # request payload
-        except Exception as e:
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
-
-        username: Optional[str] = payload.get("username")
-        if username is None or not objects.validate_field_type(payload, "username", str):
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_USERNAME)
-
-        old_password: Optional[str] = payload.get("old_password")
-        if old_password is None or not objects.validate_field_type(payload, "old_password", str):
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_OLD_PASSWORD)
-
-        new_password: Optional[str] = payload.get("new_password")
-        if new_password is None or not objects.validate_field_type(payload, "new_password", str):
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_NEW_PASSWORD)
-
-        confirm_new_password: Optional[str] = payload.get("confirm_new_password")
-        if confirm_new_password is None or not objects.validate_field_type(payload, "confirm_new_password", str):
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_NEW_PASSWORD_CONFIRM)
 
         if new_password != confirm_new_password:
             raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.PASSWORD_MISMATCH)
@@ -217,12 +172,7 @@ class HTTPSafety:
 
         stored_username: Optional[str] = config.get("username")
         stored_hash: Optional[str] = config.get("password_hash")
-        if (
-            stored_username is None
-            or stored_hash is None
-            or not objects.validate_field_type(config, "stored_username", str)
-            or not objects.validate_field_type(config, "password_hash", str)
-        ):
+        if stored_username is None or stored_hash is None or not isinstance(stored_username, str) or not isinstance(stored_hash, str):
             raise api_exception.UserConfigCorrupted(api_exception.Errors.AUTH.USER_CONFIG_CORRUPT)
 
         if username != stored_username:
@@ -270,49 +220,28 @@ class HTTPSafety:
         fingerprint = f"{ip}:{hash(user_agent)}"
         return fingerprint
 
-    async def create_jwt_token(self, request: Request) -> Tuple[str, str]:
+    async def create_jwt_token(self, username: str, password: str, auto_login: bool, ip: str) -> Tuple[str, str]:
         """
-        Authenticates user credentials and issues a JWT access token.
+        Authenticate user credentials and issue a JWT access token.
 
-        This method validates the JSON request body, verifies authentication
-        credentials against the stored user configuration, and generates a JWT
-        token for the authenticated user.
+        Verifies the provided credentials against the stored user configuration,
+        generates a signed JWT token on success, and registers the active login
+        session with the associated client IP and auto-login preference.
 
         Args:
-            request (Request): HTTP request containing a JSON body with
-                `username`, `password`, and optional `auto_login` fields.
+            username: Username to authenticate.
+            password: Plain-text password to verify.
+            auto_login: Whether the session should persist across restarts.
+            ip: Client IP address associated with the login session.
 
         Returns:
-            Tuple[str, str]: A tuple containing the authenticated username and
-            the generated JWT token.
+            Tuple[str, str]: The authenticated username and the generated JWT token.
 
         Raises:
-            InvalidRequestPayload: If the request body is invalid JSON or required
-                authentication fields are missing.
-            InvalidCredentials: If the provided username or password is invalid.
+            InvalidCredentials: If the username or password is incorrect.
             UserConfigurationNotFound: If the user configuration does not exist.
+            UserConfigCorrupted: If the stored user configuration is invalid.
         """
-
-        try:
-            payload: Dict[str, Any] = await request.json()  # request payload
-        except Exception as e:
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
-
-        username: Optional[str] = payload.get("username")
-        if username is None or not objects.validate_field_type(payload, "username", str):
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_USERNAME)
-
-        password: Optional[str] = payload.get("password")
-        if password is None or not objects.validate_field_type(payload, "password", str):
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_PASSWORD)
-
-        auto_login: bool = payload.get("auto_login", False)
-
-        if username is None:
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_USERNAME)
-
-        if password is None:
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_PASSWORD)
 
         # Checks if configuration file exists
         if not os.path.exists(HTTPSafety.USER_CONFIG_PATH):
@@ -327,7 +256,7 @@ class HTTPSafety:
             raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_CREDENTIALS)
 
         stored_hash: Optional[str] = config.get("password_hash")
-        if stored_hash is None or not objects.validate_field_type(config, "password_hash", str):
+        if stored_hash is None or not isinstance(stored_hash, str):
             raise api_exception.UserConfigCorrupted(api_exception.Errors.AUTH.USER_CONFIG_CORRUPT)
 
         try:
@@ -339,7 +268,7 @@ class HTTPSafety:
         token_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
         token = jwt.encode(token_payload, config["jwt_secret"], algorithm="HS256")
         self.active_tokens[token] = LoginToken(
-            token=token, user=username, ip=web_util.get_ip_address(request), auto_login=auto_login, keep_session_until=None
+            token=token, user=username, ip=ip, auto_login=auto_login, keep_session_until=None
         )
         return (username, token)
 

@@ -11,7 +11,7 @@ from util.debug import LoggerManager
 from controller.node.node import Node, OPCUANode
 from model.controller.general import Protocol
 from model.controller.device import EnergyMeterType, EnergyMeterOptions
-from model.controller.protocol.opcua import OPCUAOptions, OPCUANodeType
+from model.controller.protocol.opc_ua import OPCUAOptions, OPCUANodeType
 from controller.meter.meter import EnergyMeter
 
 #######################################

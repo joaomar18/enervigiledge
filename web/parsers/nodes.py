@@ -1,6 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
 from typing import Optional, Dict, Set, List, Any
+from types import NoneType
 from fastapi import Request
 from datetime import datetime
 
@@ -10,13 +11,14 @@ from datetime import datetime
 
 from controller.registry.protocol import ProtocolRegistry
 from model.controller.device import EnergyMeterType
-from model.controller.node import NodeRecord, BaseNodeRecordConfig, BaseNodeProtocolOptions, NodeAttributes
+from model.controller.node import NodePhase, CounterMode, NodeRecord, BaseNodeRecordConfig, NodeAttributes
 from model.controller.general import Protocol
 from model.date import TimeSpanParameters, FormattedTimeStep
 import util.functions.objects as objects
 import web.exceptions as api_exception
 import util.functions.date as date
 import util.functions.meter as meter_util
+import web.parsers.helpers as parse_helper
 
 #######################################
 
@@ -56,9 +58,9 @@ async def parse_formatted_time_span(request: Request, formatted: bool, force_agg
     if formatted:
         time_step = request.query_params.get("time_step")
         time_step = FormattedTimeStep(time_step) if time_step is not None else None
-        if not objects.validate_field_type(request.query_params, "start_time", str):
+        start_time = request.query_params.get("start_time")
+        if start_time is None or not isinstance(start_time, str):
             raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_START_TIME)
-        start_time = request.query_params["start_time"]
         end_time = request.query_params.get("end_time")
         end_time = end_time if end_time is not None else datetime.isoformat(datetime.now())  # If None accounts end time is now
     else:
@@ -81,133 +83,173 @@ async def parse_formatted_time_span(request: Request, formatted: bool, force_agg
 
 def parse_node_config(dict_node_config: Dict[str, Any]) -> BaseNodeRecordConfig:
     """
-    Parse and validate a node configuration payload.
+    Parse and validate base node configuration from an API payload.
 
-    Validates required and optional node configuration fields against the
-    BaseNodeRecordConfig schema and returns a constructed configuration
-    instance. Missing or invalid fields are translated into API-level
-    validation errors.
-
-    Args:
-        dict_node_config: Raw node configuration data from an external source.
-
-    Returns:
-        BaseNodeRecordConfig: Parsed and validated node configuration object.
-
-    Raises:
-        InvalidRequestPayload:
-            - If required configuration fields are missing.
-            - If a configuration field has an invalid value or type.
-    """
-
-    try:
-        dataclass_fields, optional_fields = objects.check_required_keys(dict_node_config, BaseNodeRecordConfig)
-    except KeyError as e:
-        missing_fields = list(e.args[0]) if e.args else []
-        raise api_exception.InvalidRequestPayload(
-            error=api_exception.Errors.NODES.MISSING_NODE_CONFIG_FIELDS, details={"fields": missing_fields}
-        )
-
-    try:
-        arguments = objects.create_dict_from_fields(dict_node_config, dataclass_fields, optional_fields)
-    except ValueError as e:
-        invalid_field = e.args[0] if e.args else None
-        raise api_exception.InvalidRequestPayload(
-            error=api_exception.Errors.NODES.INVALID_NODE_CONFIG_FIELDS, details={"field": invalid_field}
-        )
-
-    return BaseNodeRecordConfig(**arguments)
-
-
-def parse_node_protocol_options(dict_node_protocol_options: Dict[str, Any], protocol: Protocol) -> BaseNodeProtocolOptions:
-    """
-    Parse and validate protocol-specific node configuration options.
-
-    Resolves the protocol plugin, validates the provided options against the
-    protocol-specific node options schema, and returns a constructed options
-    instance. Validation failures are translated into API-level errors.
+    Extracts and type-checks all protocol-independent node configuration
+    fields, applies enum normalization where required, and returns a
+    fully constructed ``BaseNodeRecordConfig`` instance.
 
     Args:
-        dict_node_protocol_options: Raw protocol-specific node options data
-            from an external source.
-        protocol: Communication protocol used to resolve the options schema.
+        dict_node_config: Raw node configuration dictionary from the API request.
 
     Returns:
-        BaseNodeProtocolOptions: Parsed and validated protocol-specific node
-        options object.
+        BaseNodeRecordConfig: Parsed and validated node configuration.
 
     Raises:
-        InvalidRequestPayload:
-            - If the protocol is invalid or unsupported.
-            - If required protocol options fields are missing.
-            - If a protocol option field has an invalid value or type.
+        InvalidRequestPayload: If required fields are missing or invalid.
+        ValueError: If parsed values violate expected internal types
+            (indicating an unexpected internal state).
     """
 
-    if protocol is Protocol.NONE:
-        options_class = ProtocolRegistry.no_protocol_options
-    else:
+    missing: List[str] = []
+
+    # Parse Enabled
+    enabled = parse_helper.parse_bool_field_from_dict(dict_node_config, "enabled", missing)
+
+    # Parse Unit
+    unit = parse_helper.parse_str_field_from_dict(dict_node_config, "unit", missing, True)
+
+    # Parse Publish
+    publish = parse_helper.parse_bool_field_from_dict(dict_node_config, "publish", missing)
+
+    # Parse Calculated
+    calculated = parse_helper.parse_bool_field_from_dict(dict_node_config, "calculated", missing)
+
+    # Parse Custom
+    custom = parse_helper.parse_bool_field_from_dict(dict_node_config, "custom", missing)
+
+    # Parse Decimal Places
+    decimal_places = parse_helper.parse_int_field_from_dict(dict_node_config, "decimal_places", missing, True)
+
+    # Parse Logging
+    logging = parse_helper.parse_bool_field_from_dict(dict_node_config, "logging", missing)
+
+    # Parse Logging Period
+    logging_period = parse_helper.parse_int_field_from_dict(dict_node_config, "logging_period", missing)
+
+    # Parse Min Alarm
+    min_alarm = parse_helper.parse_bool_field_from_dict(dict_node_config, "min_alarm", missing)
+
+    # Parse Max Alarm
+    max_alarm = parse_helper.parse_bool_field_from_dict(dict_node_config, "max_alarm", missing)
+
+    # Parse Min Alarm Value
+    min_alarm_value = parse_helper.parse_float_field_from_dict(dict_node_config, "min_alarm_value", missing, True)
+
+    # Parse Max Alarm Value
+    max_alarm_value = parse_helper.parse_float_field_from_dict(dict_node_config, "max_alarm_value", missing, True)
+
+    # Parse Min Warning
+    min_warning = parse_helper.parse_bool_field_from_dict(dict_node_config, "min_warning", missing)
+
+    # Parse Max Warning
+    max_warning = parse_helper.parse_bool_field_from_dict(dict_node_config, "max_warning", missing)
+
+    # Parse Min Warning Value
+    min_warning_value = parse_helper.parse_float_field_from_dict(dict_node_config, "min_warning_value", missing, True)
+
+    # Parse Max Warning Value
+    max_warning_value = parse_helper.parse_float_field_from_dict(dict_node_config, "max_warning_value", missing, True)
+
+    # Parse Is Counter
+    is_counter = parse_helper.parse_bool_field_from_dict(dict_node_config, "is_counter", missing, True)
+
+    # Parse Counter Mode
+    counter_mode = parse_helper.parse_str_field_from_dict(dict_node_config, "counter_mode", missing, True)
+    if counter_mode is not None:
         try:
-            plugin = ProtocolRegistry.get_protocol_plugin(protocol)
-            options_class = plugin.node_options_class
-        except NotImplementedError as e:
-            raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.INVALID_PROTOCOL)
+            counter_mode = CounterMode(counter_mode)
+        except Exception as e:
+            counter_mode = None
+            missing.append("counter_mode")
 
-    try:
-        dataclass_fields, optional_fields = objects.check_required_keys(dict_node_protocol_options, options_class)
-    except KeyError as e:
-        missing_fields = list(e.args[0]) if e.args else []
+    if len(missing) > 0:
         raise api_exception.InvalidRequestPayload(
-            error=api_exception.Errors.NODES.MISSING_NODE_PROTOCOL_OPTIONS_FIELDS, details={"fields": missing_fields}
+            api_exception.Errors.NODES.MISSING_NODE_CONFIG_FIELDS, None, details={"missing_fields": missing}
         )
 
-    try:
-        arguments = objects.create_dict_from_fields(dict_node_protocol_options, dataclass_fields, optional_fields)
-    except ValueError as e:
-        invalid_field = e.args[0] if e.args else None
-        raise api_exception.InvalidRequestPayload(
-            error=api_exception.Errors.NODES.INVALID_NODE_PROTOCOL_OPTIONS_FIELDS, details={"field": invalid_field}
-        )
+    if (
+        not isinstance(enabled, bool)
+        or not isinstance(unit, (str, NoneType))
+        or not isinstance(publish, bool)
+        or not isinstance(calculated, bool)
+        or not isinstance(custom, bool)
+        or not isinstance(decimal_places, (int, NoneType))
+        or not isinstance(logging, bool)
+        or not isinstance(logging_period, int)
+        or not isinstance(min_alarm, bool)
+        or not isinstance(max_alarm, bool)
+        or not isinstance(min_alarm_value, (float, NoneType))
+        or not isinstance(max_alarm_value, (float, NoneType))
+        or not isinstance(min_warning, bool)
+        or not isinstance(max_warning, bool)
+        or not isinstance(min_warning_value, (float, NoneType))
+        or not isinstance(max_warning_value, (float, NoneType))
+        or not isinstance(is_counter, (bool, NoneType))
+        or not isinstance(counter_mode, (CounterMode, NoneType))
+    ):
+        raise ValueError(f"Invalid types in Node Base Configuration.")
 
-    return options_class(**arguments)
+    return BaseNodeRecordConfig(
+        enabled=enabled,
+        unit=unit,
+        publish=publish,
+        calculated=calculated,
+        custom=custom,
+        decimal_places=decimal_places,
+        logging=logging,
+        logging_period=logging_period,
+        min_alarm=min_alarm,
+        max_alarm=max_alarm,
+        min_alarm_value=min_alarm_value,
+        max_alarm_value=max_alarm_value,
+        min_warning=min_warning,
+        max_warning=max_warning,
+        min_warning_value=min_warning_value,
+        max_warning_value=max_warning_value,
+        is_counter=is_counter,
+        counter_mode=counter_mode,
+    )
 
 
 def parse_node_attributes(dict_node_attributes: Dict[str, Any]) -> NodeAttributes:
     """
-    Parse and validate node attribute metadata.
+    Parse and validate node attributes from an API payload.
 
-    Validates required and optional node attribute fields against the
-    NodeAttributes schema and returns a constructed attributes instance.
-    Validation failures are translated into API-level errors.
+    Converts raw attribute values into their corresponding domain types and
+    returns a validated NodeAttributes instance.
 
     Args:
-        dict_node_attributes: Raw node attribute data from an external source.
+        dict_node_attributes: Raw node attributes dictionary from the request.
 
     Returns:
-        NodeAttributes: Parsed and validated node attributes object.
+        NodeAttributes: Parsed node attributes.
 
     Raises:
-        InvalidRequestPayload:
-            - If required node attribute fields are missing.
-            - If a node attribute field has an invalid value or type.
+        InvalidRequestPayload: If required attributes are missing or invalid.
+        ValueError: If parsed values violate expected internal types.
     """
 
-    try:
-        dataclass_fields, optional_fields = objects.check_required_keys(dict_node_attributes, NodeAttributes)
-    except KeyError as e:
-        missing_fields = list(e.args[0]) if e.args else []
+    missing: List[str] = []
+
+    # Parse Type
+    phase = parse_helper.parse_str_field_from_dict(dict_node_attributes, "phase", missing)
+    if phase is not None:
+        try:
+            phase = NodePhase(phase)
+        except Exception as e:
+            phase = None
+            missing.append("phase")
+
+    if len(missing) > 0:
         raise api_exception.InvalidRequestPayload(
-            error=api_exception.Errors.NODES.MISSING_NODE_ATTRIBUTES_FIELDS, details={"fields": missing_fields}
+            api_exception.Errors.NODES.MISSING_NODE_ATTRIBUTES_FIELDS, None, details={"missing_fields": missing}
         )
 
-    try:
-        arguments = objects.create_dict_from_fields(dict_node_attributes, dataclass_fields, optional_fields)
-    except ValueError as e:
-        invalid_field = e.args[0] if e.args else None
-        raise api_exception.InvalidRequestPayload(
-            error=api_exception.Errors.NODES.INVALID_NODE_ATTRIBUTES_FIELDS, details={"field": invalid_field}
-        )
+    if not isinstance(phase, NodePhase):
+        raise ValueError(f"Invalid types in Node Attributes.")
 
-    return NodeAttributes(**arguments)
+    return NodeAttributes(phase=phase)
 
 
 def parse_node(dict_node: Dict[str, Any], meter_type: EnergyMeterType) -> NodeRecord:
@@ -235,38 +277,34 @@ def parse_node(dict_node: Dict[str, Any], meter_type: EnergyMeterType) -> NodeRe
               missing or invalid.
     """
 
-    # Check for Configuration fields
-    try:
-        objects.check_required_keys(dict_node, NodeRecord)
-    except KeyError as e:
-        missing_fields = list(e.args[0]) if e.args else []
-        raise api_exception.InvalidRequestPayload(error=api_exception.Errors.NODES.MISSING_NODE_FIELDS, details={"fields": missing_fields})
-
     # Name Parsing
-    if not objects.validate_field_type(dict_node, "name", str):
+    device_name = dict_node.get("name")
+    if device_name is None or not isinstance(device_name, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_NAME)
-    device_name: str = dict_node["name"]
 
     # Protocol Parsing
-    if not objects.validate_field_type(dict_node, "protocol", str):
+    protocol = dict_node.get("protocol")
+    if protocol is None or not isinstance(protocol, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_PROTOCOL)
-    protocol: str = dict_node["protocol"]
     try:
         protocol = Protocol(protocol)
+        parser_comm_method = ProtocolRegistry.get_protocol_plugin(protocol).node_protocol_options_parser_method
     except Exception as e:
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.INVALID_PROTOCOL)
 
     # Node Configuration
-    if not objects.validate_field_type(dict_node, "config", Dict[str, Any]):
+    node_config_dict_req = dict_node.get("config")
+    if node_config_dict_req is None or not isinstance(node_config_dict_req, dict):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_CONFIG)
-    node_config_dict: Dict[str, Any] = dict_node["config"]
+    node_config_dict: Dict[str, Any] = node_config_dict_req
     node_config = parse_node_config(node_config_dict)
 
     # Node Protocol Options
-    if not objects.validate_field_type(dict_node, "protocol_options", Dict[str, Any]):
+    node_protocol_options_dict_req = dict_node.get("protocol_options")
+    if node_protocol_options_dict_req is None or not isinstance(node_protocol_options_dict_req, dict):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_PROTOCOL_OPTIONS)
-    node_protocol_options_dict: Dict[str, Any] = dict_node["protocol_options"]
-    node_protocol_options = parse_node_protocol_options(node_protocol_options_dict, protocol)
+    node_protocol_options_dict: Dict[str, Any] = node_protocol_options_dict_req
+    node_protocol_options = parser_comm_method(node_protocol_options_dict)
 
     # Node Attributes
     node_dict_attributes: Optional[Dict[str, Any]] = dict_node.get("attributes")  # Optional
