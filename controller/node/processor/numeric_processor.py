@@ -158,7 +158,11 @@ class NumericNodeProcessor(NodeProcessor[N]):
         """
 
         if self.initial_value is None:
-            self.initial_value = value
+            if self.config.counter_mode is CounterMode.DELTA:
+                self.value = self.ZERO
+                self.initial_value = self.value
+            else:
+                self.initial_value = value
 
         current_value = self.value if self.value is not None else self.ZERO
 

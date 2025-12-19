@@ -206,7 +206,7 @@ class EnergyMeter(Device):
                         if phase_dir_node and not phase_dir_node.config.logging:
                             phase_dir_node.processor.reset_value()
 
-                    # Normal incremental
+                    # Phase Value
                     phase_norm_key = f"{p}{energy_type}_energy"
                     phase_norm_node = self.meter_nodes.nodes.get(phase_norm_key)
                     if phase_norm_node and not phase_norm_node.config.logging:
