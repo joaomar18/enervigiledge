@@ -160,7 +160,7 @@ def subtract_datetime_mins(dt1: datetime, dt2: datetime) -> int:
         int: Difference in minutes.
     """
 
-    difference = int((dt2 - dt1).total_seconds()) * 60
+    difference = int((dt2 - dt1).total_seconds()) // 60
     return difference
 
 

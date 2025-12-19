@@ -163,7 +163,7 @@ class EnergyMeter(Device):
                 node.processor.last_log_datetime = current_time
                 continue
 
-            elapsed_time = date.subtract_datetime_mins(current_time, node.processor.last_log_datetime)
+            elapsed_time = date.subtract_datetime_mins(node.processor.last_log_datetime, current_time)
 
             if (
                 elapsed_time >= node.config.logging_period

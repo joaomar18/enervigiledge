@@ -420,6 +420,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                 size = MODBUS_RTU_TYPE_TO_SIZE_MAP[node.options.type]
                 value = self.get_value_map[node.options.type](node.options, response, index, size)
                 results[node] = value
+                node.set_connection_state(True)
 
             except Exception as e:
                 raise ModbusException(f"Batch read failed for {self.name} on batch group {batch_group.nodes}: {e}")

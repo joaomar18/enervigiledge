@@ -240,6 +240,7 @@ class OPCUAEnergyMeter(EnergyMeter):
             batch_values = await self.batch_read_nodes(client, batch_read_nodes)
             for node, result in zip(batch_read_nodes, batch_values):
                 node.processor.set_value(result)
+                node.set_connection_state(True)
 
         except Exception as e:
             single_read_nodes.extend(batch_read_nodes)

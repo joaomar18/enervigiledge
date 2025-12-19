@@ -43,6 +43,7 @@ def calculate_energy(prefix: str, energy_type: str, node: Node, meter_nodes: Dic
                 return
 
             total += calculation.get_scaled_value(phase_value, phase_node.config.unit)
+            print(f"Current phase Scaled Value: ", )
 
         scaled_total = calculation.apply_output_scaling(total, node.config.unit)
         node.processor.set_value(scaled_total)
