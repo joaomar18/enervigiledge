@@ -82,6 +82,7 @@ def auth_endpoint(config: APIMethodConfig):
                     return JSONResponse(status_code=401, content={"error": str(e)})
 
                 content["message"] = e.message
+                content["error_section"] = e.error_section
                 content["error_code"] = e.error_id
                 content.update(e.details)
                 return JSONResponse(status_code=e.status_code, content=content)
@@ -90,6 +91,7 @@ def auth_endpoint(config: APIMethodConfig):
                 logger.exception(f"Failed {web_util.get_api_url(request)} API due to server error: {str(e)}")
                 content: Dict[str, Any] = {}
                 content["message"] = str(e)
+                content["error_section"] = api_exception.Errors.INTERNAL_SERVER_ERROR.error_section
                 content["error_code"] = api_exception.Errors.INTERNAL_SERVER_ERROR.error_id
                 return JSONResponse(status_code=api_exception.Errors.INTERNAL_SERVER_ERROR.status_code, content=content)
 
