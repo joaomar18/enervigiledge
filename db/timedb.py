@@ -491,7 +491,7 @@ class TimeDBClient:
             if point["start_time"] is not None and point["end_time"] is not None:
                 st = date.convert_isostr_to_date(point["start_time"])
                 et = date.convert_isostr_to_date(point["end_time"])
-                current_time_step = date.get_formatted_time_step(st, et)
+                current_time_step = date.get_formatted_time_step(st, et, inclusive=True)
                 time_step = date.bigger_time_step(time_step, current_time_step)
 
         return time_step

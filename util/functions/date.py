@@ -208,35 +208,36 @@ def process_time_span(time_span: TimeSpanParameters) -> None:
     time_span.end_time = align_end_time(time_span.end_time, time_span.time_step, time_span.time_zone).astimezone(time_span.time_zone)
 
 
-def get_formatted_time_step(start_time: datetime, end_time: datetime, time_zone: Optional[ZoneInfo] = None) -> FormattedTimeStep:
+def get_formatted_time_step(start_time: datetime, end_time: datetime, time_zone: Optional[ZoneInfo] = None, inclusive: bool = False) -> FormattedTimeStep:
     """
-    Determines appropriate time step based on time span duration.
+    Selects an appropriate time step for a given time span.
 
-    Selects the largest time step that fits the duration, prioritizing larger
-    intervals (year > month > day > hour > 15min > minute).
+    Chooses the largest time step that fits between `start_time` and `end_time`,
+    prioritizing larger intervals (year > month > day > hour > 15min > minute).
 
     Args:
-        start_time: Start of time span.
-        end_time: End of time span.
-        time_zone: Optional timezone for calculations.
+        start_time: Start of the time span.
+        end_time: End of the time span.
+        time_zone: Optional timezone for date calculations.
+        inclusive: If True, allow a time step whose end equals `end_time`.
 
     Returns:
-        FormattedTimeStep: Appropriate time step for the duration.
+        FormattedTimeStep: Selected time step for the duration.
     """
 
-    if calculate_date_delta(start_time, FormattedTimeStep._1Y, time_zone) < end_time:
+    if calculate_date_delta(start_time, FormattedTimeStep._1Y, time_zone) < end_time or (inclusive and calculate_date_delta(start_time, FormattedTimeStep._1Y, time_zone) <= end_time):
         return FormattedTimeStep._1Y
 
-    elif calculate_date_delta(start_time, FormattedTimeStep._1M, time_zone) < end_time:
+    elif calculate_date_delta(start_time, FormattedTimeStep._1M, time_zone) < end_time or (inclusive and calculate_date_delta(start_time, FormattedTimeStep._1M, time_zone) <= end_time):
         return FormattedTimeStep._1M
 
-    elif calculate_date_delta(start_time, FormattedTimeStep._1d, time_zone) < end_time:
+    elif calculate_date_delta(start_time, FormattedTimeStep._1d, time_zone) < end_time or (inclusive and calculate_date_delta(start_time, FormattedTimeStep._1d, time_zone) <= end_time):
         return FormattedTimeStep._1d
 
-    elif calculate_date_delta(start_time, FormattedTimeStep._1h, time_zone) < end_time:
+    elif calculate_date_delta(start_time, FormattedTimeStep._1h, time_zone) < end_time or (inclusive and calculate_date_delta(start_time, FormattedTimeStep._1h, time_zone) <= end_time):
         return FormattedTimeStep._1h
 
-    elif calculate_date_delta(start_time, FormattedTimeStep._15m, time_zone) < end_time:
+    elif calculate_date_delta(start_time, FormattedTimeStep._15m, time_zone) < end_time or (inclusive and calculate_date_delta(start_time, FormattedTimeStep._15m, time_zone) <= end_time):
         return FormattedTimeStep._15m
 
     else:
