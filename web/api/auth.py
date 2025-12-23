@@ -19,13 +19,22 @@ import util.functions.web as web_util
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+@router.post("/check_login")
+@auth_endpoint(AuthConfigs.AUTO_LOGIN)
+async def check_login(request: Request, safety: HTTPSafety = Depends(services.get_safety)) -> JSONResponse:
+    """Checks whether the request is associated with a valid authenticated session without modifying it."""
+
+    response = JSONResponse(content={"message": "Session is logged in."})
+    return response
+
+
 @router.post("/auto_login")
 @auth_endpoint(AuthConfigs.AUTO_LOGIN)
 async def auto_login(request: Request, safety: HTTPSafety = Depends(services.get_safety)) -> JSONResponse:
     """Refreshes existing session token for authenticated users."""
 
     username, token = await safety.update_jwt_token(request)
-    response = JSONResponse(content={"message": "Auto-login successful", "username": username})
+    response = JSONResponse(content={"message": "Auto-login successful"})
     response.set_cookie(
         key="token",
         value=token,
@@ -107,7 +116,7 @@ async def create_login(request: Request, safety: HTTPSafety = Depends(services.g
     return response
 
 
-@router.post("change_password")
+@router.post("/change_password")
 @auth_endpoint(AuthConfigs.CHANGE_PASSWORD)
 async def change_password(request: Request, safety: HTTPSafety = Depends(services.get_safety)) -> JSONResponse:
     """Updates user password after validating current credentials."""
