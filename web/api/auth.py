@@ -22,7 +22,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/auto_login")
 @auth_endpoint(AuthConfigs.AUTO_LOGIN)
 async def auto_login(request: Request, safety: HTTPSafety = Depends(services.get_safety)) -> JSONResponse:
-    """Refreshes existing session token for authenticated users."""
+    """Validates the current session and optionally refreshes the authentication token when requested."""
 
     try:
         payload: Dict[str, Any] = await request.json()  # request payload
