@@ -79,7 +79,6 @@ def auth_endpoint(config: APIMethodConfig):
 
                 else:
                     safety.clean_failed_requests(request, web_util.get_api_url(request))  # Clean failed requests if the exception was not of incrementing type
-                    return JSONResponse(status_code=401, content={"error": str(e)})
 
                 content["message"] = e.message
                 content["error_section"] = e.error_section
@@ -109,10 +108,7 @@ class AuthConfigs:
         requires_auth=False,
         increment_exceptions=[api_exception.InvalidCredentials, api_exception.UserConfigurationNotFound],
     )
-    AUTO_LOGIN = APIMethodConfig(
-        requires_auth=False,
-        increment_exceptions=[api_exception.InvalidCredentials, api_exception.UserConfigurationNotFound],
-    )
+    AUTO_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[api_exception.InvalidCredentials, api_exception.UserConfigurationNotFound])
     LOGOUT = APIMethodConfig(increment_exceptions=[api_exception.InvalidCredentials, api_exception.UserConfigurationNotFound])
     CREATE_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[api_exception.UserConfigurationExists])
     CHANGE_PASSWORD = APIMethodConfig(increment_exceptions=[api_exception.InvalidCredentials, api_exception.UserConfigurationNotFound])

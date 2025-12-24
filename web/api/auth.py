@@ -22,31 +22,18 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/auto_login")
 @auth_endpoint(AuthConfigs.AUTO_LOGIN)
 async def auto_login(request: Request, safety: HTTPSafety = Depends(services.get_safety)) -> JSONResponse:
-    """Validates the current session and optionally refreshes the authentication token when requested."""
+    """Validates the current session and refreshes the authentication token."""
 
-    try:
-        payload: Dict[str, Any] = await request.json()  # request payload
-    except Exception as e:
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
-
-    update_session = payload.get("update_session")
-    if update_session is not None and not isinstance(update_session, bool):
-        raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.INVALID_UPDATE_SESSION)
-    update_session = update_session if update_session is not None else False
-
-    if  update_session is True:
-        username, token = await safety.update_jwt_token(request)
-        response = JSONResponse(content={"message": "Auto-login successful"})
-        response.set_cookie(
-            key="token",
-            value=token,
-            httponly=True,
-            secure=True,
-            samesite="none",
-            max_age=3600 if not safety.active_tokens[token].auto_login else 2592000,
-        )
-    else:
-        response = JSONResponse(content={"message": "Auto-login successful"})
+    username, token = await safety.update_jwt_token(request)
+    response = JSONResponse(content={"message": "Auto-login successful"})
+    response.set_cookie(
+        key="token",
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=3600 if not safety.active_tokens[token].auto_login else 2592000,
+    )
 
     return response
 

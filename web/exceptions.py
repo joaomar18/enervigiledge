@@ -203,12 +203,6 @@ class Errors:
             error_id="INVALID_AUTO_LOGIN",
             default_message="The auto_login field must be a boolean value.",
         )
-        INVALID_UPDATE_SESSION = APIErrorDef(
-            status_code=400,
-            error_section="AUTH",
-            error_id="INVALID_UPDATE_SESSION",
-            default_message="The update_session field must be a boolean value.",
-        )
         INVALID_PASSWORD = APIErrorDef(
             status_code=422,
             error_section="AUTH",
