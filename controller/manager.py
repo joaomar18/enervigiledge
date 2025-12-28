@@ -150,7 +150,7 @@ class DeviceManager:
         Publishes a dictionary of all device states to the MQTT queue.
         """
 
-        topic = "devices_state"
+        topic = "devices"
         payload: Dict[int, Dict[str, Any]] = {device.id: device.get_device() for device in self.devices}
         await self.publish_queue.put(MQTTMessage(qos=0, topic=topic, payload=payload))
 
