@@ -52,7 +52,7 @@ class BoolNodeProcessor(NodeProcessor[bool]):
 
         self.value = value
 
-    def get_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+    def create_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
 
         output = additional_data.copy()
         output["value"] = self.value
