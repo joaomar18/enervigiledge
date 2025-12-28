@@ -9,7 +9,6 @@ from typing import Optional, Dict, Set, Any
 
 from mqtt.client import MQTTMessage
 from db.db import SQLiteDBClient
-from model.controller.general import Protocol
 from model.controller.device import EnergyMeterRecord
 from controller.registry.protocol import ProtocolRegistry
 from controller.device import Device
