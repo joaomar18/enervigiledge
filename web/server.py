@@ -159,6 +159,6 @@ class HTTPServer:
         It runs the server within the asyncio event loop.
         """
 
-        config = Config(app=self.server, host=self.host, port=self.port, reload=False, log_level=logging.CRITICAL + 1)
+        config = Config(app=self.server, host=self.host if IS_DEVELOPMENT else "127.0.0.1", port=self.port, reload=False, log_level=logging.CRITICAL + 1)
         server = Server(config)
         await server.serve()
