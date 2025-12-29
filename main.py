@@ -13,7 +13,7 @@ from controller.manager import DeviceManager
 from web.server import HTTPServer
 from util.debug import LoggerManager
 
-# from data.nodes import get_orno_we_516_db, get_sm1238_db
+# from meter_models.meters import get_orno_we_516_db, get_sm1238_db
 
 #######################################
 

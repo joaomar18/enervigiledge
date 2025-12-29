@@ -2,6 +2,7 @@ mqtt/client_options.env
 __pycache__/
 user_config.json
 .venv/
+.env
 config.db*
 pyproject.toml
 influxdb.conf

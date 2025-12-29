@@ -20,6 +20,7 @@ import web.api.auth as auth
 import web.api.device as device
 import web.api.nodes as nodes
 from util.debug import LoggerManager
+from app_config import IS_DEVELOPMENT
 
 #######################################
 
@@ -85,7 +86,7 @@ class HTTPServer:
         - Modular API structure supports maintainability and future extension
     """
 
-    def __init__(self, host: str, port: int, device_manager: DeviceManager, db: SQLiteDBClient, timedb: TimeDBClient, development: bool = False) -> None:
+    def __init__(self, host: str, port: int, device_manager: DeviceManager, db: SQLiteDBClient, timedb: TimeDBClient) -> None:
         self.host = host
         self.port = port
         self.device_manager = device_manager
@@ -99,7 +100,7 @@ class HTTPServer:
         api_router.include_router(device.router)  # Device router (handles device endpoints)
         api_router.include_router(nodes.router)  # Nodes router (handles nodes endpoints)
         self.server.include_router(api_router)
-        if development:
+        if IS_DEVELOPMENT:
             self.server.add_middleware(
                 CORSMiddleware,
                 allow_origins=["http://localhost:8080, http://127.0.0.1:8080"],

@@ -12,7 +12,8 @@ from web.dependencies import services
 from web.api.decorator import auth_endpoint, AuthConfigs
 from web.safety import HTTPSafety
 import web.exceptions as api_exception
-import util.functions.web as web_util
+from app_config import IS_DEVELOPMENT
+
 
 #######################################
 
@@ -30,7 +31,7 @@ async def auto_login(request: Request, safety: HTTPSafety = Depends(services.get
         key="token",
         value=token,
         httponly=True,
-        secure=True,
+        secure=False if IS_DEVELOPMENT else True,
         samesite="lax",
         path="/",
         max_age=3600 if not safety.active_tokens[token].auto_login else 2592000,
@@ -68,7 +69,7 @@ async def login(request: Request, safety: HTTPSafety = Depends(services.get_safe
         key="token",
         value=token,
         httponly=True,
-        secure=True,
+        secure=False if IS_DEVELOPMENT else True,
         samesite="lax",
         path="/",
         max_age=3600 if not safety.active_tokens[token].auto_login else 2592000,
