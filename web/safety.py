@@ -102,26 +102,36 @@ class HTTPSafety:
         self.active_tokens: Dict[str, LoginToken] = {}
         self.ph = PasswordHasher()
 
-    async def create_user_configuration(self, username: str, password: str) -> None:
+    async def create_user_configuration(self, username: str, password: str, confirm_password: str) -> None:
         """
         Create the initial user authentication configuration.
 
-        Initializes the user configuration by validating the provided credentials,
-        generating a password hash and JWT secret, and persisting them to disk.
-        This operation is allowed only once.
+        Validates the provided username and password, ensures password confirmation
+        matches, generates a secure password hash and JWT secret, and persists the
+        configuration to disk. This method can only be executed once; subsequent
+        calls are rejected if a configuration already exists.
 
         Args:
             username: Username to store in the authentication configuration.
             password: Plain-text password to validate and hash.
+            confirm_password: Plain-text password confirmation used to verify
+                password consistency.
 
         Raises:
-            UserConfigurationExists: If a user configuration already exists.
-            InvalidCredentials: If the provided password does not meet validation
-                requirements.
+            UserConfigurationExists: If a user configuration already exists on disk.
+            InvalidCredentials: If the username is invalid, the password does not
+                meet validation requirements, or the password confirmation does not
+                match.
         """
+
+        if password != confirm_password:
+            raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.PASSWORD_MISMATCH)
 
         if not validation.validate_password(password):
             raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_PASSWORD)
+
+        if not validation.validate_username(username):
+            raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_USERNAME)
 
         if os.path.exists(HTTPSafety.USER_CONFIG_PATH):
             raise api_exception.UserConfigurationExists(api_exception.Errors.AUTH.USER_CONFIG_EXISTS)
@@ -357,12 +367,12 @@ class HTTPSafety:
         else:
             token = request.cookies.get("token")
 
-        if not token:
-            raise api_exception.TokenNotInRequest(api_exception.Errors.AUTH.TOKEN_MISSING)
-
         # Checks if configuration file exists
         if not os.path.exists(HTTPSafety.USER_CONFIG_PATH):
             raise api_exception.UserConfigurationNotFound(api_exception.Errors.AUTH.USER_CONFIG_NOT_FOUND)
+
+        if not token:
+            raise api_exception.TokenNotInRequest(api_exception.Errors.AUTH.TOKEN_MISSING)
 
         # Obtain user configuration
         with open(HTTPSafety.USER_CONFIG_PATH, "r") as file:

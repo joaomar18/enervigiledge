@@ -103,7 +103,11 @@ async def create_login(request: Request, safety: HTTPSafety = Depends(services.g
     if password is None or not isinstance(password, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_PASSWORD)
 
-    await safety.create_user_configuration(username, password)
+    confirm_password = payload.get("confirm_password")
+    if confirm_password is None or not isinstance(confirm_password, str):
+        raise api_exception.InvalidRequestPayload(api_exception.Errors.AUTH.MISSING_PASSWORD_CONFIRM)
+
+    await safety.create_user_configuration(username, password, confirm_password)
     response = JSONResponse(content={"message": "User configuration file created sucessfully"})
     return response
 

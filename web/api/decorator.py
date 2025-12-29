@@ -34,10 +34,12 @@ class APIMethodConfig:
 
     Attributes:
         requires_auth: Whether the endpoint requires JWT-based authentication.
+        enable_rate_limiting: Whether to enable rate limiting for this endpoint.
         increment_exceptions: APIException types that should count toward failed request tracking (e.g., for client blocking).
     """
 
     requires_auth: bool = True
+    enable_rate_limiting: bool = True
     increment_exceptions: List[Type[api_exception.APIException]] = field(default_factory=list)  # Exception types that increment failed requests
 
 
@@ -69,7 +71,7 @@ def auth_endpoint(config: APIMethodConfig):
                 content: Dict[str, Any] = {}
 
                 # Handle incrementing exceptions
-                if any(isinstance(e, exc) for exc in all_increment_exceptions):
+                if any(isinstance(e, exc) for exc in all_increment_exceptions) and config.enable_rate_limiting:
                     if e.status_code != 429: # Avoid double incrementing for ToManyRequests exceptions
                         safety.increment_failed_requests(request, web_util.get_api_url(request))
                     remaining_attempts = safety.get_remaining_requests(request)
@@ -104,12 +106,9 @@ class AuthConfigs:
     """Simple presets for common auth endpoint patterns."""
 
     # Standard login endpoint
-    LOGIN = APIMethodConfig(
-        requires_auth=False,
-        increment_exceptions=[api_exception.InvalidCredentials, api_exception.UserConfigurationNotFound],
-    )
-    AUTO_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[api_exception.InvalidCredentials, api_exception.UserConfigurationNotFound])
+    LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[api_exception.InvalidCredentials, api_exception.UserConfigurationNotFound])
+    AUTO_LOGIN = APIMethodConfig(requires_auth=False, enable_rate_limiting=False)
     LOGOUT = APIMethodConfig(increment_exceptions=[api_exception.InvalidCredentials, api_exception.UserConfigurationNotFound])
-    CREATE_LOGIN = APIMethodConfig(requires_auth=False, increment_exceptions=[api_exception.UserConfigurationExists])
+    CREATE_LOGIN = APIMethodConfig(requires_auth=False, enable_rate_limiting=False)
     CHANGE_PASSWORD = APIMethodConfig(increment_exceptions=[api_exception.InvalidCredentials, api_exception.UserConfigurationNotFound])
     PROTECTED = APIMethodConfig(increment_exceptions=[api_exception.InvalidCredentials, api_exception.UserConfigurationNotFound])

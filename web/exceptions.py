@@ -179,6 +179,12 @@ class Errors:
             error_id="MISSING_PASSWORD",
             default_message="The password is missing or in an invalid format.",
         )
+        MISSING_PASSWORD_CONFIRM = APIErrorDef(
+            status_code=400,
+            error_section="AUTH",
+            error_id="MISSING_CONFIRM_PASSWORD",
+            default_message="The password confirmation is missing or in an invalid format.",
+        )
         MISSING_OLD_PASSWORD = APIErrorDef(
             status_code=400,
             error_section="AUTH",
@@ -208,6 +214,12 @@ class Errors:
             error_section="AUTH",
             error_id="INVALID_PASSWORD",
             default_message="Password must be at least 5 characters and not just whitespace.",
+        )
+        INVALID_USERNAME = APIErrorDef(
+            status_code=422,
+            error_section="AUTH",
+            error_id="INVALID_USERNAME",
+            default_message="Username must be at least 3 characters and not just whitespace.",
         )
         INVALID_NEW_PASSWORD = APIErrorDef(
             status_code=422,
