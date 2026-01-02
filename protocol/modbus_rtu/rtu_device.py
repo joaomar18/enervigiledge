@@ -30,7 +30,7 @@ from controller.meter.meter import EnergyMeter
 #######################################
 
 
-LoggerManager.get_logger(__name__).setLevel(logging.ERROR)
+LoggerManager.get_logger(__name__).setLevel(logging.INFO)
 ModbusCall = Callable[[ModbusRTUClient, int, int, int, bool], ModbusPDU]
 
 
@@ -140,15 +140,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         if self.client is not None:
             raise RuntimeError(f"Modbus RTU Client for device {self.name} is already running")
 
-        self.client = ModbusRTUClient(
-            port=self.communication_options.port,
-            baudrate=self.communication_options.baudrate,
-            stopbits=self.communication_options.stopbits,
-            parity=self.communication_options.parity,
-            bytesize=self.communication_options.bytesize,
-            timeout=float(self.communication_options.timeout),
-            retries=self.communication_options.retries,
-        )
+        self.__renew_client()
         loop = asyncio.get_event_loop()
         self.run_connection_task = True
         self.run_receiver_task = True
@@ -169,40 +161,45 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         self.receiver_task = None
         await self.close_connection()
 
-    def __require_client(self) -> ModbusRTUClient:
+    def __renew_client(self) -> None:
         """
-        Return the active Modbus RTU client object.
-
-        Raises:
-            RuntimeError: If the client is not initialized.
+        Re-initializes the Modbus RTU client with the current communication options.
         """
 
-        if self.client is None:
-            raise RuntimeError(f"Modbus RTU client for device {self.name} with id {self.id} is not instantiated properly. ")
-        return self.client
+        self.client = ModbusRTUClient(
+            port=self.communication_options.port,
+            baudrate=self.communication_options.baudrate,
+            stopbits=self.communication_options.stopbits,
+            parity=self.communication_options.parity,
+            bytesize=self.communication_options.bytesize,
+            timeout=float(self.communication_options.timeout),
+            retries=self.communication_options.retries,
+        )
 
     async def manage_connection(self):
         """
         Manages the RTU connection lifecycle. Continuously tries to connect to the client,
         monitors its status, and handles reconnection if the link is lost.
+        Raises:
+            RuntimeError: If the Modbus RTU client is not initialized.
         """
 
         logger = LoggerManager.get_logger(__name__)
-        client = self.__require_client()
 
         while self.run_connection_task:
+            if self.client is None:
+                raise RuntimeError(f"Client {self.name} with id {self.id} is not initialized.")
             try:
                 logger.info(f"Trying to connect to client {self.name} with id {self.id}...")
-                self.network_connected = client.connect()
+                self.network_connected = self.client.connect()
 
                 if not self.network_connected:
                     logger.warning(f"Failed to connect to client {self.name} with id {self.id}")
                     await asyncio.sleep(3)
                     continue
-
                 logger.info(f"Client {self.name} with id {self.id} connected")
 
-                while self.network_connected:
+                while self.network_connected: # This loop will run forever because the driver connects to the virtual serial port, not the device itself
                     await asyncio.sleep(3)
 
                 logger.warning(f"Client {self.name} with id {self.id} disconnected")
@@ -219,17 +216,16 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         """
 
         logger = LoggerManager.get_logger(__name__)
-        client = self.__require_client()
 
         while self.run_receiver_task:
             try:
-                if self.network_connected:
+                if self.network_connected and self.client:
                     enabled_nodes = [node for node in self.modbus_rtu_nodes if node.config.enabled]
                     batch_read_nodes = [node for node in enabled_nodes if node.enable_batch_read]
                     single_read_nodes = [node for node in enabled_nodes if not node.enable_batch_read]
 
-                    await self.process_batch_read(client, batch_read_nodes, single_read_nodes)
-                    await self.process_single_reads(client, single_read_nodes)
+                    await self.process_batch_read(self.client, batch_read_nodes, single_read_nodes)
+                    await self.process_single_reads(self.client, single_read_nodes)
 
                     if not enabled_nodes or any(node.connected for node in enabled_nodes):
                         self.set_connection_state(True)
@@ -240,11 +236,11 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
             except ModbusException as e:
                 logger.error(f"{e}")
-                self.set_network_state(False)
+                self.set_connection_state(False)
 
             except Exception as e:
                 logger.exception(f"{e}")
-                self.set_network_state(False)
+                self.set_connection_state(False)
 
             await asyncio.sleep(self.communication_options.read_period)
 

@@ -105,11 +105,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         if self.client is not None:
             raise RuntimeError(f"OPC UA Client for device {self.name} is already running")
 
-        self.client = asyncua.Client(url=self.communication_options.url, timeout=self.communication_options.timeout)
-        if self.communication_options.username is not None and self.communication_options.password is not None:
-            self.client.set_user(self.communication_options.username)
-            self.client.set_password(self.communication_options.password)
-
+        self.__renew_client()
         loop = asyncio.get_event_loop()
         self.run_connection_task = True
         self.run_receiver_task = True
@@ -130,17 +126,15 @@ class OPCUAEnergyMeter(EnergyMeter):
         self.receiver_task = None
         await self.close_connection()
 
-    def __require_client(self) -> asyncua.Client:
+    def __renew_client(self) -> None:
         """
-        Return the active OPC UA client connection.
-
-        Raises:
-            RuntimeError: If the client is not initialized.
+        Initializes a new OPC UA client instance with the current communication options.
         """
 
-        if self.client is None:
-            raise RuntimeError(f"OPC UA client for device {self.name} with id {self.id} is not instantiated properly. ")
-        return self.client
+        self.client = asyncua.Client(url=self.communication_options.url, timeout=self.communication_options.timeout)
+        if self.communication_options.username is not None and self.communication_options.password is not None:
+            self.client.set_user(self.communication_options.username)
+            self.client.set_password(self.communication_options.password)
 
     async def manage_connection(self):
         """
@@ -156,27 +150,31 @@ class OPCUAEnergyMeter(EnergyMeter):
 
         In case of connection loss or unexpected errors, the client is properly closed
         and a reconnection is attempted after a short delay.
+        Raises:
+            RuntimeError: If the OPC UA client is not initialized.
         """
 
         logger = LoggerManager.get_logger(__name__)
-        client = self.__require_client()
 
         while self.run_connection_task:
+            if self.client is None:
+                raise RuntimeError(f"Client {self.name} with id {self.id} is not initialized.")
             try:
                 logger.info(f"Trying to connect OPC UA client {self.name} with id {self.id}...")
-                await client.connect()
+                await self.client.connect()
                 self.set_network_state(True)
                 logger.info(f"Client {self.name} with id {self.id} connected")
 
                 while self.network_connected:
                     await asyncio.sleep(3)
-                    await client.check_connection()
+                    await self.client.check_connection()
 
             except Exception as e:
                 if self.network_connected:
+                    self.set_network_state(False)
+                    self.__renew_client()
                     logger.warning(f"Client {self.name} with id {self.id} disconnected")
                 logger.warning(f"Connection error on client {self.name} with id {self.id}: {e}")
-                self.set_network_state(False)
                 await asyncio.sleep(3)
 
     async def receiver(self):
@@ -191,17 +189,16 @@ class OPCUAEnergyMeter(EnergyMeter):
         """
 
         logger = LoggerManager.get_logger(__name__)
-        client = self.__require_client()
 
         while self.run_receiver_task:
             try:
-                if self.network_connected:
+                if self.network_connected and self.client:
                     enabled_nodes = [node for node in self.opcua_nodes if node.config.enabled]
                     batch_read_nodes = [node for node in enabled_nodes if node.enable_batch_read]
                     single_read_nodes = [node for node in enabled_nodes if not node.enable_batch_read]
 
-                    await self.process_batch_read(client, batch_read_nodes, single_read_nodes)
-                    await self.process_single_reads(client, single_read_nodes)
+                    await self.process_batch_read(self.client, batch_read_nodes, single_read_nodes)
+                    await self.process_single_reads(self.client, single_read_nodes)
 
                     if not enabled_nodes or any(node.connected for node in enabled_nodes):
                         self.set_connection_state(True)
