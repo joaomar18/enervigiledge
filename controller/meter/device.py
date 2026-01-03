@@ -9,10 +9,9 @@ from abc import abstractmethod
 
 #############LOCAL IMPORTS#############
 
-from controller.device import Device
 from controller.node.node import Node
 from model.controller.general import Protocol
-from model.controller.device import EnergyMeterType, EnergyMeterOptions, EnergyMeterRecord, BaseCommunicationOptions
+from model.controller.device import EnergyMeterType, EnergyMeterOptions, EnergyMeterRecord, BaseCommunicationOptions, DeviceHistoryStatus
 from model.controller.node import NodeRecord
 from controller.meter.nodes import EnergyMeterNodes
 import controller.meter.calculation as calculation
@@ -25,7 +24,7 @@ from util.debug import LoggerManager
 #######################################
 
 
-class EnergyMeter(Device):
+class EnergyMeter():
     """
     Specialized device class representing an energy meter.
 
@@ -74,19 +73,19 @@ class EnergyMeter(Device):
         protocol: Protocol = Protocol.NONE,
         on_connection_change: Callable[[int, bool], bool] | None = None,
     ):
-
-        super().__init__(
-            id=id,
-            name=name,
-            protocol=protocol,
-            publish_queue=publish_queue,
-            measurements_queue=measurements_queue,
-            nodes=nodes,
-            on_connection_change=on_connection_change,
-        )
+        self.id = id
+        self.name = name
+        if protocol not in Protocol.valid_protocols():
+            raise ValueError(f"Invalid protocol: {protocol}")
+        self.protocol = protocol
+        self.publish_queue = publish_queue
+        self.measurements_queue = measurements_queue
+        self.on_connection_change = on_connection_change
         self.meter_type = meter_type
         self.meter_options = meter_options
         self.communication_options = communication_options
+        self.connected = False
+        self.network_connected = False
 
         try:
             self.meter_nodes = EnergyMeterNodes(meter_type=self.meter_type, meter_options=self.meter_options, nodes=nodes)
@@ -120,6 +119,25 @@ class EnergyMeter(Device):
         """
 
         pass
+
+    def set_connection_state(self, state: bool):
+        """
+        Updates the energy meter connection state.
+        """
+
+        if self.on_connection_change and state != self.connected:
+            self.on_connection_change(self.id, state)
+
+        self.connected = state
+
+    def set_network_state(self, state: bool):
+        """
+        Updates the energy meter network connectivity state.
+        """
+
+        self.network_connected = state
+        if not state:
+            self.connected = state
 
     async def process_nodes(self) -> None:
         """
@@ -342,6 +360,30 @@ class EnergyMeter(Device):
             "communication_options": self.communication_options.get_communication_options(),
             "type": self.meter_type,
         }
+    
+    def get_device_info(self, get_history_method: Callable[[int], DeviceHistoryStatus]) -> Dict[str, Any]:
+        """
+        Returns comprehensive energy meter information including history status.
+
+        Args:
+            get_history_method: Callback to retrieve energy meter history status.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the device's:
+                - ID
+                - Name
+                - Protocol
+                - Connection status
+                - Meter options
+                - Communication options
+                - Meter type
+                - history status
+        """
+
+        history = get_history_method(self.id)
+        output = self.get_device()
+        output["history"] = history.get_status() if history else None
+        return output
 
     def get_meter_record(self) -> EnergyMeterRecord:
         """
@@ -353,7 +395,7 @@ class EnergyMeter(Device):
 
         node_records: Set[NodeRecord] = set()
 
-        for node in self.nodes:
+        for node in self.meter_nodes.nodes.values():
             record = node.get_node_record()
             node_records.add(record)
 

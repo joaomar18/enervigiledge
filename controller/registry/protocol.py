@@ -7,7 +7,7 @@ from typing import Callable, Dict, Set, Optional, Any, Type
 
 #############LOCAL IMPORTS#############
 
-from controller.meter.meter import EnergyMeter
+from controller.meter.device import EnergyMeter
 from controller.node.node import Node, ModbusRTUNode, OPCUANode
 from model.controller.general import Protocol
 from model.controller.device import BaseCommunicationOptions, EnergyMeterRecord, EnergyMeterType, EnergyMeterOptions

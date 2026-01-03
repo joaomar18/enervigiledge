@@ -9,7 +9,6 @@ from datetime import datetime
 
 #############LOCAL IMPORTS#############
 
-from controller.meter.meter import EnergyMeter
 import controller.meter.extraction as meter_extraction
 from web.safety import HTTPSafety
 from web.dependencies import services
@@ -46,10 +45,10 @@ async def get_nodes_state(
 
     if filter:
         nodes_state = {
-            node.config.name: node.get_publish_format() for node in device.nodes if node.config.publish and filter in node.config.name
+            node.config.name: node.get_publish_format() for node in device.meter_nodes.nodes.values() if node.config.publish and filter in node.config.name
         }
     else:
-        nodes_state = {node.config.name: node.get_publish_format() for node in device.nodes if node.config.publish}
+        nodes_state = {node.config.name: node.get_publish_format() for node in device.meter_nodes.nodes.values() if node.config.publish}
 
     return JSONResponse(content={"meter_type": device.get_device().get("type", None), "nodes_state": nodes_state})
 
@@ -71,7 +70,7 @@ async def get_node_additional_info(
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
-    node = next((n for n in device.nodes if n.config.name == name), None)
+    node = next((n for n in device.meter_nodes.nodes.values() if n.config.name == name), None)
 
     if not node:
         raise api_exception.NodeNotFound(api_exception.Errors.NODES.NOT_FOUND)
@@ -97,14 +96,14 @@ async def get_nodes_config(
 
     if filter:
         nodes_config = {}
-        for node in device.nodes:
+        for node in device.meter_nodes.nodes.values():
             if filter in node.config.name:
                 record = node.get_node_record()
                 record.device_id = device_id
                 nodes_config[node.config.name] = record.get_attributes()
     else:
         nodes_config = {}
-        for node in device.nodes:
+        for node in device.meter_nodes.nodes.values():
             record = node.get_node_record()
             record.device_id = device_id
             nodes_config[node.config.name] = record.get_attributes()
@@ -132,7 +131,7 @@ async def get_logs_from_node(
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
-    node = next((n for n in device.nodes if n.config.name == name), None)
+    node = next((n for n in device.meter_nodes.nodes.values() if n.config.name == name), None)
     if not node:
         raise api_exception.NodeNotFound(api_exception.Errors.NODES.NOT_FOUND)
 
@@ -240,7 +239,7 @@ async def delete_logs_from_node(
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
-    node = next((n for n in device.nodes if n.config.name == name), None)
+    node = next((n for n in device.meter_nodes.nodes.values() if n.config.name == name), None)
     if not node:
         raise api_exception.NodeNotFound(api_exception.Errors.NODES.NOT_FOUND)
 

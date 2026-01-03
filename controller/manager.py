@@ -11,8 +11,7 @@ from mqtt.client import MQTTMessage
 from db.db import SQLiteDBClient
 from model.controller.device import EnergyMeterRecord
 from controller.registry.protocol import ProtocolRegistry
-from controller.device import Device
-from controller.meter.meter import EnergyMeter
+from controller.meter.device import EnergyMeter
 from controller.node.node import Node
 from util.debug import LoggerManager
 
@@ -38,7 +37,7 @@ class DeviceManager:
     """
 
     def __init__(self, publish_queue: asyncio.Queue, measurements_queue: asyncio.Queue, devices_db: SQLiteDBClient):
-        self.devices: Set[Device] = set()
+        self.devices: Set[EnergyMeter] = set()
         self.publish_queue = publish_queue
         self.measurements_queue = measurements_queue
         self.devices_db = devices_db
@@ -93,7 +92,7 @@ class DeviceManager:
             device = self.create_device_from_record(record)
             await self.add_device(device)
 
-    async def add_device(self, device: Device):
+    async def add_device(self, device: EnergyMeter):
         """
         Registers and starts a device, configuring its queues and connection callback.
 
@@ -111,7 +110,7 @@ class DeviceManager:
         await device.start()
         self.devices.add(device)
 
-    async def delete_device(self, device: Device) -> None:
+    async def delete_device(self, device: EnergyMeter) -> None:
         """
         Stops and removes a device from the manager asynchronously.
 
@@ -122,7 +121,7 @@ class DeviceManager:
         await device.stop()
         self.devices.discard(device)
 
-    def get_device(self, device_id: int) -> Optional[Device]:
+    def get_device(self, device_id: int) -> Optional[EnergyMeter]:
         """
         Retrieves a device by ID.
 

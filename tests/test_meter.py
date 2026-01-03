@@ -10,7 +10,7 @@ from typing import Set
 #############LOCAL IMPORTS#############
 
 from controller.node.node import Node
-from controller.meter.meter import EnergyMeter
+from controller.meter.device import EnergyMeter
 from model.controller.general import Protocol
 from model.controller.device import EnergyMeterType
 from model.controller.node import NodeType, NodeConfig

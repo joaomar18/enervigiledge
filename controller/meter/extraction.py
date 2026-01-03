@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional
 
 #############LOCAL IMPORTS#############
 
-from controller.device import Device
+from controller.meter.device import EnergyMeter
 from model.controller.node import NodePhase, NodeType, NodeDirection, NodeLogs
 from model.date import TimeSpanParameters
 from db.timedb import TimeDBClient
@@ -17,7 +17,7 @@ import util.functions.meter as meter_util
 
 
 def get_meter_energy_consumption(
-    device: Device, phase: NodePhase, direction: NodeDirection, timedb: TimeDBClient, time_span: TimeSpanParameters
+    device: EnergyMeter, phase: NodePhase, direction: NodeDirection, timedb: TimeDBClient, time_span: TimeSpanParameters
 ) -> Dict[str, Any]:
     """
     Retrieves energy consumption and derived power factor data for a meter.
@@ -55,9 +55,9 @@ def get_meter_energy_consumption(
     active_energy_node_name = meter_util.create_node_name("active_energy", phase, direction)
     reactive_energy_node_name = meter_util.create_node_name("reactive_energy", phase, direction)
     pf_node_name = meter_util.create_node_name("power_factor", phase, None)
-    active_energy_node = next((n for n in device.nodes if n.config.name == active_energy_node_name), None)
-    reactive_energy_node = next((n for n in device.nodes if n.config.name == reactive_energy_node_name), None)
-    pf_node = next((n for n in device.nodes if n.config.name == pf_node_name), None)
+    active_energy_node = next((n for n in device.meter_nodes.nodes.values() if n.config.name == active_energy_node_name), None)
+    reactive_energy_node = next((n for n in device.meter_nodes.nodes.values() if n.config.name == reactive_energy_node_name), None)
+    pf_node = next((n for n in device.meter_nodes.nodes.values() if n.config.name == pf_node_name), None)
 
     if active_energy_node:
         active_energy_logs = timedb.get_variable_logs(device.name, device.id, active_energy_node, time_span)
@@ -146,7 +146,7 @@ def get_meter_energy_consumption(
     return output
 
 
-def get_meter_peak_power(device: Device, phase: NodePhase, timedb: TimeDBClient, time_span: TimeSpanParameters) -> Dict[str, Any]:
+def get_meter_peak_power(device: EnergyMeter, phase: NodePhase, timedb: TimeDBClient, time_span: TimeSpanParameters) -> Dict[str, Any]:
     """
     Retrieve global peak power metrics (active, reactive, and apparent) for a specific device phase.
 
@@ -181,9 +181,9 @@ def get_meter_peak_power(device: Device, phase: NodePhase, timedb: TimeDBClient,
     reactive_power_node_name = meter_util.create_node_name("reactive_power", phase, None)
     apparent_power_node_name = meter_util.create_node_name("apparent_power", phase, None)
 
-    active_power_node = next((n for n in device.nodes if n.config.name == active_power_node_name), None)
-    reactive_power_node = next((n for n in device.nodes if n.config.name == reactive_power_node_name), None)
-    apparent_power_node = next((n for n in device.nodes if n.config.name == apparent_power_node_name), None)
+    active_power_node = next((n for n in device.meter_nodes.nodes.values() if n.config.name == active_power_node_name), None)
+    reactive_power_node = next((n for n in device.meter_nodes.nodes.values() if n.config.name == reactive_power_node_name), None)
+    apparent_power_node = next((n for n in device.meter_nodes.nodes.values() if n.config.name == apparent_power_node_name), None)
 
     if active_power_node:
         active_power_logs = timedb.get_variable_logs(device.name, device.id, active_power_node, time_span, True)

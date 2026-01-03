@@ -25,7 +25,7 @@ from model.controller.protocol.modbus_rtu import (
     ModbusRTUBatchGroup,
     MODBUS_RTU_TYPE_TO_SIZE_MAP,
 )
-from controller.meter.meter import EnergyMeter
+from controller.meter.device import EnergyMeter
 
 #######################################
 

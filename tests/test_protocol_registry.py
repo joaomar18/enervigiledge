@@ -7,7 +7,7 @@ import pytest
 #############LOCAL IMPORTS#############
 
 from controller.registry.protocol import ProtocolRegistry
-from controller.meter.meter import EnergyMeter
+from controller.meter.device import EnergyMeter
 from model.controller.general import Protocol
 from controller.node.node import Node
 from model.controller.node import NodeConfig, NodeType, NodeRecord
