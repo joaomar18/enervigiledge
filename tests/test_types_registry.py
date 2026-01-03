@@ -12,7 +12,6 @@ from controller.node.processor.int_processor import IntNodeProcessor
 from controller.node.processor.bool_processor import BoolNodeProcessor
 from controller.node.processor.string_processor import StringNodeProcessor
 from controller.registry.node_type import TypeRegistry
-from controller.exceptions import NotImplemeted
 
 #########################################
 
@@ -27,7 +26,7 @@ def reset_types_registry():
 
 
 def get_unregistered_behavior():
-    with pytest.raises(NotImplemeted):
+    with pytest.raises(NotImplementedError):
         TypeRegistry.get_type_plugin(NodeType.INT)
 
 

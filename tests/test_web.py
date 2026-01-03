@@ -28,7 +28,6 @@ class DummyDevice:
         self.connected = True
 
     def get_device(self):
-        # FastAPI/jsonable_encoder can handle Enum; if not, switch to self.protocol.name
         return {
             "id": self.id,
             "name": self.name,
@@ -71,7 +70,7 @@ def test_login_flow(tmp_path):
     }
     config_path = tmp_path / "user_config.json"
     config_path.write_text(json.dumps(config))
-    HTTPSafety.USER_CONFIG_PATH = str(config_path)  # type: ignore[assignment]
+    HTTPSafety.USER_CONFIG_PATH = str(config_path)
 
     safety = HTTPSafety()
     app = create_app(safety, DummyDeviceManager([]))
@@ -91,7 +90,7 @@ def test_get_all_devices(monkeypatch, tmp_path):
     }
     config_path = tmp_path / "user_config.json"
     config_path.write_text(json.dumps(config))
-    HTTPSafety.USER_CONFIG_PATH = str(config_path)  # type: ignore[assignment]
+    HTTPSafety.USER_CONFIG_PATH = str(config_path)
 
     safety = HTTPSafety()
     dev = DummyDevice(1, "dev1")

@@ -1,0 +1,42 @@
+[tool.black]
+line-length = 125       
+
+[project]
+name = "enervigiledge"
+version = "0.1.0"
+description = "Open-source application to monitor and log data from energy devices using multiple protocols."
+authors = [
+    { name = "Enervigiledge Contributors" }
+]
+dependencies = [
+    "influxdb",
+    "colorama",
+    "python-dotenv",
+    "aiomqtt",
+    "cryptography",
+    "fastapi",
+    "pymodbus",
+    "pyserial",
+    "asyncua",
+    "uvicorn",
+    "PyJWT",
+    "argon2-cffi",
+    "Pillow",
+    "arrow",
+    "tzdata",
+    "python-multipart"
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx"
+]
+
+[project.scripts]
+enervigiledge = "main:async_main"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

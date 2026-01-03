@@ -1,6 +1,9 @@
 ########### EXTERNAL IMPORTS ############
 
+import asyncio
 import json
+import types
+from typing import Set, List
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from argon2 import PasswordHasher
@@ -13,23 +16,50 @@ from web.api import nodes, auth
 from web.dependencies import services
 from web.safety import HTTPSafety
 from controller.node.node import Node
-from model.controller.node import NodeType, NodeConfig
+from controller.meter.device import EnergyMeter
+from model.controller.node import NodeType, NodeConfig, BaseNodeProtocolOptions, NodeLogs
+from model.controller.general import Protocol
+from model.controller.device import BaseCommunicationOptions, EnergyMeterType, EnergyMeterOptions, EnergyMeterRecord
 
 #########################################
 
 
-class DummyDevice:
-    def __init__(self, id, name, nodes):
-        self.id = id
-        self.name = name
-        self.nodes = nodes
+class DummyMeter(EnergyMeter):
+    def __init__(self, nodes: Set[Node]):
+        self.name = "meter"
+        self.id = 1
+        self.publish_queue = asyncio.Queue()
+        self.measurements_queue = asyncio.Queue()
+        self.meter_nodes = types.SimpleNamespace(nodes={n.config.name: n for n in nodes})
+        self.protocol = Protocol.MODBUS_RTU
+        self.connected = True
+        self.meter_type = EnergyMeterType.THREE_PHASE
+        self.meter_options = EnergyMeterOptions()
+        self.communication_options = BaseCommunicationOptions()
+
+    async def start(self):
+        pass
+
+    async def stop(self):
+        pass
+
+    def get_meter_record(self) -> EnergyMeterRecord:
+        return EnergyMeterRecord(
+            id=self.id,
+            name=self.name,
+            protocol=Protocol.MODBUS_RTU,  # Dummy protocol
+            type=EnergyMeterType.THREE_PHASE,  # Dummy type
+            options=EnergyMeterOptions(),  # Dummy options
+            communication_options=BaseCommunicationOptions(),  # Dummy connection options
+            nodes=set(),  # Dummy nodes
+        )
 
 
 class DummyDeviceManager:
-    def __init__(self, devices):
+    def __init__(self, devices: List[DummyMeter]):
         self.devices = devices
 
-    def get_device(self, device_id):
+    def get_device(self, device_id: int):
         for d in self.devices:
             if d.id == device_id:
                 return d
@@ -37,8 +67,8 @@ class DummyDeviceManager:
 
 
 class DummyTimeDB:
-    def get_measurement_data_between(self, device_name, device_id, measurement, start_time=None, end_time=None):
-        return [{"time": "0", "value": 1}]
+    def get_variable_logs(self, device_name, device_id, measurement, start_time=None, end_time=None) -> NodeLogs:
+        return NodeLogs(unit="V", decimal_places=2, type=NodeType.FLOAT, is_counter=False, points=[{"time": "0", "value": 1}], time_step=None, global_metrics=None)
 
 
 class DummySQLiteDB:
@@ -66,10 +96,10 @@ def test_nodes_endpoints_use_query_params(tmp_path):
 
     # Dependencies
     safety = HTTPSafety()
-    node = Node(NodeConfig("voltage", NodeType.FLOAT, "V"))
+    node = Node(NodeConfig("voltage", NodeType.FLOAT, "V"), BaseNodeProtocolOptions())
     node.processor.set_value(10)
-    device = DummyDevice(1, "dev1", [node])
-    device_manager = DummyDeviceManager([device])
+    meter = DummyMeter({node})
+    device_manager = DummyDeviceManager([meter])
     timedb = DummyTimeDB()
     sqlitedb = DummySQLiteDB()
 
@@ -88,7 +118,11 @@ def test_nodes_endpoints_use_query_params(tmp_path):
 
         # 3) Call endpoints with header
         state_resp = client.get("/nodes/get_nodes_state", params={"id": 1}, headers=headers)
+        if state_resp.status_code != 200:
+            print("Error response:", state_resp.json())  # Debugging output
         assert state_resp.status_code == 200
 
-        logs_resp = client.get("/nodes/get_logs_from_node", params={"id": 1, "node": "voltage"}, headers=headers)
+        logs_resp = client.get("/nodes/get_logs_from_node", params={"id": 1, "node_name": "voltage"}, headers=headers)
+        if logs_resp.status_code != 200:
+            print("Error response:", logs_resp.json())  # Debugging output
         assert logs_resp.status_code == 200

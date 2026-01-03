@@ -30,7 +30,7 @@ from controller.meter.device import EnergyMeter
 #######################################
 
 
-LoggerManager.get_logger(__name__).setLevel(logging.INFO)
+LoggerManager.get_logger(__name__).setLevel(logging.ERROR)
 ModbusCall = Callable[[ModbusRTUClient, int, int, int, bool], ModbusPDU]
 
 
