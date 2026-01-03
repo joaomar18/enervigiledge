@@ -389,8 +389,7 @@ class EnergyMeter():
                     - warning: True if any enabled node is in a warning state
                     - created_at: Device creation timestamp
                     - updated_at: Last configuration update timestamp
-                    - last_seen: Timestamp of the last successful connection
-                    - last_connection_off: Timestamp of the last disconnection
+                    - last_seen: Timestamp of the last disconnection or connection event
                 plus any fields provided in `additional_data`.
         """
 
@@ -398,13 +397,13 @@ class EnergyMeter():
         history = get_history_method(self.id)
         output: Dict[str, Any] = additional_data.copy()
         output["protocol"] = self.protocol
+        output["type"] = self.meter_type
         output["connected"] = self.connected
         output["alarm"] = any([node for node in enabled_nodes if node.processor.in_alarm()])
         output["warning"] = any([node for node in enabled_nodes if node.processor.in_warning()])
-        output["type"] = self.meter_type
-        output["last_seen"] = history.connection_off_datetime if history.connection_off_datetime else history.connection_on_datetime
         output["created_at"] = history.created_at
         output["updated_at"] = history.updated_at
+        output["last_seen"] = history.connection_off_datetime if history.connection_off_datetime else history.connection_on_datetime
         return output
 
     def get_meter_record(self) -> EnergyMeterRecord:
