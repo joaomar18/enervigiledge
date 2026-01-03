@@ -200,6 +200,26 @@ async def get_device_extended_info(
     return JSONResponse(content=device.get_extended_info(database.get_device_history))
 
 
+@router.get("/get_device_identification")
+@auth_endpoint(AuthConfigs.PROTECTED)
+async def get_device_identification(
+    request: Request,
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
+    database: SQLiteDBClient = Depends(services.get_db),
+) -> JSONResponse:
+    """Retrieves device identification."""
+
+    device_id = device_parser.parse_device_id(request.query_params)
+    device = device_manager.get_device(device_id)
+    if not device:
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
+
+    device_identification: Dict[str, Any] = {}
+    device_identification["id"] = device.id
+    device_identification["name"] = device.name
+    return JSONResponse(content=device_identification)
+
 @router.get("/get_all_devices")
 @auth_endpoint(AuthConfigs.PROTECTED)
 async def get_all_devices(
@@ -250,6 +270,28 @@ async def get_device_extended_info_with_image(
     device_info = device.get_extended_info(database.get_device_history)
     device_info["image"] = get_device_image(device.id, "default", "db/device_img/")
     return JSONResponse(content=device_info)
+
+
+@router.get("/get_device_identification_with_image")
+@auth_endpoint(AuthConfigs.PROTECTED)
+async def get_device_identification_with_image(
+    request: Request,
+    safety: HTTPSafety = Depends(services.get_safety),
+    device_manager: DeviceManager = Depends(services.get_device_manager),
+    database: SQLiteDBClient = Depends(services.get_db),
+) -> JSONResponse:
+    """Retrieves device identification including image."""
+
+    device_id = device_parser.parse_device_id(request.query_params)
+    device = device_manager.get_device(device_id)
+    if not device:
+        raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
+
+    device_identification: Dict[str, Any] = {}
+    device_identification["id"] = device.id
+    device_identification["name"] = device.name
+    device_identification["image"] = get_device_image(device.id, "default", "db/device_img/")
+    return JSONResponse(content=device_identification)
 
 
 @router.get("/get_all_devices_with_image")
