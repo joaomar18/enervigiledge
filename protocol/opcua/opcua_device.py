@@ -81,7 +81,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         self.communication_options = communication_options
         self.client: Optional[asyncua.Client] = None
 
-        self.nodes = nodes if nodes else set()
+        self.nodes: Set[Node] = nodes if nodes else set()
         self.opcua_nodes: Set[OPCUANode] = {node for node in self.nodes if isinstance(node, OPCUANode)}
 
         self.run_connection_task = False
@@ -366,10 +366,13 @@ class OPCUAEnergyMeter(EnergyMeter):
             Dict[str, Any]:
                 Base extended device info plus:
                     - read_period: OPC UA polling period
-                    - connected_nodes: Number of enabled and connected nodes
+                    - enabled_nodes: Number of enabled nodes
+                    - ok_nodes: Number of enabled healthy (no alarms and no warnings) nodes
         """
 
         output: Dict[str, Any] = additional_data.copy()
         output["read_period"] = self.communication_options.read_period
-        output["connected_nodes"] = len([node for node in self.opcua_nodes if node.connected and node.config.enabled])
+        output["enabled_nodes"] = len([node for node in self.nodes if node.config.enabled])
+        output["ok_nodes"] = len([node for node in self.nodes if node.config.enabled and node.config.calculated and node.processor.is_healthy()])
+        output["ok_nodes"] += len([node for node in self.opcua_nodes if node.config.enabled and node.connected and node.processor.is_healthy()])
         return super().get_extended_info(get_history_method)

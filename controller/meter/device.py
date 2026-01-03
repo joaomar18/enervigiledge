@@ -382,8 +382,6 @@ class EnergyMeter():
             Dict[str, Any]:
                 A dictionary containing device identification, status, health, and
                 history information, including:
-                    - id: Device identifier
-                    - name: Device name
                     - protocol: Communication protocol in use
                     - type: Meter type
                     - connected: Current connection state
@@ -391,7 +389,7 @@ class EnergyMeter():
                     - warning: True if any enabled node is in a warning state
                     - created_at: Device creation timestamp
                     - updated_at: Last configuration update timestamp
-                    - last_connection_on: Timestamp of the last successful connection
+                    - last_seen: Timestamp of the last successful connection
                     - last_connection_off: Timestamp of the last disconnection
                 plus any fields provided in `additional_data`.
         """
@@ -399,15 +397,12 @@ class EnergyMeter():
         enabled_nodes = [node for node in self.meter_nodes.nodes.values() if node.config.enabled]    
         history = get_history_method(self.id)
         output: Dict[str, Any] = additional_data.copy()
-        output["name"] = self.name
-        output["id"] = self.id
         output["protocol"] = self.protocol
         output["connected"] = self.connected
-        output["alarm"] = any([node for node in enabled_nodes if node.processor.min_alarm_state or node.processor.max_alarm_state])
-        output["warning"] = any([node for node in enabled_nodes if node.processor.min_warning_state or node.processor.max_warning_state])
+        output["alarm"] = any([node for node in enabled_nodes if node.processor.in_alarm()])
+        output["warning"] = any([node for node in enabled_nodes if node.processor.in_warning()])
         output["type"] = self.meter_type
-        output["last_connection_on"] = history.connection_on_datetime
-        output["last_connection_off"] = history.connection_off_datetime
+        output["last_seen"] = history.connection_off_datetime if history.connection_off_datetime else history.connection_on_datetime
         output["created_at"] = history.created_at
         output["updated_at"] = history.updated_at
         return output
