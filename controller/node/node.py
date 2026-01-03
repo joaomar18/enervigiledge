@@ -50,10 +50,10 @@ class Node:
 
         return self.processor.create_publish_format()
 
-    def get_additional_info(self) -> Dict[str, Any]:
-        """Returns merged processor and protocol-specific metadata."""
+    def get_extended_info(self) -> Dict[str, Any]:
+        """Returns merged processor and protocol-specific extended information metadata."""
 
-        return {**self.processor.create_additional_info(), "protocol_type": self.protocol_options.get_options().get("type") or "Not found"}
+        return {**self.processor.create_extended_info(), "protocol_type": self.protocol_options.get_options().get("type") or "Not found"}
 
     def get_node_record(self) -> NodeRecord:
         """

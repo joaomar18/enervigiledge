@@ -53,13 +53,14 @@ async def get_nodes_state(
     return JSONResponse(content={"meter_type": device.get_device().get("type", None), "nodes_state": nodes_state})
 
 
-@router.get("/get_node_additional_info")
+@router.get("/get_node_extended_info")
 @auth_endpoint(AuthConfigs.PROTECTED)
-async def get_node_additional_info(
+async def get_node_extended_info(
     request: Request,
     safety: HTTPSafety = Depends(services.get_safety),
     device_manager: DeviceManager = Depends(services.get_device_manager),
 ) -> JSONResponse:
+    """Returns extended runtime and status information for a specific device node."""
 
     device_id = device_parser.parse_device_id(request.query_params)
     name = request.query_params.get("node_name")
@@ -75,7 +76,7 @@ async def get_node_additional_info(
     if not node:
         raise api_exception.NodeNotFound(api_exception.Errors.NODES.NOT_FOUND)
 
-    node_detailed_state = node.get_additional_info()
+    node_detailed_state = node.get_extended_info()
     return JSONResponse(content=node_detailed_state)
 
 

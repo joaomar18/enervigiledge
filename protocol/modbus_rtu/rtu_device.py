@@ -5,7 +5,7 @@ import struct
 from pymodbus.pdu import ModbusPDU
 from pymodbus.client import ModbusSerialClient as ModbusRTUClient
 from pymodbus import ModbusException
-from typing import Optional, Set, Dict, List, Callable
+from typing import Optional, Set, Dict, List, Callable, Any
 import logging
 
 #######################################
@@ -15,7 +15,7 @@ import logging
 from util.debug import LoggerManager
 from controller.node.node import Node, ModbusRTUNode
 from model.controller.general import Protocol
-from model.controller.device import EnergyMeterType, EnergyMeterOptions
+from model.controller.device import EnergyMeterType, EnergyMeterOptions, DeviceHistoryStatus
 from model.controller.protocol.modbus_rtu import (
     ModbusRTUOptions,
     ModbusRTUNodeOptions,
@@ -722,3 +722,22 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             self.client.close()
         self.set_network_state(False)
         self.client = None
+
+    def get_extended_info(self, get_history_method: Callable[[int], DeviceHistoryStatus], additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """
+        Extends the base device information with Modbus RTU–specific data.
+
+        Adds communication parameters and connection statistics, then delegates
+        to the parent implementation.
+
+        Returns:
+            Dict[str, Any]:
+                Base extended device info plus:
+                    - read_period: Modbus RTU polling period
+                    - connected_nodes: Number of enabled and connected nodes
+        """
+
+        output: Dict[str, Any] = additional_data.copy()
+        output["read_period"] = self.communication_options.read_period
+        output["connected_nodes"] = len([node for node in self.modbus_rtu_nodes if node.connected and node.config.enabled])
+        return super().get_extended_info(get_history_method)

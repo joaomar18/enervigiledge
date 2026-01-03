@@ -196,6 +196,10 @@ class NumericNodeProcessor(NodeProcessor[N]):
         self.check_alarms(value)
 
     def create_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """
+        Formats the node value for publishing based on its configuration and
+        delegates construction of the final payload to the base implementation.
+        """
 
         output = additional_data.copy()
         if self.value is not None:
@@ -212,9 +216,12 @@ class NumericNodeProcessor(NodeProcessor[N]):
 
         return super().create_publish_format(additional_data=output)
 
-    def create_additional_info(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+    def create_extended_info(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """
+        Extends the base node information with additional metadata.
+        """
 
-        return super().create_additional_info()
+        return super().create_extended_info(additional_data=additional_data)
 
     def submit_log(self, date_time: datetime, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
         """

@@ -361,28 +361,55 @@ class EnergyMeter():
             "type": self.meter_type,
         }
     
-    def get_device_info(self, get_history_method: Callable[[int], DeviceHistoryStatus]) -> Dict[str, Any]:
+    def get_extended_info(self, get_history_method: Callable[[int], DeviceHistoryStatus], additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
         """
-        Returns comprehensive energy meter information including history status.
+        Returns an extended dictionary describing the device's current state,
+        health, and lifecycle metadata.
+
+        The method combines static device attributes, runtime status, aggregated
+        alarm/warning states from enabled nodes, and historical timestamps obtained
+        via the provided history callback.
 
         Args:
-            get_history_method: Callback to retrieve energy meter history status.
+            get_history_method:
+                Callable that receives the device ID and returns a DeviceHistoryStatus
+                instance containing lifecycle and connection timestamps.
+            additional_data:
+                Optional base dictionary with device-related data to be extended.
+                The original dictionary is not modified.
 
         Returns:
-            Dict[str, Any]: A dictionary containing the device's:
-                - ID
-                - Name
-                - Protocol
-                - Connection status
-                - Meter options
-                - Communication options
-                - Meter type
-                - history status
+            Dict[str, Any]:
+                A dictionary containing device identification, status, health, and
+                history information, including:
+                    - id: Device identifier
+                    - name: Device name
+                    - protocol: Communication protocol in use
+                    - type: Meter type
+                    - connected: Current connection state
+                    - alarm: True if any enabled node is in an alarm state
+                    - warning: True if any enabled node is in a warning state
+                    - created_at: Device creation timestamp
+                    - updated_at: Last configuration update timestamp
+                    - last_connection_on: Timestamp of the last successful connection
+                    - last_connection_off: Timestamp of the last disconnection
+                plus any fields provided in `additional_data`.
         """
 
+        enabled_nodes = [node for node in self.meter_nodes.nodes.values() if node.config.enabled]    
         history = get_history_method(self.id)
-        output = self.get_device()
-        output["history"] = history.get_status() if history else None
+        output: Dict[str, Any] = additional_data.copy()
+        output["name"] = self.name
+        output["id"] = self.id
+        output["protocol"] = self.protocol
+        output["connected"] = self.connected
+        output["alarm"] = any([node for node in enabled_nodes if node.processor.min_alarm_state or node.processor.max_alarm_state])
+        output["warning"] = any([node for node in enabled_nodes if node.processor.min_warning_state or node.processor.max_warning_state])
+        output["type"] = self.meter_type
+        output["last_connection_on"] = history.connection_on_datetime
+        output["last_connection_off"] = history.connection_off_datetime
+        output["created_at"] = history.created_at
+        output["updated_at"] = history.updated_at
         return output
 
     def get_meter_record(self) -> EnergyMeterRecord:

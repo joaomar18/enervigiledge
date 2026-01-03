@@ -10,7 +10,7 @@ import logging
 from util.debug import LoggerManager
 from controller.node.node import Node, OPCUANode
 from model.controller.general import Protocol
-from model.controller.device import EnergyMeterType, EnergyMeterOptions
+from model.controller.device import EnergyMeterType, EnergyMeterOptions, DeviceHistoryStatus
 from model.controller.protocol.opc_ua import OPCUAOptions, OPCUANodeType
 from controller.meter.device import EnergyMeter
 
@@ -354,3 +354,22 @@ class OPCUAEnergyMeter(EnergyMeter):
             pass
         self.set_network_state(False)
         self.client = None
+
+    def get_extended_info(self, get_history_method: Callable[[int], DeviceHistoryStatus], additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """
+        Extends the base device information with OPC UA data.
+
+        Adds communication parameters and connection statistics, then delegates
+        to the parent implementation.
+
+        Returns:
+            Dict[str, Any]:
+                Base extended device info plus:
+                    - read_period: OPC UA polling period
+                    - connected_nodes: Number of enabled and connected nodes
+        """
+
+        output: Dict[str, Any] = additional_data.copy()
+        output["read_period"] = self.communication_options.read_period
+        output["connected_nodes"] = len([node for node in self.opcua_nodes if node.connected and node.config.enabled])
+        return super().get_extended_info(get_history_method)

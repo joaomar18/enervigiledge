@@ -53,14 +53,20 @@ class StringNodeProcessor(NodeProcessor[str]):
         self.value = value
 
     def create_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """
+        Builds the publish payload for the node, including its current value.
+        """
 
         output = additional_data.copy()
         output["value"] = self.value
         return super().create_publish_format(additional_data=output)
 
-    def create_additional_info(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+    def create_extended_info(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """
+        Extends the base node information with additional metadata.
+        """
 
-        return super().create_additional_info()
+        return super().create_extended_info(additional_data=additional_data)
 
     def submit_log(self, date_time: datetime, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
         """

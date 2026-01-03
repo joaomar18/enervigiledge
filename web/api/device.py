@@ -183,9 +183,9 @@ async def get_device(
     return JSONResponse(content=device.get_device())
 
 
-@router.get("/get_device_info")
+@router.get("/get_device_extended_info")
 @auth_endpoint(AuthConfigs.PROTECTED)
-async def get_device_info(
+async def get_device_extended_info(
     request: Request,
     safety: HTTPSafety = Depends(services.get_safety),
     device_manager: DeviceManager = Depends(services.get_device_manager),
@@ -197,7 +197,7 @@ async def get_device_info(
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
-    return JSONResponse(content=device.get_device_info(database.get_device_history))
+    return JSONResponse(content=device.get_extended_info(database.get_device_history))
 
 
 @router.get("/get_all_devices")
@@ -232,9 +232,9 @@ async def get_device_with_image(
     return JSONResponse(content=device_obj)
 
 
-@router.get("/get_device_info_with_image")
+@router.get("/get_device_extended_info_with_image")
 @auth_endpoint(AuthConfigs.PROTECTED)
-async def get_device_info_with_image(
+async def get_device_extended_info_with_image(
     request: Request,
     safety: HTTPSafety = Depends(services.get_safety),
     device_manager: DeviceManager = Depends(services.get_device_manager),
@@ -247,7 +247,7 @@ async def get_device_info_with_image(
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
-    device_info = device.get_device_info(database.get_device_history)
+    device_info = device.get_extended_info(database.get_device_history)
     device_info["image"] = get_device_image(device.id, "default", "db/device_img/")
     return JSONResponse(content=device_info)
 

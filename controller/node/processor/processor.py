@@ -133,6 +133,10 @@ class NodeProcessor(ABC, Generic[V]):
         pass
 
     def create_publish_format(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """
+        Builds the node publish payload by exposing configuration metadata,
+        optional alarm and warning states, and any protocol-specific attributes.
+        """
 
         output = additional_data.copy()
         output["type"] = self.config.type.value
@@ -157,7 +161,14 @@ class NodeProcessor(ABC, Generic[V]):
 
         return output
 
-    def create_additional_info(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+    def create_extended_info(self, additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """
+        Builds an extended, read-only information payload for the node.
+
+        The returned data includes lifecycle timestamps (last update and reset),
+        configuration metadata (type, protocol, logging period), and any configured
+        alarm or warning thresholds when applicable.
+        """
 
         output = additional_data.copy()
         output["last_update_date"] = date.to_iso(date.get_date_from_timestamp(self.timestamp)) if self.timestamp is not None else None
