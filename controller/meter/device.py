@@ -390,6 +390,8 @@ class EnergyMeter():
                     - created_at: Device creation timestamp
                     - updated_at: Last configuration update timestamp
                     - last_seen: Timestamp of the last disconnection or connection event
+                    - enabled_nodes: Number of enabled nodes
+                    - ok_nodes: Number of enabled healthy (valid value with no alarms and no warnings) nodes
                 plus any fields provided in `additional_data`.
         """
 
@@ -404,6 +406,8 @@ class EnergyMeter():
         output["created_at"] = history.created_at
         output["updated_at"] = history.updated_at
         output["last_seen"] = history.connection_off_datetime if history.connection_off_datetime else history.connection_on_datetime
+        output["enabled_nodes"] = len(enabled_nodes)
+        output["ok_nodes"] = len([node for node in enabled_nodes if node.processor.is_healthy()])
         return output
 
     def get_meter_record(self) -> EnergyMeterRecord:

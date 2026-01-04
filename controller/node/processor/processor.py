@@ -72,7 +72,7 @@ class NodeProcessor(ABC, Generic[V]):
     def is_healthy(self) -> bool:
         """Returns whether the node is currently healthy based on the processor state."""
 
-        return self.min_alarm_state is False and self.max_alarm_state is False and self.min_warning_state is False and self.max_warning_state is False
+        return self.min_alarm_state is False and self.max_alarm_state is False and self.min_warning_state is False and self.max_warning_state is False and self.value is not None
 
     def in_alarm(self) -> bool:
         """Returns whether the node is currently in an alarm state based on the processor state."""
