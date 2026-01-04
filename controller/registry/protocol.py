@@ -15,8 +15,8 @@ from model.controller.node import NodeRecord, NodeConfig, BaseNodeRecordConfig, 
 from model.controller.protocol.no_protocol import NoProtocolNodeOptions, NONE_TO_INTERNAL_TYPE_MAP
 from model.controller.protocol.modbus_rtu import ModbusRTUOptions, ModbusRTUNodeOptions, MODBUS_RTU_TO_INTERNAL_TYPE_MAP
 from model.controller.protocol.opc_ua import OPCUAOptions, OPCUANodeOptions, OPCUA_TO_INTERNAL_TYPE_MAP
-from protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
-from protocol.opcua.opcua_device import OPCUAEnergyMeter
+from controller.meter.protocol.modbus_rtu.rtu_device import ModbusRTUEnergyMeter
+from controller.meter.protocol.opcua.opcua_device import OPCUAEnergyMeter
 from web.parsers.protocol.modbus_rtu import parse_modbus_rtu_meter_comm_options, parse_modbus_rtu_node_protocol_options
 from web.parsers.protocol.opc_ua import parse_opc_ua_meter_comm_options, parse_opc_ua_node_protocol_options
 from web.parsers.protocol.no_protocol import parse_no_protocol_node_protocol_options
