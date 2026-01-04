@@ -145,14 +145,12 @@ class DeviceHistoryStatus:
     device availability and operational status over time.
 
     Attributes:
-        connection_on_datetime (Optional[datetime]): Timestamp when was the device last connection.
-        connection_off_datetime (Optional[datetime]): Timestamp when was the device last disconnection.
+        last_seen (Optional[datetime]): Timestamp when was the device last seen.
         created_at (Optional[datetime]): Timestamp when the device was first created.
         updated_at (Optional[datetime]): Timestamp when the device was last modified.
     """
 
-    connection_on_datetime: Optional[datetime]
-    connection_off_datetime: Optional[datetime]
+    last_seen: Optional[datetime]
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
 

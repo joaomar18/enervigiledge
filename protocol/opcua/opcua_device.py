@@ -16,9 +16,7 @@ from controller.meter.device import EnergyMeter
 
 #######################################
 
-
 LoggerManager.get_logger(__name__).setLevel(logging.ERROR)
-
 
 class OPCUAEnergyMeter(EnergyMeter):
     """
@@ -41,8 +39,8 @@ class OPCUAEnergyMeter(EnergyMeter):
         meter_options (EnergyMeterOptions): General meter configuration.
         communication_options (OPCUAOptions): OPC UA connection parameters.
         nodes (Optional[Set[Node]]): Node definitions for this meter.
-        on_connection_change (Callable[[int, bool], None] | None): Optional callback
-            invoked when the meter's connection state changes.
+        last_seen_update (Callable[[int], bool] | None): Optional callback
+            invoked when the meter's last seen timestamp changes.
 
     Attributes:
         client (Optional[asyncua.Client]): OPC UA client instance.
@@ -63,7 +61,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         meter_options: EnergyMeterOptions,
         communication_options: OPCUAOptions,
         nodes: Optional[Set[Node]] = None,
-        on_connection_change: Callable[[int, bool], bool] | None = None,
+        last_seen_update: Callable[[int], bool] | None = None,
     ):
         super().__init__(
             id=id,
@@ -75,7 +73,7 @@ class OPCUAEnergyMeter(EnergyMeter):
             meter_options=meter_options,
             communication_options=communication_options,
             nodes=nodes if nodes else set(),
-            on_connection_change=on_connection_change,
+            last_seen_update=last_seen_update,
         )
 
         self.communication_options = communication_options
@@ -202,6 +200,8 @@ class OPCUAEnergyMeter(EnergyMeter):
 
                     if not enabled_nodes or any(node.connected for node in enabled_nodes):
                         self.set_connection_state(True)
+                        if self.last_seen_update:
+                            self.last_seen_update(self.id)
                     else:
                         self.set_connection_state(False)
 
@@ -271,7 +271,9 @@ class OPCUAEnergyMeter(EnergyMeter):
             node.processor.set_value(result)
 
         if failed_nodes:
-            logger.warning(f"Failed to read {len(failed_nodes)} nodes from device {self.name} with id {self.id}: {', '.join(failed_nodes)}")
+            logger.warning(
+                f"Failed to read {len(failed_nodes)} nodes from device {self.name} with id {self.id}: {', '.join(failed_nodes)}"
+            )
 
     async def batch_read_nodes(self, client: asyncua.Client, nodes: list[OPCUANode]) -> List[float | int | str | bool]:
         """
@@ -355,7 +357,9 @@ class OPCUAEnergyMeter(EnergyMeter):
         self.set_network_state(False)
         self.client = None
 
-    def get_extended_info(self, get_history_method: Callable[[int], DeviceHistoryStatus], additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+    def get_extended_info(
+        self, get_history_method: Callable[[int], DeviceHistoryStatus], additional_data: Dict[str, Any] = {}
+    ) -> Dict[str, Any]:
         """
         Extends the base device information with OPC UA data.
 

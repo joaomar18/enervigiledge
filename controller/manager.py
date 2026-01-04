@@ -104,8 +104,8 @@ class DeviceManager:
             device.publish_queue = self.publish_queue
         if device.measurements_queue != self.measurements_queue:
             device.measurements_queue = self.measurements_queue
-        if device.on_connection_change is None:
-            device.on_connection_change = self.devices_db.update_device_connection_history
+        if device.last_seen_update is None:
+            device.last_seen_update = self.devices_db.update_device_last_seen
 
         await device.start()
         self.devices.add(device)
@@ -188,7 +188,7 @@ class DeviceManager:
             meter_options=record.options,
             communication_options=record.communication_options,
             nodes=self.create_nodes(record),
-            on_connection_change=self.devices_db.update_device_connection_history,
+            last_seen_update=self.devices_db.update_device_last_seen,
         )
 
     def create_nodes(self, record: EnergyMeterRecord) -> Set[Node]:

@@ -51,7 +51,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         meter_options(EnergyMeterOptions):General configuration options for the meter.
         communication_options(ModbusRTUOptions):Serial communication parameters for Modbus RTU.
         nodes(set[Node]):Set of nodes representing Modbus measurement points.
-        on_connection_change(Callable[[int,bool],None]|None):Optional callback triggered on connection state changes.
+        last_seen_update(Callable[[int], bool] | None):Optional callback triggered on device last seen updates.
     Attributes:
         nodes(set[Node]):All nodes associated with this meter.
         modbus_rtu_nodes(set[ModbusRTUNode]):Subset of nodes using the Modbus RTU protocol.
@@ -77,7 +77,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         meter_options: EnergyMeterOptions,
         communication_options: ModbusRTUOptions,
         nodes: Optional[Set[Node]] = None,
-        on_connection_change: Callable[[int, bool], bool] | None = None,
+        last_seen_update: Callable[[int], bool] | None = None
     ):
         super().__init__(
             id=id,
@@ -89,7 +89,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             meter_options=meter_options,
             communication_options=communication_options,
             nodes=nodes if nodes else set(),
-            on_connection_change=on_connection_change,
+            last_seen_update=last_seen_update,
         )
 
         self.communication_options = communication_options
@@ -229,6 +229,8 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
                     if not enabled_nodes or any(node.connected for node in enabled_nodes):
                         self.set_connection_state(True)
+                        if self.last_seen_update:
+                            self.last_seen_update(self.id)
                     else:
                         self.set_connection_state(False)
 

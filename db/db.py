@@ -102,7 +102,7 @@ class SQLiteDBClient:
             - Each device_status entry is linked to a device via a foreign key (device_id).
             - Devices use an auto-incrementing primary key (id).
             - Nodes and device_status entries are automatically deleted if their parent device is removed (ON DELETE CASCADE).
-            - Device status table tracks first connection time, last connection time, and record timestamps.
+            - Device status table tracks last seen time, and record timestamps.
         """
 
         logger = LoggerManager.get_logger(__name__)
@@ -141,8 +141,7 @@ class SQLiteDBClient:
                 """
                 CREATE TABLE IF NOT EXISTS device_status (
                     device_id INTEGER PRIMARY KEY,
-                    connection_on_datetime TEXT DEFAULT NULL,
-                    connection_off_datetime TEXT DEFAULT NULL,
+                    last_seen TEXT DEFAULT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
@@ -464,13 +463,12 @@ class SQLiteDBClient:
 
         return meters
 
-    def update_device_connection_history(self, device_id: int, status: bool) -> bool:
+    def update_device_last_seen(self, device_id: int) -> bool:
         """
-        Updates device connection timestamps.
+        Updates device last seen timestamp.
 
         Args:
             device_id (int): Device identifier
-            status (bool): True for connected, False for disconnected
 
         Returns:
             bool: True if successful, False otherwise
@@ -480,12 +478,10 @@ class SQLiteDBClient:
         conn, cursor = self.require_client()
 
         try:
-            conn_parameter = "on" if status else "off"
-
             cursor.execute(
                 f"""
                 UPDATE device_status 
-                SET connection_{conn_parameter}_datetime = CURRENT_TIMESTAMP
+                SET last_seen = CURRENT_TIMESTAMP
                 WHERE device_id = ?
                 """,
                 (device_id,),
@@ -495,7 +491,7 @@ class SQLiteDBClient:
             return True
 
         except Exception as e:
-            logger.exception(f"Failed to update connection status for device {device_id}: {e}")
+            logger.exception(f"Failed to update last seen timestamp for device {device_id}: {e}")
             return False
 
     def get_device_history(self, device_id: int) -> DeviceHistoryStatus:
@@ -506,7 +502,7 @@ class SQLiteDBClient:
             device_id (int): Device identifier
 
         Returns:
-            DeviceHistoryStatus: Object containing connection timestamps and record lifecycle info
+            DeviceHistoryStatus: Object containing last seen timestamp and record lifecycle info
         """
 
         logger = LoggerManager.get_logger(__name__)
@@ -515,7 +511,7 @@ class SQLiteDBClient:
         try:
             cursor.execute(
                 """
-                SELECT connection_on_datetime, connection_off_datetime, created_at, updated_at
+                SELECT last_seen, created_at, updated_at
                 FROM device_status
                 WHERE device_id = ?
                 """,
@@ -525,15 +521,14 @@ class SQLiteDBClient:
 
             if row:
                 return DeviceHistoryStatus(
-                    connection_on_datetime=row[0],
-                    connection_off_datetime=row[1],
-                    created_at=row[2],
-                    updated_at=row[3],
+                    last_seen=row[0],
+                    created_at=row[1],
+                    updated_at=row[2],
                 )
             else:
                 logger.warning(f"No status record found for device ID {device_id}")
-                return DeviceHistoryStatus(None, None, None, None)
+                return DeviceHistoryStatus(None, None, None)
 
         except Exception as e:
             logger.exception(f"Failed to retrieve device history for device {device_id}: {e}")
-            return DeviceHistoryStatus(None, None, None, None)
+            return DeviceHistoryStatus(None, None, None)

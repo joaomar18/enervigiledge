@@ -48,8 +48,8 @@ class EnergyMeter():
         meter_options (EnergyMeterOptions): Configuration flags controlling how energy and power are interpreted.
         communication_options (BaseCommunicationOptions): Protocol-specific communication configuration (e.g., ModbusRTUOptions, OPCUAOptions).
         nodes (Set[Node]): Set of nodes representing individual measurement points.
-        on_connection_change (Callable[[int, bool], bool] | None): Optional callback triggered when the device connection state changes.
-            Expects two parameters: device id (int) and state (bool).
+        last_seen_update (Callable[[int], bool] | None): Optional callback triggered when the device's last seen timestamp changes.
+            Expects one parameter: device id (int).
 
     Attributes:
         meter_type (EnergyMeterType): Type of the energy meter (single or three phase).
@@ -71,7 +71,7 @@ class EnergyMeter():
         communication_options: BaseCommunicationOptions,
         nodes: Set[Node],
         protocol: Protocol = Protocol.NONE,
-        on_connection_change: Callable[[int, bool], bool] | None = None,
+        last_seen_update: Callable[[int], bool] | None = None,
     ):
         self.id = id
         self.name = name
@@ -80,7 +80,7 @@ class EnergyMeter():
         self.protocol = protocol
         self.publish_queue = publish_queue
         self.measurements_queue = measurements_queue
-        self.on_connection_change = on_connection_change
+        self.last_seen_update = last_seen_update
         self.meter_type = meter_type
         self.meter_options = meter_options
         self.communication_options = communication_options
@@ -124,9 +124,6 @@ class EnergyMeter():
         """
         Updates the energy meter connection state.
         """
-
-        if self.on_connection_change and state != self.connected:
-            self.on_connection_change(self.id, state)
 
         self.connected = state
 
@@ -389,7 +386,7 @@ class EnergyMeter():
                     - warning: True if any enabled node is in a warning state
                     - created_at: Device creation timestamp
                     - updated_at: Last configuration update timestamp
-                    - last_seen: Timestamp of the last disconnection or connection event
+                    - last_seen: Timestamp of the last successful polling timestamp of the device
                     - enabled_nodes: Number of enabled nodes
                     - ok_nodes: Number of enabled healthy (valid value with no alarms and no warnings) nodes
                 plus any fields provided in `additional_data`.
@@ -405,7 +402,7 @@ class EnergyMeter():
         output["warning"] = any([node for node in enabled_nodes if node.processor.in_warning()])
         output["created_at"] = history.created_at
         output["updated_at"] = history.updated_at
-        output["last_seen"] = history.connection_off_datetime if history.connection_off_datetime else history.connection_on_datetime
+        output["last_seen"] = history.last_seen
         output["enabled_nodes"] = len(enabled_nodes)
         output["ok_nodes"] = len([node for node in enabled_nodes if node.processor.is_healthy()])
         return output
