@@ -14,7 +14,13 @@ from controller.manager import DeviceManager
 from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
 from web.api.decorator import auth_endpoint, AuthConfigs
-from util.functions.images import process_and_save_image, get_device_image, delete_device_image, rollback_image, flush_bin_images
+from util.functions.images import (
+    process_and_save_image,
+    get_device_image,
+    delete_device_image,
+    rollback_image,
+    flush_bin_images,
+)
 import web.exceptions as api_exception
 import web.parsers.device as device_parser
 from util.debug import LoggerManager
@@ -220,17 +226,27 @@ async def get_device_identification(
     device_identification["name"] = device.name
     return JSONResponse(content=device_identification)
 
-@router.get("/get_all_devices")
+
+@router.get("/get_all_devices_status")
 @auth_endpoint(AuthConfigs.PROTECTED)
 async def get_all_devices(
     request: Request,
     safety: HTTPSafety = Depends(services.get_safety),
     device_manager: DeviceManager = Depends(services.get_device_manager),
 ) -> JSONResponse:
-    """Retrieves objects of all devices."""
+    """Retrieves status of all devices."""
 
-    all_obj = [device.get_device() for device in device_manager.devices]
-    return JSONResponse(content=all_obj)
+    all_status = []
+    for device in device_manager.devices:
+        current_status: Dict[str, Any] = {}
+        current_status["id"] = device.id
+        current_status["name"] = device.name
+        current_status["connected"] = device.connected
+        current_status["alarm"] =  any([node for node in device.meter_nodes.nodes.values() if node.config.enabled and node.processor.in_alarm()])
+        current_status["warning"] = any([node for node in device.meter_nodes.nodes.values() if node.config.enabled and node.processor.in_warning()])
+        all_status.append(current_status)
+
+    return JSONResponse(content=all_status)
 
 
 @router.get("/get_device_with_image")
@@ -294,22 +310,27 @@ async def get_device_identification_with_image(
     return JSONResponse(content=device_identification)
 
 
-@router.get("/get_all_devices_with_image")
+@router.get("/get_all_devices_status_with_image")
 @auth_endpoint(AuthConfigs.PROTECTED)
 async def get_all_devices_with_image(
     request: Request,
     safety: HTTPSafety = Depends(services.get_safety),
     device_manager: DeviceManager = Depends(services.get_device_manager),
 ) -> JSONResponse:
-    """Retrieves current state and images of all devices."""
+    """Retrieves current status and images of all devices."""
 
-    all_obj = []
+    all_status = []
     for device in device_manager.devices:
-        device_obj = device.get_device()
-        device_obj["image"] = get_device_image(device.id, "default", "db/device_img/")
-        all_obj.append(device_obj)
+        current_status: Dict[str, Any] = {}
+        current_status["id"] = device.id
+        current_status["name"] = device.name
+        current_status["connected"] = device.connected
+        current_status["alarm"] =  any([node for node in device.meter_nodes.nodes.values() if node.config.enabled and node.processor.in_alarm()])
+        current_status["warning"] = any([node for node in device.meter_nodes.nodes.values() if node.config.enabled and node.processor.in_warning()])
+        current_status["image"] = get_device_image(device.id, "default", "db/device_img/")
+        all_status.append(current_status)
 
-    return JSONResponse(content=all_obj)
+    return JSONResponse(content=all_status)
 
 
 @router.get("/get_default_image")
