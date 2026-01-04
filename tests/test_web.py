@@ -1,9 +1,16 @@
 ########### EXTERNAL IMPORTS ############
 
+import asyncio
+import types
+from typing import Set
 import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from argon2 import PasswordHasher
+from controller.meter.device import EnergyMeter
+from model.controller.general import Protocol
+from model.controller.device import EnergyMeterRecord, EnergyMeterType, EnergyMeterOptions, BaseCommunicationOptions
+from controller.node.node import Node
 
 #########################################
 
@@ -13,27 +20,41 @@ from web.api import device
 from web.api import auth
 from web.dependencies import services
 from web.safety import HTTPSafety
-from model.controller.general import Protocol
 from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
 
 #########################################
 
 
-class DummyDevice:
-    def __init__(self, id, name):
-        self.id = id
+class DummyMeter(EnergyMeter):
+    def __init__(self, name: str, nodes: Set[Node]):
         self.name = name
-        self.protocol = Protocol.NONE
+        self.id = 1
+        self.publish_queue = asyncio.Queue()
+        self.measurements_queue = asyncio.Queue()
+        self.meter_nodes = types.SimpleNamespace(nodes={n.config.name: n for n in nodes})
+        self.protocol = Protocol.MODBUS_RTU
         self.connected = True
+        self.meter_type = EnergyMeterType.THREE_PHASE
+        self.meter_options = EnergyMeterOptions()
+        self.communication_options = BaseCommunicationOptions()
 
-    def get_device(self):
-        return {
-            "id": self.id,
-            "name": self.name,
-            "protocol": self.protocol,
-            "connected": self.connected,
-        }
+    async def start(self):
+        pass
+
+    async def stop(self):
+        pass
+
+    def get_meter_record(self) -> EnergyMeterRecord:
+        return EnergyMeterRecord(
+            id=self.id,
+            name=self.name,
+            protocol=Protocol.MODBUS_RTU,  # Dummy protocol
+            type=EnergyMeterType.THREE_PHASE,  # Dummy type
+            options=EnergyMeterOptions(),  # Dummy options
+            communication_options=BaseCommunicationOptions(),  # Dummy connection options
+            nodes=set(),  # Dummy nodes
+        )
 
 
 class DummyDeviceManager:
@@ -93,7 +114,7 @@ def test_get_all_devices(monkeypatch, tmp_path):
     HTTPSafety.USER_CONFIG_PATH = str(config_path)
 
     safety = HTTPSafety()
-    dev = DummyDevice(1, "dev1")
+    dev = DummyMeter("dev1", set())
     app = create_app(safety, DummyDeviceManager([dev]))
 
     # Patch image provider used by the endpoint
@@ -117,7 +138,7 @@ def test_get_all_devices(monkeypatch, tmp_path):
         headers = {"Authorization": f"Bearer {token}"}
 
         # 3) Call endpoints with header
-        resp = client.get("/device/get_all_devices", headers=headers)
+        resp = client.get("/device/get_all_devices_status", headers=headers)
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
