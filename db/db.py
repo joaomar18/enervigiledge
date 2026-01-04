@@ -143,7 +143,7 @@ class SQLiteDBClient:
                     device_id INTEGER PRIMARY KEY,
                     last_seen TEXT DEFAULT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT NULL,
                     FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
                 )
             """
@@ -172,14 +172,6 @@ class SQLiteDBClient:
         Returns:
             int | None: The ID of the newly inserted device if successful, None if an
             error occurs during insertion.
-
-        Note:
-            This method creates the following records:
-            - A device entry in the devices table
-            - One entry per associated node in the nodes table
-            - An initial device status entry with default values
-
-            Transaction commit or rollback must be handled by the caller.
         """
 
         logger = LoggerManager.get_logger(__name__)
@@ -259,15 +251,6 @@ class SQLiteDBClient:
         Returns:
             bool: True if the update operations complete successfully, False if an
             error occurs or the specified device does not exist.
-
-        Note:
-            - All existing node records for the device are deleted and recreated.
-            - The device status record is preserved when present.
-            - The `created_at`, `connection_on_datetime`, and
-            `connection_off_datetime` values are preserved.
-            - The `updated_at` timestamp is refreshed.
-            - If no device status record exists, a new one is created.
-            - Transaction commit or rollback must be handled by the caller.
         """
 
         logger = LoggerManager.get_logger(__name__)
@@ -277,10 +260,10 @@ class SQLiteDBClient:
             return False
 
         try:
-
+            # Retrieve existing device status to preserve timestamps
             cursor.execute(
                 """
-                SELECT connection_on_datetime, connection_off_datetime, created_at 
+                SELECT last_seen, created_at 
                 FROM device_status 
                 WHERE device_id = ?
                 """,
@@ -330,17 +313,16 @@ class SQLiteDBClient:
                     ),
                 )
 
-            # Restore device status with preserved created_at and updated updated_at
+            # Update or create device history status
             if status_data:
                 cursor.execute(
                     """
-                    INSERT INTO device_status (device_id, connection_on_datetime, connection_off_datetime, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    INSERT INTO device_status (device_id, last_seen, created_at, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
                     """,
-                    (record.id, status_data[0], status_data[1], status_data[2]),
+                    (record.id, status_data[0], status_data[1]),
                 )
             else:
-                # Create new status if none existed
                 cursor.execute(
                     """
                     INSERT INTO device_status (device_id)
@@ -479,10 +461,11 @@ class SQLiteDBClient:
 
         try:
             cursor.execute(
-                f"""
-                UPDATE device_status 
-                SET last_seen = CURRENT_TIMESTAMP
-                WHERE device_id = ?
+                """
+                INSERT INTO device_status (device_id, last_seen)
+                VALUES (?, CURRENT_TIMESTAMP)
+                ON CONFLICT(device_id) DO UPDATE SET
+                last_seen = CURRENT_TIMESTAMP
                 """,
                 (device_id,),
             )
