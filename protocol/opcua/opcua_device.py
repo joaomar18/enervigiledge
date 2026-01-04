@@ -375,4 +375,4 @@ class OPCUAEnergyMeter(EnergyMeter):
         output["enabled_nodes"] = len([node for node in self.nodes if node.config.enabled])
         output["ok_nodes"] = len([node for node in self.nodes if node.config.enabled and node.config.calculated and node.processor.is_healthy()])
         output["ok_nodes"] += len([node for node in self.opcua_nodes if node.config.enabled and node.connected and node.processor.is_healthy()])
-        return super().get_extended_info(get_history_method)
+        return super().get_extended_info(get_history_method, additional_data=output)
