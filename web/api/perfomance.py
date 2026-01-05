@@ -28,7 +28,10 @@ async def get_system_metrics(
     output: Dict[str, Any] = {}
     cpu_usage = perf.get_cpu_performance()
     ram_used, ram_total = perf.get_ram_performance()
+    disk_used, disk_total = perf.get_disk_performance()
     output["cpu_usage"] = cpu_usage
     output["ram_used"] = ram_used
     output["ram_total"] = ram_total
+    output["disk_used"] = disk_used
+    output["disk_total"] = disk_total
     return JSONResponse(content=output)

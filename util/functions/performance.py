@@ -1,6 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
-from typing import Tuple
+from typing import Tuple, List
 import psutil
 
 #######################################
@@ -21,14 +21,14 @@ def get_ram_performance() -> Tuple[int, int]:
     return (virtual_memory.used, virtual_memory.total)
 
 
-def get_cpu_performance() -> float:
+def get_cpu_performance() -> List[float]:
     """
-    Retrieves the current CPU usage percentage of the system.
+    Retrieves the current CPU usage percentage of the system per core.
     Returns:
-        CPU usage as a float percentage.
+        CPU usage as a list of floats representing each core usage percentage.
     """
 
-    return psutil.cpu_percent()
+    return psutil.cpu_percent(percpu=True)
 
 
 def get_disk_performance() -> Tuple[int, int]:
