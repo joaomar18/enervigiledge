@@ -1,11 +1,12 @@
 ###########EXTERNAL IMPORTS############
 
+import asyncio
 import os
 import logging
 import json
 from fastapi import Request
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Optional, Any, Tuple
+from typing import List, Dict, Optional, Any, Tuple
 from dataclasses import dataclass
 import jwt
 import secrets
@@ -20,11 +21,11 @@ from util.debug import LoggerManager
 import web.validation as validation
 import util.functions.web as web_util
 import web.exceptions as api_exception
+import util.functions.date as date
 
 #######################################
 
-LoggerManager.get_logger(__name__).setLevel(logging.DEBUG)
-
+LoggerManager.get_logger(__name__).setLevel(logging.INFO)
 
 @dataclass
 class LoginToken:
@@ -40,7 +41,7 @@ class LoginToken:
         ip (str): The IP address from which the user authenticated.
         auto_login (bool): Whether the session should persist without requiring manual login
                            again from the same IP (e.g., "remember me" functionality).
-        keep_session_until (Optional[datetime]): If set, defines the timestamp until which the session
+        keep_session_until (datetime): Defines the timestamp until which the session
                                                  remains valid without re-authentication, even if inactive.
     """
 
@@ -48,7 +49,7 @@ class LoginToken:
     user: str
     ip: str
     auto_login: bool
-    keep_session_until: Optional[datetime]
+    keep_session_until: datetime
 
 
 @dataclass
@@ -91,6 +92,7 @@ class HTTPSafety:
         active_tokens (Dict[str, LoginToken]): Stores active JWT tokens by token value, including session metadata like IP,
                                                auto-login status, and keep-alive timestamp. Each token represents a unique session.
         ph (PasswordHasher): Argon2 password hasher instance for secure password hashing and verification.
+        cleanup_task (Optional[asyncio.Task]): Background task for cleaning up expired sessions.
     """
 
     USER_CONFIG_PATH = str("user_config.json")
@@ -101,6 +103,57 @@ class HTTPSafety:
         self.failed_requests: Dict[str, Dict[str, RequestsSafety]] = {}
         self.active_tokens: Dict[str, LoginToken] = {}
         self.ph = PasswordHasher()
+        self.cleanup_task: Optional[asyncio.Task] = None
+    
+    async def start_cleanup_task(self) -> None:
+        """
+        Starts the background task for cleaning up expired sessions.
+        """
+
+        if self.cleanup_task is not None:
+            raise RuntimeError("Cleanup task is already instantiated")
+
+        loop = asyncio.get_event_loop()
+        self.cleanup_task = loop.create_task(self._cleanup_expired_sessions())
+
+    async def stop_cleanup_task(self) -> None:
+        """
+        Stops the background task for cleaning up expired sessions.
+        """
+
+        if self.cleanup_task:
+            self.cleanup_task.cancel()
+            try:
+                await self.cleanup_task
+            except asyncio.CancelledError:
+                pass
+            self.cleanup_task = None
+
+    async def _cleanup_expired_sessions(self) -> None:
+        """
+        Background task that periodically cleans up expired sessions from active_tokens.
+        Sessions that are not set to auto-login and have exceeded their keep-alive time are removed.
+        """
+
+        logger = LoggerManager.get_logger(__name__)
+
+        try:
+            while True:
+                await asyncio.sleep(5)  # Run cleanup every 15 minutes
+                logger.debug(f"Running cleanup of expired sessions. Active sessions count: {len(self.active_tokens)}")
+                tokens_to_remove: List[str] = []
+                for token, session in self.active_tokens.items():
+                    if date.get_current_utc_datetime() >= session.keep_session_until:
+                        tokens_to_remove.append(token)
+
+                for token in tokens_to_remove:
+                    del self.active_tokens[token]
+                    logger.debug(f"Removed expired session for token: {token}")
+
+        except asyncio.CancelledError:
+            logger.debug("Session cleanup task cancelled.")
+        except Exception as e:
+            logger.exception(f"Error in session cleanup task: {str(e)}")
 
     async def create_user_configuration(self, username: str, password: str, confirm_password: str) -> None:
         """
@@ -280,10 +333,11 @@ class HTTPSafety:
             raise api_exception.InvalidCredentials(api_exception.Errors.AUTH.INVALID_CREDENTIALS)
 
         # Create token and return it
-        token_payload = {"user": username, "iat": datetime.now(timezone.utc).timestamp()}
+        token_payload = {"user": username, "iat": date.get_current_utc_datetime().timestamp()}
+        keep_session_until = date.get_current_utc_datetime() + timedelta(days=30) if auto_login else date.get_current_utc_datetime() + timedelta(hours=1)
         token = jwt.encode(token_payload, config["jwt_secret"], algorithm="HS256")
         self.active_tokens[token] = LoginToken(
-            token=token, user=username, ip=web_util.get_ip_address(request), auto_login=auto_login, keep_session_until=None
+            token=token, user=username, ip=web_util.get_ip_address(request), auto_login=auto_login, keep_session_until=keep_session_until
         )
         return (username, token)
 
@@ -310,9 +364,10 @@ class HTTPSafety:
 
         # Get auto_login status from current session and update token
         current_auto_login = self.active_tokens[token].auto_login
+        keep_session_until = date.get_current_utc_datetime() + timedelta(days=30) if current_auto_login else date.get_current_utc_datetime() + timedelta(hours=1)
         del self.active_tokens[token]
         self.active_tokens[new_token] = LoginToken(
-            token=new_token, user=username, ip=web_util.get_ip_address(request), auto_login=current_auto_login, keep_session_until=None
+            token=new_token, user=username, ip=web_util.get_ip_address(request), auto_login=current_auto_login, keep_session_until=keep_session_until
         )
         return (username, new_token)
 
@@ -387,7 +442,7 @@ class HTTPSafety:
         if not stored_token or stored_token.token != token:
             raise api_exception.TokenInRequestInvalid(api_exception.Errors.AUTH.INVALID_TOKEN)
 
-        if stored_token.user != username or stored_token.ip != web_util.get_ip_address(request):
+        if stored_token.user != username or stored_token.ip != web_util.get_ip_address(request) or stored_token.keep_session_until < date.get_current_utc_datetime():
             raise api_exception.TokenInRequestInvalid(api_exception.Errors.AUTH.INVALID_TOKEN)
 
         return (username, token, str(config["jwt_secret"]))

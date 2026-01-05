@@ -126,6 +126,7 @@ class HTTPServer:
 
             loop = asyncio.get_event_loop()
             self.run_task = loop.create_task(self.run_server())
+            await self.safety.start_cleanup_task()
         except Exception as e:
             logger.exception(f"Failed to start HTTP Server: {str(e)}")
 
@@ -141,6 +142,7 @@ class HTTPServer:
                 self.run_task.cancel()
                 await self.run_task
                 self.run_task = None
+            await self.safety.stop_cleanup_task()
 
         except asyncio.CancelledError:
             pass
