@@ -24,7 +24,8 @@ dependencies = [
     "Pillow",
     "arrow",
     "tzdata",
-    "python-multipart"
+    "python-multipart",
+    "psutil",
 ]
 
 [project.optional-dependencies]

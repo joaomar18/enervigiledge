@@ -19,6 +19,7 @@ from db.timedb import TimeDBClient
 import web.api.auth as auth
 import web.api.device as device
 import web.api.nodes as nodes
+import web.api.perfomance as performance
 from util.debug import LoggerManager
 from app_config import IS_DEVELOPMENT
 
@@ -59,6 +60,7 @@ class HTTPServer:
         - auth_api: Authentication and authorization endpoints (`/api/auth/*`)
         - device_api: Device lifecycle management endpoints (`/api/device/*`)
         - nodes_api: Node data and state endpoints (`/api/nodes/*`)
+        - performance_api: Performance metrics endpoints (`/api/performance/*`)
 
     Security Features:
         - Token-based authentication with session management
@@ -99,6 +101,7 @@ class HTTPServer:
         api_router.include_router(auth.router)  # Authorization router (handles authorization endpoints)
         api_router.include_router(device.router)  # Device router (handles device endpoints)
         api_router.include_router(nodes.router)  # Nodes router (handles nodes endpoints)
+        api_router.include_router(performance.router) # Performance router (handles performance metrics endpoints)
         self.server.include_router(api_router)
         if IS_DEVELOPMENT:
             self.server.add_middleware(
