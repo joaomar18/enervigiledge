@@ -12,8 +12,6 @@ from web.dependencies import services
 from web.api.decorator import auth_endpoint, AuthConfigs
 from web.safety import HTTPSafety
 import web.exceptions as api_exception
-from app_config import IS_DEVELOPMENT
-
 
 #######################################
 
@@ -27,16 +25,7 @@ async def auto_login(request: Request, safety: HTTPSafety = Depends(services.get
 
     username, token = await safety.update_jwt_token(request)
     response = JSONResponse(content={"message": "Auto-login successful"})
-    response.set_cookie(
-        key="token",
-        value=token,
-        httponly=True,
-        secure=False if IS_DEVELOPMENT else True,
-        samesite="lax",
-        path="/",
-        max_age=3600 if not safety.active_tokens[token].auto_login else 2592000,
-    )
-
+    safety.set_response_http_session_cookie(response, token)
     return response
 
 
@@ -65,15 +54,7 @@ async def login(request: Request, safety: HTTPSafety = Depends(services.get_safe
 
     username, token = await safety.create_jwt_token(username, password, auto_login, request)
     response = JSONResponse(content={"message": "Login successful"})
-    response.set_cookie(
-        key="token",
-        value=token,
-        httponly=True,
-        secure=False if IS_DEVELOPMENT else True,
-        samesite="lax",
-        path="/",
-        max_age=3600 if not safety.active_tokens[token].auto_login else 2592000,
-    )
+    safety.set_response_http_session_cookie(response, token)
     return response
 
 

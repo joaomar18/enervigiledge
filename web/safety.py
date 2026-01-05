@@ -5,6 +5,7 @@ import os
 import logging
 import json
 from fastapi import Request
+from fastapi.responses import JSONResponse
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional, Any, Tuple
 from dataclasses import dataclass
@@ -22,10 +23,12 @@ import web.validation as validation
 import util.functions.web as web_util
 import web.exceptions as api_exception
 import util.functions.date as date
+from app_config import IS_DEVELOPMENT
 
 #######################################
 
 LoggerManager.get_logger(__name__).setLevel(logging.INFO)
+
 
 @dataclass
 class LoginToken:
@@ -86,6 +89,8 @@ class HTTPSafety:
         USER_CONFIG_PATH (str): Path to the user configuration JSON file containing hashed credentials and the JWT secret.
         MAX_REQUEST_ATTEMPTS (int): Maximum number of failed attempts allowed before an IP is blocked for an endpoint.
         BLOCK_TIME (timedelta): Duration an IP remains blocked after exceeding the failed request limit.
+        AUTO_LOGIN_SESSION_TIME (timedelta): Duration for which an auto-login session remains valid.
+        REGULAR_SESSION_TIME (timedelta): Duration for which a regular session remains valid.
         failed_requests (Dict[str, Dict[str, RequestsSafety]]): Tracks failed attempts per client identifier and endpoint.
                                                                 Client identifier can be JWT token (for authenticated requests)
                                                                 or IP+User-Agent hash (for unauthenticated requests).
@@ -98,13 +103,15 @@ class HTTPSafety:
     USER_CONFIG_PATH = str("user_config.json")
     MAX_REQUEST_ATTEMPTS = 5
     BLOCK_TIME = timedelta(minutes=15)
+    AUTO_LOGIN_SESSION_TIME = timedelta(days=30)
+    REGULAR_SESSION_TIME = timedelta(hours=1)
 
     def __init__(self):
         self.failed_requests: Dict[str, Dict[str, RequestsSafety]] = {}
         self.active_tokens: Dict[str, LoginToken] = {}
         self.ph = PasswordHasher()
         self.cleanup_task: Optional[asyncio.Task] = None
-    
+
     async def start_cleanup_task(self) -> None:
         """
         Starts the background task for cleaning up expired sessions.
@@ -139,8 +146,7 @@ class HTTPSafety:
 
         try:
             while True:
-                await asyncio.sleep(5)  # Run cleanup every 15 minutes
-                logger.debug(f"Running cleanup of expired sessions. Active sessions count: {len(self.active_tokens)}")
+                await asyncio.sleep(int(HTTPSafety.REGULAR_SESSION_TIME.total_seconds()))
                 tokens_to_remove: List[str] = []
                 for token, session in self.active_tokens.items():
                     if date.get_current_utc_datetime() >= session.keep_session_until:
@@ -148,10 +154,9 @@ class HTTPSafety:
 
                 for token in tokens_to_remove:
                     del self.active_tokens[token]
-                    logger.debug(f"Removed expired session for token: {token}")
 
         except asyncio.CancelledError:
-            logger.debug("Session cleanup task cancelled.")
+            pass
         except Exception as e:
             logger.exception(f"Error in session cleanup task: {str(e)}")
 
@@ -197,7 +202,9 @@ class HTTPSafety:
         with open(HTTPSafety.USER_CONFIG_PATH, "w") as file:
             json.dump(config, file, indent=4)
 
-    async def change_user_password(self, username: str, old_password: str, new_password: str, confirm_new_password: str) -> None:
+    async def change_user_password(
+        self, username: str, old_password: str, new_password: str, confirm_new_password: str
+    ) -> None:
         """
         Update the stored user password after verifying existing credentials.
 
@@ -234,7 +241,12 @@ class HTTPSafety:
 
         stored_username: Optional[str] = config.get("username")
         stored_hash: Optional[str] = config.get("password_hash")
-        if stored_username is None or stored_hash is None or not isinstance(stored_username, str) or not isinstance(stored_hash, str):
+        if (
+            stored_username is None
+            or stored_hash is None
+            or not isinstance(stored_username, str)
+            or not isinstance(stored_hash, str)
+        ):
             raise api_exception.UserConfigCorrupted(api_exception.Errors.AUTH.USER_CONFIG_CORRUPT)
 
         if username != stored_username:
@@ -319,7 +331,12 @@ class HTTPSafety:
 
         stored_username: Optional[str] = config.get("username")
         stored_hash: Optional[str] = config.get("password_hash")
-        if stored_username is None or stored_hash is None or not isinstance(stored_username, str) or not isinstance(stored_hash, str):
+        if (
+            stored_username is None
+            or stored_hash is None
+            or not isinstance(stored_username, str)
+            or not isinstance(stored_hash, str)
+        ):
             raise api_exception.UserConfigCorrupted(api_exception.Errors.AUTH.USER_CONFIG_CORRUPT)
 
         # Verify credentials
@@ -334,10 +351,18 @@ class HTTPSafety:
 
         # Create token and return it
         token_payload = {"user": username, "iat": date.get_current_utc_datetime().timestamp()}
-        keep_session_until = date.get_current_utc_datetime() + timedelta(days=30) if auto_login else date.get_current_utc_datetime() + timedelta(hours=1)
+        keep_session_until = (
+            date.get_current_utc_datetime() + HTTPSafety.AUTO_LOGIN_SESSION_TIME
+            if auto_login
+            else date.get_current_utc_datetime() + HTTPSafety.REGULAR_SESSION_TIME
+        )
         token = jwt.encode(token_payload, config["jwt_secret"], algorithm="HS256")
         self.active_tokens[token] = LoginToken(
-            token=token, user=username, ip=web_util.get_ip_address(request), auto_login=auto_login, keep_session_until=keep_session_until
+            token=token,
+            user=username,
+            ip=web_util.get_ip_address(request),
+            auto_login=auto_login,
+            keep_session_until=keep_session_until,
         )
         return (username, token)
 
@@ -364,10 +389,18 @@ class HTTPSafety:
 
         # Get auto_login status from current session and update token
         current_auto_login = self.active_tokens[token].auto_login
-        keep_session_until = date.get_current_utc_datetime() + timedelta(days=30) if current_auto_login else date.get_current_utc_datetime() + timedelta(hours=1)
+        keep_session_until = (
+            date.get_current_utc_datetime() + HTTPSafety.AUTO_LOGIN_SESSION_TIME
+            if current_auto_login
+            else date.get_current_utc_datetime() + HTTPSafety.REGULAR_SESSION_TIME
+        )
         del self.active_tokens[token]
         self.active_tokens[new_token] = LoginToken(
-            token=new_token, user=username, ip=web_util.get_ip_address(request), auto_login=current_auto_login, keep_session_until=keep_session_until
+            token=new_token,
+            user=username,
+            ip=web_util.get_ip_address(request),
+            auto_login=current_auto_login,
+            keep_session_until=keep_session_until,
         )
         return (username, new_token)
 
@@ -442,7 +475,11 @@ class HTTPSafety:
         if not stored_token or stored_token.token != token:
             raise api_exception.TokenInRequestInvalid(api_exception.Errors.AUTH.INVALID_TOKEN)
 
-        if stored_token.user != username or stored_token.ip != web_util.get_ip_address(request) or stored_token.keep_session_until < date.get_current_utc_datetime():
+        if (
+            stored_token.user != username
+            or stored_token.ip != web_util.get_ip_address(request)
+            or stored_token.keep_session_until < date.get_current_utc_datetime()
+        ):
             raise api_exception.TokenInRequestInvalid(api_exception.Errors.AUTH.INVALID_TOKEN)
 
         return (username, token, str(config["jwt_secret"]))
@@ -493,7 +530,9 @@ class HTTPSafety:
         client_id = self.get_client_identifier(request)
         failed_requests = self.failed_requests.get(client_id, {}).get(web_util.get_api_url(request))
         requests_count = failed_requests.count if failed_requests is not None else 0
-        remaining_requests: int = HTTPSafety.MAX_REQUEST_ATTEMPTS - requests_count if requests_count else HTTPSafety.MAX_REQUEST_ATTEMPTS
+        remaining_requests: int = (
+            HTTPSafety.MAX_REQUEST_ATTEMPTS - requests_count if requests_count else HTTPSafety.MAX_REQUEST_ATTEMPTS
+        )
         return remaining_requests
 
     def clean_failed_requests(self, request: Request, endpoint: str) -> None:
@@ -542,3 +581,30 @@ class HTTPSafety:
             logger.warning(f"Client {client_id} blocked from {endpoint} for {HTTPSafety.BLOCK_TIME}.")
 
         client_record[endpoint] = record
+
+    def set_response_http_session_cookie(self, response: JSONResponse, token: str) -> None:
+        """
+        Sets the HTTP-only session cookie in the response for client authentication.
+
+        Args:
+            response: JSONResponse object to set the cookie on
+            token: JWT token string to set as the cookie value
+        """
+
+        active_token = self.active_tokens.get(token)
+        if not active_token:
+            return
+
+        response.set_cookie(
+            key="token",
+            value=token,
+            httponly=True,
+            secure=False if IS_DEVELOPMENT else True,
+            samesite="lax",
+            path="/",
+            max_age=(
+                int(HTTPSafety.AUTO_LOGIN_SESSION_TIME.total_seconds())
+                if self.active_tokens[token].auto_login
+                else int(HTTPSafety.REGULAR_SESSION_TIME.total_seconds())
+            ),
+        )
