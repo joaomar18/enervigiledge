@@ -477,7 +477,6 @@ class HTTPSafety:
 
         if (
             stored_token.user != username
-            or stored_token.ip != web_util.get_ip_address(request)
             or stored_token.keep_session_until < date.get_current_utc_datetime()
         ):
             raise api_exception.TokenInRequestInvalid(api_exception.Errors.AUTH.INVALID_TOKEN)
