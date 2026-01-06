@@ -32,7 +32,7 @@ async def async_main():
     LoggerManager.init()
 
     # Create core infrastructure
-    timedb_client = TimeDBClient()
+    timedb_client = TimeDBClient(host="127.0.0.1", port=8010)
     sqlitedb_client = SQLiteDBClient()
     mqtt_client = MQTTClient(config_file="mqtt/client_options.env")
     device_manager = DeviceManager(
