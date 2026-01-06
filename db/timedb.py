@@ -132,7 +132,7 @@ class TimeDBClient:
 
         return formatted
 
-    def __init__(self, host: str = "localhost", port: int = 8086, username: str = "root", password: str = "root"):
+    def __init__(self, host: str = "localhost", port: int = 8010, username: str = "root", password: str = "root"):
 
         self.host = host
         self.port = port
