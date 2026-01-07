@@ -1,5 +1,6 @@
 ###########EXTERNAL IMPORTS############
 
+import asyncio
 from fastapi import APIRouter, Request, Depends
 from typing import Optional, Dict, Any
 from fastapi.responses import JSONResponse
@@ -136,8 +137,8 @@ async def get_logs_from_node(
         raise api_exception.NodeNotFound(api_exception.Errors.NODES.NOT_FOUND)
 
     date.process_time_span(time_span)
-    response = timedb.get_variable_logs(device.name, device_id, node, time_span).get_logs()
-    return JSONResponse(content=response)
+    response = await asyncio.get_running_loop().run_in_executor(timedb.api_executor, timedb.get_variable_logs, device.name, device_id, node, time_span)
+    return JSONResponse(content=response.get_logs())
 
 
 @router.get("/get_energy_consumption")
@@ -179,7 +180,7 @@ async def get_energy_consumption(
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     date.process_time_span(time_span)
-    response = meter_extraction.get_meter_energy_consumption(device, phase, direction, timedb, time_span)
+    response = await asyncio.get_running_loop().run_in_executor(timedb.api_executor, meter_extraction.get_meter_energy_consumption, device, phase, direction, timedb, time_span)
     return JSONResponse(content=response)
 
 
@@ -211,7 +212,7 @@ async def get_peak_demand_power(
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     date.process_time_span(time_span)
-    response = meter_extraction.get_meter_peak_power(device, phase, timedb, time_span)
+    response = await asyncio.get_running_loop().run_in_executor(timedb.api_executor, meter_extraction.get_meter_peak_power, device, phase, timedb, time_span)
     return JSONResponse(content=response)
 
 
@@ -230,8 +231,8 @@ async def delete_logs_from_node(
     except Exception as e:
         raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
 
-    device_id = device_parser.parse_device_id(request.query_params)
-    name = request.query_params.get("node_name")
+    device_id = device_parser.parse_device_id(payload)
+    name = payload.get("node_name")
     if name is None or not isinstance(name, str):
         raise api_exception.InvalidRequestPayload(api_exception.Errors.NODES.MISSING_NODE_NAME)
 
@@ -243,8 +244,11 @@ async def delete_logs_from_node(
     if not node:
         raise api_exception.NodeNotFound(api_exception.Errors.NODES.NOT_FOUND)
 
-    if timedb.check_variable_has_logs(device_name=device.name, device_id=device_id, variable=node):
-        if not timedb.delete_variable_data(device_name=device.name, device_id=device_id, variable=node):
+    has_logs = await asyncio.get_running_loop().run_in_executor(timedb.api_executor, timedb.check_variable_has_logs, device.name, device_id, node)
+
+    if has_logs:
+        result = await asyncio.get_running_loop().run_in_executor(timedb.api_executor, timedb.delete_variable_data, device.name, device_id, node)
+        if not result:
             raise api_exception.DeviceDeleteError(api_exception.Errors.NODES.DELETE_LOGS_FAILED)
 
     return JSONResponse(content={"result": f"Successfully deleted logs for node '{name}' from device '{device.name}' with id {device_id}."})
@@ -265,12 +269,13 @@ async def delete_all_logs(
     except Exception as e:
         raise api_exception.InvalidRequestPayload(api_exception.Errors.INVALID_JSON)
 
-    device_id = device_parser.parse_device_id(request.query_params)
+    device_id = device_parser.parse_device_id(payload)
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
-    if not timedb.delete_all_data(device_name=device.name, device_id=device_id):
+    result = await asyncio.get_running_loop().run_in_executor(timedb.api_executor, timedb.delete_all_data, device.name, device_id)
+    if not result:
         raise api_exception.DeviceDeleteError(api_exception.Errors.NODES.DELETE_ALL_LOGS_FAILED)
 
     return JSONResponse(content={"result": f"Successfully deleted all logs from device '{device.name}' with id {device_id}."})

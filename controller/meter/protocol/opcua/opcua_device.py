@@ -2,7 +2,7 @@
 
 import asyncio
 import asyncua
-from typing import Set, List, Dict, Optional, Any, Callable
+from typing import Set, List, Dict, Optional, Any, Callable, Awaitable
 import logging
 
 ############### LOCAL IMPORTS ###############
@@ -39,7 +39,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         meter_options (EnergyMeterOptions): General meter configuration.
         communication_options (OPCUAOptions): OPC UA connection parameters.
         nodes (Optional[Set[Node]]): Node definitions for this meter.
-        last_seen_update (Callable[[int], bool] | None): Optional callback
+        last_seen_update (Callable[[int], Awaitable[bool]] | None): Optional callback
             invoked when the meter's last seen timestamp changes.
 
     Attributes:
@@ -61,7 +61,7 @@ class OPCUAEnergyMeter(EnergyMeter):
         meter_options: EnergyMeterOptions,
         communication_options: OPCUAOptions,
         nodes: Optional[Set[Node]] = None,
-        last_seen_update: Callable[[int], bool] | None = None,
+        last_seen_update: Callable[[int], Awaitable[bool]] | None = None,
     ):
         super().__init__(
             id=id,
@@ -201,7 +201,7 @@ class OPCUAEnergyMeter(EnergyMeter):
                     if not enabled_nodes or any(node.connected for node in enabled_nodes):
                         self.set_connection_state(True)
                         if self.last_seen_update:
-                            self.last_seen_update(self.id)
+                            await self.last_seen_update(self.id)
                     else:
                         self.set_connection_state(False)
 
@@ -357,8 +357,8 @@ class OPCUAEnergyMeter(EnergyMeter):
         self.set_network_state(False)
         self.client = None
 
-    def get_extended_info(
-        self, get_history_method: Callable[[int], DeviceHistoryStatus], additional_data: Dict[str, Any] = {}
+    async def get_extended_info(
+        self, get_history_method: Callable[[int], Awaitable[DeviceHistoryStatus]], additional_data: Dict[str, Any] = {}
     ) -> Dict[str, Any]:
         """
         Extends the base device information with OPC UA data.
@@ -374,4 +374,4 @@ class OPCUAEnergyMeter(EnergyMeter):
 
         output: Dict[str, Any] = additional_data.copy()
         output["read_period"] = self.communication_options.read_period
-        return super().get_extended_info(get_history_method, additional_data=output)
+        return await super().get_extended_info(get_history_method, additional_data=output)

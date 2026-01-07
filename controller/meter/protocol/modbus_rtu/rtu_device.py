@@ -3,9 +3,9 @@
 import asyncio
 import struct
 from pymodbus.pdu import ModbusPDU
-from pymodbus.client import ModbusSerialClient as ModbusRTUClient
+from pymodbus.client import AsyncModbusSerialClient as ModbusRTUClient
 from pymodbus import ModbusException
-from typing import Optional, Set, Dict, List, Callable, Any
+from typing import Optional, Set, Dict, List, Callable, Awaitable, Any
 import logging
 
 #######################################
@@ -31,7 +31,7 @@ from controller.meter.device import EnergyMeter
 
 
 LoggerManager.get_logger(__name__).setLevel(logging.ERROR)
-ModbusCall = Callable[[ModbusRTUClient, int, int, int, bool], ModbusPDU]
+ModbusCall = Callable[[ModbusRTUClient, int, int, int, bool], Awaitable[ModbusPDU]]
 
 
 class ModbusRTUEnergyMeter(EnergyMeter):
@@ -51,7 +51,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         meter_options(EnergyMeterOptions):General configuration options for the meter.
         communication_options(ModbusRTUOptions):Serial communication parameters for Modbus RTU.
         nodes(set[Node]):Set of nodes representing Modbus measurement points.
-        last_seen_update(Callable[[int], bool] | None):Optional callback triggered on device last seen updates.
+        last_seen_update(Callable[[int], Awaitable[bool]] | None):Optional callback triggered on device last seen updates.
     Attributes:
         nodes(set[Node]):All nodes associated with this meter.
         modbus_rtu_nodes(set[ModbusRTUNode]):Subset of nodes using the Modbus RTU protocol.
@@ -77,7 +77,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         meter_options: EnergyMeterOptions,
         communication_options: ModbusRTUOptions,
         nodes: Optional[Set[Node]] = None,
-        last_seen_update: Callable[[int], bool] | None = None
+        last_seen_update: Callable[[int], Awaitable[bool]] | None = None
     ):
         super().__init__(
             id=id,
@@ -191,7 +191,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                 raise RuntimeError(f"Client {self.name} with id {self.id} is not initialized.")
             try:
                 logger.info(f"Trying to connect to client {self.name} with id {self.id}...")
-                self.network_connected = self.client.connect()
+                self.network_connected = await self.client.connect()
 
                 if not self.network_connected:
                     logger.warning(f"Failed to connect to client {self.name} with id {self.id}")
@@ -230,7 +230,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
                     if not enabled_nodes or any(node.connected for node in enabled_nodes):
                         self.set_connection_state(True)
                         if self.last_seen_update:
-                            self.last_seen_update(self.id)
+                            await self.last_seen_update(self.id)
                     else:
                         self.set_connection_state(False)
 
@@ -303,7 +303,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         if not single_read_nodes:
             return
 
-        tasks = [asyncio.to_thread(self.read_node, client, node) for node in single_read_nodes]
+        tasks = [asyncio.create_task(self.read_node(client, node)) for node in single_read_nodes]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         failed_nodes = []
 
@@ -407,9 +407,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         if function not in self.modbus_function_map:
             raise ModbusException(f"Unknown modbus function {function} while trying to read batch group: {batch_group.nodes}.")
 
-        response = await asyncio.to_thread(
-            self.modbus_function_map[function], client, batch_group.start_addr, batch_group.size, self.communication_options.slave_id, False
-        )
+        response = await self.modbus_function_map[function](client, batch_group.start_addr, batch_group.size, self.communication_options.slave_id, False)
         results: Dict[ModbusRTUNode, float | int | bool] = {}
 
         for node in batch_group.nodes:
@@ -425,7 +423,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
         return results
 
-    def read_node(self, client: ModbusRTUClient, node: ModbusRTUNode) -> float | int | bool:
+    async def read_node(self, client: ModbusRTUClient, node: ModbusRTUNode) -> float | int | bool:
         """
         Read and decode a single Modbus address for the given node.
 
@@ -454,7 +452,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
             if node.options.function not in self.modbus_function_map:
                 raise ModbusException(f"Unknown modbus function {node.options.function} while trying to read node {node.config.name}.")
 
-            response = self.modbus_function_map[node.options.function](
+            response = await self.modbus_function_map[node.options.function](
                 client, node.options.address, size, self.communication_options.slave_id, False
             )
             value = self.get_value_map[node.options.type](node.options, response, 0, size)
@@ -725,7 +723,7 @@ class ModbusRTUEnergyMeter(EnergyMeter):
         self.set_network_state(False)
         self.client = None
 
-    def get_extended_info(self, get_history_method: Callable[[int], DeviceHistoryStatus], additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+    async def get_extended_info(self, get_history_method: Callable[[int], Awaitable[DeviceHistoryStatus]], additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
         """
         Extends the base device information with Modbus RTU–specific data.
 
@@ -740,4 +738,4 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
         output: Dict[str, Any] = additional_data.copy()
         output["read_period"] = self.communication_options.read_period
-        return super().get_extended_info(get_history_method, additional_data=output)
+        return await super().get_extended_info(get_history_method, additional_data=output)

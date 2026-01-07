@@ -7,6 +7,8 @@ from starlette.datastructures import UploadFile
 from PIL import Image
 import shutil
 import io
+from concurrent.futures import ThreadPoolExecutor
+
 
 #######################################
 
@@ -14,6 +16,7 @@ import io
 
 #######################################
 
+api_executor = ThreadPoolExecutor(max_workers=4)
 
 def get_device_image(
     device_id: int,

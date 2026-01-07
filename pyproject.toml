@@ -9,6 +9,7 @@ authors = [
     { name = "Enervigiledge Contributors" }
 ]
 dependencies = [
+    "aiosqlite",
     "influxdb",
     "colorama",
     "python-dotenv",

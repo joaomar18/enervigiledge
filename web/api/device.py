@@ -1,6 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
-from typing import Dict, Any
+import asyncio
+from typing import Dict, List, Any
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import JSONResponse
 
@@ -14,13 +15,7 @@ from controller.manager import DeviceManager
 from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
 from web.api.decorator import auth_endpoint, AuthConfigs
-from util.functions.images import (
-    process_and_save_image,
-    get_device_image,
-    delete_device_image,
-    rollback_image,
-    flush_bin_images,
-)
+import util.functions.images as img
 import web.exceptions as api_exception
 import web.parsers.device as device_parser
 from util.debug import LoggerManager
@@ -53,30 +48,34 @@ async def add_device(
     # NEEDS VALIDATION BETWEEN PARSING AND INSTANTIATION. MOVE CREATION TO END OF TRY BLOCK WHEN VALIDATION EXISTS
 
     # DB Update
-    conn, cursor = database.require_client()
+    conn = database.require_client()
     device_id = None
 
     try:
-        device_id = database.insert_energy_meter(record, conn, cursor)
+        await conn.execute("BEGIN")
+        device_id = await database.insert_energy_meter(record, conn)
         if device_id is None:
             raise api_exception.DeviceCreationError(api_exception.Errors.DEVICE.DEVICE_STORAGE_FAILED)
 
         record.id = device_id
         new_device = device_manager.create_device_from_record(record)
 
+
         if device_image:
-            if not process_and_save_image(device_image, device_id, 200, "db/device_img/"):
+            image_result = await asyncio.get_running_loop().run_in_executor(img.api_executor, img.process_and_save_image, device_image, device_id, 200, "db/device_img/")
+            if not image_result:
                 raise api_exception.DeviceCreationError(api_exception.Errors.DEVICE.SAVE_IMAGE_FAILED)
 
-        if not timedb.create_db(device_name, device_id):
+        timedb_result = await asyncio.get_running_loop().run_in_executor(timedb.api_executor, timedb.create_db, device_name, device_id)
+        if not timedb_result:
             raise api_exception.DeviceCreationError(api_exception.Errors.DEVICE.DEVICE_STORAGE_FAILED)
 
-        conn.commit()
+        await conn.commit()
 
     except Exception:
-        conn.rollback()
+        await conn.rollback()
         if device_id:
-            delete_device_image(device_id, "db/device_img/")
+            await asyncio.get_running_loop().run_in_executor(img.api_executor, img.delete_device_image, device_id, "db/device_img/")
         raise
 
     await device_manager.add_device(new_device)
@@ -107,21 +106,24 @@ async def edit_device(
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     # DB Update
-    conn, cursor = database.require_client()
+    conn =database.require_client()
 
     try:
-        if not database.update_energy_meter(record, conn, cursor):
+        await conn.execute("BEGIN")
+        if not await database.update_energy_meter(record, conn):
             raise api_exception.DeviceUpdateError(api_exception.Errors.DEVICE.UPDATE_STORAGE_FAILED)
+        
         if device_image:
-            if not process_and_save_image(device_image, device_id, 200, "db/device_img/", "db/device_img/.bin/"):
+            image_result = await asyncio.get_running_loop().run_in_executor(img.api_executor, img.process_and_save_image, device_image, device_id, 200, "db/device_img/", "db/device_img/.bin/")
+            if not image_result:
                 raise api_exception.DeviceUpdateError(api_exception.Errors.DEVICE.SAVE_IMAGE_FAILED)
 
-        conn.commit()
-        flush_bin_images("db/device_img/.bin/")
+        await conn.commit()
+        await asyncio.get_running_loop().run_in_executor(img.api_executor, img.flush_bin_images, "db/device_img/.bin/")
 
     except Exception:
-        conn.rollback()
-        rollback_image(device_id, "db/device_img/", "db/device_img/.bin/")
+        await conn.rollback()
+        await asyncio.get_running_loop().run_in_executor(img.api_executor, img.rollback_image, device_id, "db/device_img/", "db/device_img/.bin/")
         raise
 
     await device_manager.delete_device(device)
@@ -154,20 +156,21 @@ async def delete_device(
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     # DB Update
-    conn, cursor = database.require_client()
+    conn = database.require_client()
 
     try:
-        if not database.delete_device(device.id, conn, cursor):
+        await conn.execute("BEGIN")
+        if not await database.delete_device(device.id, conn):
             raise api_exception.DeviceDeleteError(api_exception.Errors.DEVICE.DELETE_STORAGE_FAILED)
 
-        conn.commit()
+        await conn.commit()
 
     except Exception:
-        conn.rollback()
+        await conn.rollback()
         raise
 
-    delete_device_image(device_id, "db/device_img/")
-    timedb.delete_db(device.name, device_id)
+    await asyncio.get_running_loop().run_in_executor(img.api_executor, img.delete_device_image, device_id, "db/device_img/")
+    await asyncio.get_running_loop().run_in_executor(timedb.api_executor, timedb.delete_db, device.name, device_id)
     await device_manager.delete_device(device)
     logger.info(f"Deleted device '{device.name}' with ID {device.id}.")
     return JSONResponse(content={"message": "Device deleted sucessfully."})
@@ -203,7 +206,8 @@ async def get_device_extended_info(
     device = device_manager.get_device(device_id)
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
-    return JSONResponse(content=device.get_extended_info(database.get_device_history))
+    device_info = await device.get_extended_info(database.get_device_history)
+    return JSONResponse(content=device_info)
 
 
 @router.get("/get_device_identification")
@@ -264,7 +268,8 @@ async def get_device_with_image(
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
     device_obj = device.get_device()
-    device_obj["image"] = get_device_image(device.id, "default", "db/device_img/")
+    device_obj["image"] = await asyncio.get_running_loop().run_in_executor(img.api_executor, img.get_device_image, device.id, "default", "db/device_img/")
+
     return JSONResponse(content=device_obj)
 
 
@@ -283,8 +288,8 @@ async def get_device_extended_info_with_image(
     if not device:
         raise api_exception.DeviceNotFound(api_exception.Errors.DEVICE.NOT_FOUND, f"Device with id {device_id} not found.")
 
-    device_info = device.get_extended_info(database.get_device_history)
-    device_info["image"] = get_device_image(device.id, "default", "db/device_img/")
+    device_info = await device.get_extended_info(database.get_device_history)
+    device_info["image"] = await asyncio.get_running_loop().run_in_executor(img.api_executor, img.get_device_image, device.id, "default", "db/device_img/")
     return JSONResponse(content=device_info)
 
 
@@ -306,7 +311,7 @@ async def get_device_identification_with_image(
     device_identification: Dict[str, Any] = {}
     device_identification["id"] = device.id
     device_identification["name"] = device.name
-    device_identification["image"] = get_device_image(device.id, "default", "db/device_img/")
+    device_identification["image"] =await asyncio.get_running_loop().run_in_executor(img.api_executor, img.get_device_image, device.id, "default", "db/device_img/")
     return JSONResponse(content=device_identification)
 
 
@@ -320,6 +325,7 @@ async def get_all_devices_with_image(
     """Retrieves current status and images of all devices."""
 
     all_status = []
+    image_tasks: List[asyncio.Future[Dict[str, str]]] = []
     for device in device_manager.devices:
         current_status: Dict[str, Any] = {}
         current_status["id"] = device.id
@@ -327,8 +333,12 @@ async def get_all_devices_with_image(
         current_status["connected"] = device.connected
         current_status["alarm"] =  any([node for node in device.meter_nodes.nodes.values() if node.config.enabled and node.processor.in_alarm()])
         current_status["warning"] = any([node for node in device.meter_nodes.nodes.values() if node.config.enabled and node.processor.in_warning()])
-        current_status["image"] = get_device_image(device.id, "default", "db/device_img/")
+        image_tasks.append(asyncio.get_running_loop().run_in_executor(img.api_executor, img.get_device_image, device.id, "default", "db/device_img/"))
         all_status.append(current_status)
+    
+    images = await asyncio.gather(*image_tasks)
+    for status, image in zip(all_status, images):
+        status["image"] = image
 
     return JSONResponse(content=all_status)
 
@@ -338,5 +348,5 @@ async def get_all_devices_with_image(
 async def get_default_image(request: Request, safety: HTTPSafety = Depends(services.get_safety)) -> JSONResponse:
     """Retrieves the default device image."""
 
-    image = get_device_image(device_id=0, default_image_str="default", directory="db/device_img/", force_default=True)
+    image = await asyncio.get_running_loop().run_in_executor(img.api_executor, img.get_device_image, 0, "default", "db/device_img/", "png", "utf-8", True)
     return JSONResponse(content=image)

@@ -1,6 +1,7 @@
 ###########EXERTNAL IMPORTS############
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from influxdb import InfluxDBClient
 from influxdb.resultset import ResultSet
 from typing import List, Dict, Tuple, Any, Optional, Iterable, Iterator
@@ -140,11 +141,12 @@ class TimeDBClient:
         self.password = password
         self.client: Optional[InfluxDBClient] = None
         self.write_queue: asyncio.Queue[Measurement] = asyncio.Queue(maxsize=1000)
+        self.api_executor = ThreadPoolExecutor(max_workers=4)
         self.write_task: Optional[asyncio.Task] = None
 
     async def init_connection(self) -> None:
         """
-        Initiates the InfluxDB connection.
+        Initiates the InfluxDB main connection (writes).
         Should be called during application initialization.
         """
 
@@ -153,11 +155,11 @@ class TimeDBClient:
         try:
             loop = asyncio.get_event_loop()
             if self.client is not None or self.write_task is not None:
-                raise RuntimeError("InfluxDB connection or write task are already instantiated")
+                raise RuntimeError("InfluxDB main connection or write task are already instantiated")
             self.client = InfluxDBClient(host=self.host, port=self.port, username=self.username, password=self.password)
             self.write_task = loop.create_task(self.db_writer())
         except Exception as e:
-            logger.exception(f"Failed to initiate InfluxDB connecion: {e}")
+            logger.exception(f"Failed to initiate InfluxDB main connecion: {e}")
 
     async def close_connection(self):
         """
@@ -181,19 +183,29 @@ class TimeDBClient:
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logger.exception(f"Failed to close InfluxDB connection: {e}")
+            logger.exception(f"Failed to close InfluxDB main connection: {e}")
 
-    def __require_client(self) -> InfluxDBClient:
+    def __require_main_client(self) -> InfluxDBClient:
         """
-        Return the active InfluxDB client connection.
+        Return the active InfluxDB main client connection for db writes.
 
         Raises:
             RuntimeError: If the client is not initialized.
         """
 
         if self.client is None:
-            raise RuntimeError(f"InfluxDB client is not instantiated properly. ")
+            raise RuntimeError(f"InfluxDB main client is not instantiated properly. ")
         return self.client
+
+    def __get_new_client(self) -> InfluxDBClient:
+        """
+        Creates a new InfluxDB client instance for read/query operations.
+
+        The returned client is intended for single-use or per-request queries and must not
+        be shared across threads. Callers are responsible for closing the client after use.
+        """
+
+        return InfluxDBClient(host=self.host, port=self.port, username=self.username, password=self.password)
 
     async def db_writer(self):
         """
@@ -232,7 +244,7 @@ class TimeDBClient:
         """
 
         logger = LoggerManager.get_logger(__name__)
-        client = self.__require_client()
+        client = self.__require_main_client()
 
         try:
             db_data = TimeDBClient.to_db_format(measurement.data)
@@ -854,46 +866,49 @@ class TimeDBClient:
                         is not after `start_time`.
         """
 
-        client = self.__require_client()
-        db_name = f"{device_name}_{device_id}"
+        client = self.__get_new_client()
+        try:
+            db_name = f"{device_name}_{device_id}"
 
-        if (time_span.start_time and not time_span.end_time) or (time_span.end_time and not time_span.start_time):
-            raise ValueError("Both 'start_time' and 'end_time' must be provided together.")
+            if (time_span.start_time and not time_span.end_time) or (time_span.end_time and not time_span.start_time):
+                raise ValueError("Both 'start_time' and 'end_time' must be provided together.")
 
-        if time_span.start_time and time_span.end_time and time_span.end_time <= time_span.start_time:
-            raise ValueError("'end_time' must be a later date than 'start_time'.")
+            if time_span.start_time and time_span.end_time and time_span.end_time <= time_span.start_time:
+                raise ValueError("'end_time' must be a later date than 'start_time'.")
 
-        client.switch_database(db_name)
-        if time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step:  # Logs are to be Formatted
+            client.switch_database(db_name)
+            if time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step:  # Logs are to be Formatted
 
-            points = self.__get_formatted_variable_logs(
-                client, variable, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone
+                points = self.__get_formatted_variable_logs(
+                    client, variable, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone
+                )
+
+            else:
+                points = self.__get_raw_variable_logs(
+                    client, variable, time_span.start_time, time_span.end_time, time_span.time_zone, time_span.force_aggregation
+                )
+
+            if (
+                time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step
+            ):  # Apply post logs processing if logs are Formatted
+                (time_span.time_step, points) = self.__formatted_post_processing(
+                    variable, points, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone
+                )
+            global_metrics = self.__post_process_points(variable, points)
+
+            variable_logs = NodeLogs(
+                unit=variable.config.unit,
+                decimal_places=variable.config.decimal_places,
+                type=variable.config.type,
+                is_counter=variable.config.is_counter,
+                points=points if not remove_points else [],
+                time_step=time_span.time_step,
+                global_metrics=global_metrics,
             )
+            return variable_logs
 
-        else:
-            points = self.__get_raw_variable_logs(
-                client, variable, time_span.start_time, time_span.end_time, time_span.time_zone, time_span.force_aggregation
-            )
-
-        if (
-            time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step
-        ):  # Apply post logs processing if logs are Formatted
-            (time_span.time_step, points) = self.__formatted_post_processing(
-                variable, points, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone
-            )
-        global_metrics = self.__post_process_points(variable, points)
-
-        variable_logs = NodeLogs(
-            unit=variable.config.unit,
-            decimal_places=variable.config.decimal_places,
-            type=variable.config.type,
-            is_counter=variable.config.is_counter,
-            points=points if not remove_points else [],
-            time_step=time_span.time_step,
-            global_metrics=global_metrics,
-        )
-
-        return variable_logs
+        finally:
+            client.close()
 
     def create_db(self, device_name: str, device_id: int) -> bool:
         """
@@ -913,17 +928,21 @@ class TimeDBClient:
         """
 
         logger = LoggerManager.get_logger(__name__)
-        client = self.__require_client()
+        client = self.__get_new_client()
 
         db_name = f"{device_name}_{device_id}"
-        if self.check_db_exists(db_name):
-            logger.warning(f"Database for device with name {device_name} and id {device_id} already exists.")
-            return False
+
         try:
+            if self.check_db_exists(client, db_name):
+                logger.warning(f"Database for device with name {device_name} and id {device_id} already exists.")
+                return False
+            
             client.create_database(db_name)
             return True
         except Exception as e:
             return False
+        finally:
+            client.close()
 
     def delete_variable_data(self, device_name: str, device_id: int, variable: Node) -> bool:
         """
@@ -939,14 +958,14 @@ class TimeDBClient:
         """
 
         logger = LoggerManager.get_logger(__name__)
-        client = self.__require_client()
+        client = self.__get_new_client()
 
         db_name = f"{device_name}_{device_id}"
 
-        if not self.check_db_exists(db_name):
-            return False
-
         try:
+            if not self.check_db_exists(client, db_name):
+                return False
+            
             client.switch_database(db_name)
             client.query(f'DELETE FROM "{variable.config.name}"')
             return True
@@ -954,6 +973,8 @@ class TimeDBClient:
         except Exception as e:
             logger.warning(f"Failed to delete measurement '{variable.config.name}' from DB '{db_name}': {e}")
             return False
+        finally:
+            client.close()
 
     def delete_all_data(self, device_name: str, device_id: int) -> bool:
         """
@@ -971,14 +992,14 @@ class TimeDBClient:
         """
 
         logger = LoggerManager.get_logger(__name__)
-        client = self.__require_client()
+        client = self.__get_new_client()
 
         db_name = f"{device_name}_{device_id}"
 
-        if not self.check_db_exists(db_name):
-            return False
-
         try:
+            if not self.check_db_exists(client, db_name):
+                return False
+            
             client.switch_database(db_name)
             client.query(f"DROP SERIES FROM /.*/")
             return True
@@ -986,6 +1007,8 @@ class TimeDBClient:
         except Exception as e:
             logger.warning(f"Failed to delete all measurements from DB '{db_name}': {e}")
             return False
+        finally:
+            client.close()
 
     def delete_db(self, device_name: str, device_id: int) -> bool:
         """
@@ -1003,33 +1026,34 @@ class TimeDBClient:
         """
 
         logger = LoggerManager.get_logger(__name__)
-        client = self.__require_client()
+        client = self.__get_new_client()
 
         db_name = f"{device_name}_{device_id}"
 
-        if not self.check_db_exists(db_name):
-            return False
-
         try:
+            if not self.check_db_exists(client, db_name):
+                return False
             client.drop_database(db_name)
 
             return True
         except Exception as e:
             logger.exception(f"Failed to delete DB '{db_name}': {e}")
             return False
+        finally:
+            client.close()
 
-    def check_db_exists(self, db: str) -> bool:
+    def check_db_exists(self, client: InfluxDBClient, db: str) -> bool:
         """
         Checks whether a given InfluxDB database exists.
 
         Args:
+            client (InfluxDBClient): The client instance to use to check if the db exists.
             db (str): The name of the database.
 
         Returns:
             bool: True if the database exists, False otherwise.
         """
 
-        client = self.__require_client()
         return {"name": db} in client.get_list_database()
 
     def check_variable_has_logs(self, device_name: str, device_id: int, variable: Node) -> bool:

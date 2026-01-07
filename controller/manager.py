@@ -86,7 +86,7 @@ class DeviceManager:
         the background task that handles periodic device state publishing.
         """
 
-        meter_records = self.devices_db.get_all_energy_meters()
+        meter_records = await self.devices_db.get_all_energy_meters()
 
         for record in meter_records:
             device = self.create_device_from_record(record)

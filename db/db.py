@@ -1,6 +1,6 @@
 ############### EXTERNAL IMPORTS ################
 
-import sqlite3
+import aiosqlite
 import json
 from typing import List, Dict, Tuple, Set, Any, Optional
 
@@ -18,7 +18,7 @@ from model.controller.node import NodeRecord
 
 class SQLiteDBClient:
     """
-    SQLite database client for energy meter device and node configuration management.
+    Async SQLite database client for energy meter device and node configuration management.
 
     Provides CRUD operations for devices and their associated data nodes with WAL mode
     for concurrent access and foreign key constraints for data integrity.
@@ -31,8 +31,8 @@ class SQLiteDBClient:
 
     def __init__(self, db_path: str = "config.db"):
         self.db_path = db_path
-        self.conn: Optional[sqlite3.Connection] = None
-        self.cursor: Optional[sqlite3.Cursor] = None
+        self.conn: Optional[aiosqlite.Connection] = None
+        self.cursor: Optional[aiosqlite.Cursor] = None
 
     async def init_connection(self) -> None:
         """
@@ -44,12 +44,11 @@ class SQLiteDBClient:
 
         try:
             if self.conn is not None or self.cursor is not None:
-                raise RuntimeError("DB connection or cursor are already instantiated")
-            self.conn = sqlite3.connect(self.db_path)
-            self.cursor = self.conn.cursor()
-            self.conn.execute("PRAGMA journal_mode=WAL;")  # Enable WAL mode
-            self.conn.execute("PRAGMA foreign_keys=ON;")  # Enable foreign key constraints
-            self.create_tables()
+                raise RuntimeError("DB connection is already instantiated")
+            self.conn = await aiosqlite.connect(self.db_path)
+            await self.conn.execute("PRAGMA journal_mode=WAL;")  # Enable WAL mode
+            await self.conn.execute("PRAGMA foreign_keys=ON;")  # Enable foreign key constraints
+            await self.create_tables()
         except Exception as e:
             logger.exception(f"Failed to initiate SQLite connecion: {e}")
 
@@ -63,32 +62,28 @@ class SQLiteDBClient:
 
         try:
             if self.conn:
-                self.conn.close()
+                await self.conn.close()
                 self.conn = None
-
-            if self.cursor:
-                self.cursor = None
 
         except Exception as e:
             logger.exception(f"Failed to close SQLite connection: {e}")
 
-    def require_client(self) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
+    def require_client(self) -> aiosqlite.Connection:
         """
-        Return the active database connection and cursor.
+        Return the active database connection.
 
         Raises:
             RuntimeError: If the client is not initialized.
         """
 
-        if self.conn is None or self.cursor is None:
+        if self.conn is None:
             raise RuntimeError(
                 f"DB client is not instantiated properly. "
                 f"Type of connection: {type(self.conn).__name__}, "
-                f"Type of cursor: {type(self.cursor).__name__}"
             )
-        return self.conn, self.cursor
+        return self.conn
 
-    def create_tables(self) -> None:
+    async def create_tables(self) -> None:
         """
         Creates the required SQLite tables for storing energy meter configurations and operational status.
 
@@ -106,11 +101,11 @@ class SQLiteDBClient:
         """
 
         logger = LoggerManager.get_logger(__name__)
-        conn, cursor = self.require_client()
+        conn = self.require_client()
 
         try:
 
-            cursor.execute(
+            await conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS devices (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,12 +114,8 @@ class SQLiteDBClient:
                     device_type TEXT NOT NULL,
                     meter_options TEXT NOT NULL,
                     communication_options TEXT NOT NULL
-                )
-            """
-            )
+                );
 
-            cursor.execute(
-                """
                 CREATE TABLE IF NOT EXISTS nodes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     device_id INTEGER NOT NULL,
@@ -134,26 +125,23 @@ class SQLiteDBClient:
                     protocol_options TEXT NOT NULL,
                     attributes TEXT NOT NULL,
                     FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
-                )
-            """
-            )
-            cursor.execute(
-                """
+                );
+
                 CREATE TABLE IF NOT EXISTS device_status (
                     device_id INTEGER PRIMARY KEY,
                     last_seen TEXT DEFAULT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT DEFAULT NULL,
                     FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
-                )
+                );
             """
             )
-
-            conn.commit()
+            await conn.commit()
         except Exception as e:
             logger.exception(f"Failed to create tables: {e}")
+            raise
 
-    def insert_energy_meter(self, record: EnergyMeterRecord, conn: sqlite3.Connection, cursor: sqlite3.Cursor) -> int | None:
+    async def insert_energy_meter(self, record: EnergyMeterRecord, conn: aiosqlite.Connection) -> int | None:
         """
         Inserts a new energy meter (device) into the database along with all associated
         nodes and an initial device status record.
@@ -166,8 +154,7 @@ class SQLiteDBClient:
         Args:
             record (EnergyMeterRecord): Structured energy meter data, including device
                 configuration and associated node definitions.
-            conn (sqlite3.Connection): Active SQLite database connection.
-            cursor (sqlite3.Cursor): Cursor bound to an active transaction.
+            conn (aiosqlite.Connection): Active SQLite database connection.
 
         Returns:
             int | None: The ID of the newly inserted device if successful, None if an
@@ -177,7 +164,7 @@ class SQLiteDBClient:
         logger = LoggerManager.get_logger(__name__)
 
         try:
-            cursor.execute(
+            async with conn.execute(
                 """
                 INSERT INTO devices (name, protocol, device_type, meter_options, communication_options)
                 VALUES (?, ?, ?, ?, ?)
@@ -189,12 +176,12 @@ class SQLiteDBClient:
                     json.dumps(record.options.get_meter_options()),
                     json.dumps(record.communication_options.get_communication_options()),
                 ),
-            )
-            device_id = cursor.lastrowid
+            ) as cursor:
+                device_id = cursor.lastrowid
 
             for node in record.nodes:
                 node.device_id = device_id
-                cursor.execute(
+                await conn.execute(
                     """
                     INSERT INTO nodes (device_id, name, protocol, config, protocol_options, attributes)
                     VALUES (?, ?, ?, ?, ?, ?)
@@ -210,7 +197,7 @@ class SQLiteDBClient:
                 )
 
             # Create initial device status entry
-            cursor.execute(
+            await conn.execute(
                 """
                 INSERT INTO device_status (device_id)
                 VALUES (?)
@@ -220,13 +207,13 @@ class SQLiteDBClient:
 
             return device_id
 
-        except sqlite3.OperationalError as e:
+        except aiosqlite.OperationalError as e:
             logger.error(f"Operational error while trying to insert energy meter {record.name}: {e}")
             return None
         except Exception as e:
             return None
 
-    def update_energy_meter(self, record: EnergyMeterRecord, conn: sqlite3.Connection, cursor: sqlite3.Cursor) -> bool:
+    async def update_energy_meter(self, record: EnergyMeterRecord, conn: aiosqlite.Connection) -> bool:
         """
         Updates an existing energy meter configuration by fully replacing its
         device and node definitions.
@@ -245,8 +232,7 @@ class SQLiteDBClient:
             record (EnergyMeterRecord): Updated energy meter configuration, including
                 associated nodes. The record must contain a valid `id` field
                 identifying the device to update.
-            conn (sqlite3.Connection): Active SQLite database connection.
-            cursor (sqlite3.Cursor): Cursor bound to an active transaction.
+            conn (aiosqlite.Connection): Active SQLite database connection.
 
         Returns:
             bool: True if the update operations complete successfully, False if an
@@ -261,26 +247,26 @@ class SQLiteDBClient:
 
         try:
             # Retrieve existing device status to preserve timestamps
-            cursor.execute(
+            async with conn.execute(
                 """
                 SELECT last_seen, created_at 
                 FROM device_status 
                 WHERE device_id = ?
                 """,
                 (record.id,),
-            )
-            status_data = cursor.fetchone()
+            ) as cursor:
+                status_data = await cursor.fetchone()
 
             # Delete existing nodes and device
-            cursor.execute("DELETE FROM nodes WHERE device_id = ?", (record.id,))
-            cursor.execute("DELETE FROM devices WHERE id = ?", (record.id,))
+            await conn.execute("DELETE FROM nodes WHERE device_id = ?", (record.id,))
+            async with conn.execute("DELETE FROM devices WHERE id = ?", (record.id,)) as cursor:
+                if not cursor.rowcount:
+                    logger.warning(f"No energy meter found with ID {record.id}")
+                    return False
 
-            if cursor.rowcount == 0:
-                logger.warning(f"No energy meter found with ID {record.id}")
-                return False
 
             # Insert the updated device configuration
-            cursor.execute(
+            await conn.execute(
                 """
                 INSERT INTO devices (id, name, protocol, device_type, meter_options, communication_options)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -298,7 +284,7 @@ class SQLiteDBClient:
             # Insert all associated nodes
             for node in record.nodes:
                 node.device_id = record.id
-                cursor.execute(
+                await conn.execute(
                     """
                     INSERT INTO nodes (device_id, name, protocol, config, protocol_options, attributes)
                     VALUES (?, ?, ?, ?, ?, ?)
@@ -315,7 +301,7 @@ class SQLiteDBClient:
 
             # Update or create device history status
             if status_data:
-                cursor.execute(
+                await conn.execute(
                     """
                     INSERT INTO device_status (device_id, last_seen, created_at, updated_at)
                     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
@@ -323,7 +309,7 @@ class SQLiteDBClient:
                     (record.id, status_data[0], status_data[1]),
                 )
             else:
-                cursor.execute(
+                await conn.execute(
                     """
                     INSERT INTO device_status (device_id)
                     VALUES (?)
@@ -332,13 +318,13 @@ class SQLiteDBClient:
                 )
 
             return True
-        except sqlite3.OperationalError as e:
+        except aiosqlite.OperationalError as e:
             logger.error(f"Operational error while trying to update energy meter {record.name} with id {record.id}: {e}")
             return False
         except Exception as e:
             return False
 
-    def delete_device(self, device_id: int, conn: sqlite3.Connection, cursor: sqlite3.Cursor) -> bool:
+    async def delete_device(self, device_id: int, conn: aiosqlite.Connection) -> bool:
         """
         Deletes a device and all its associated data from the database.
 
@@ -353,8 +339,7 @@ class SQLiteDBClient:
 
         Args:
             device_id (int): The unique ID of the device to delete.
-            conn (sqlite3.Connection): Active SQLite database connection.
-            cursor (sqlite3.Cursor): Cursor bound to an active transaction.
+            conn (aiosqlite.Connection): Active SQLite database connection.
 
         Returns:
             bool: True if the device was successfully deleted, False if the device
@@ -371,18 +356,17 @@ class SQLiteDBClient:
         try:
 
             # Delete the device (other tables will be cascade deleted due to foreign key)
-            cursor.execute("DELETE FROM devices WHERE id = ?", (device_id,))
-
-            if cursor.rowcount == 0:
-                logger.warning(f"No energy meter found with ID {device_id}")
-                return False
+            async with conn.execute("DELETE FROM devices WHERE id = ?", (device_id,)) as cursor:
+                if cursor.rowcount == 0:
+                    logger.warning(f"No energy meter found with ID {device_id}")
+                    return False
 
             return True
 
         except Exception as e:
             return False
 
-    def get_all_energy_meters(self) -> List[EnergyMeterRecord]:
+    async def get_all_energy_meters(self) -> List[EnergyMeterRecord]:
         """
         Retrieves all energy meters from the database, including their associated nodes.
 
@@ -393,17 +377,16 @@ class SQLiteDBClient:
         logger = LoggerManager.get_logger(__name__)
 
         meters: List[EnergyMeterRecord] = []
-
-        conn, cursor = self.require_client()
+        conn = self.require_client()
 
         try:
-            cursor.execute(
+            async with conn.execute(
                 """
                 SELECT id, name, protocol, device_type, meter_options, communication_options
                 FROM devices
             """
-            )
-            device_rows = cursor.fetchall()
+            ) as cursor:
+                device_rows = await cursor.fetchall()
 
             for device_row in device_rows:
                 (
@@ -415,13 +398,14 @@ class SQLiteDBClient:
                     comm_opts_json,
                 ) = device_row
 
-                cursor.execute(
+                async with conn.execute(
                     """
                     SELECT name, protocol, config, protocol_options, attributes FROM nodes WHERE device_id = ?
                 """,
                     (device_id,),
-                )
-                node_rows = cursor.fetchall()
+                ) as cursor:
+                    node_rows = await cursor.fetchall()
+
                 nodes: Set[NodeRecord] = set()
                 for node_name, node_protocol, config_json, protocol_options_json, attributes_json in node_rows:
                     config: Dict[str, Any] = json.loads(config_json)
@@ -445,7 +429,7 @@ class SQLiteDBClient:
 
         return meters
 
-    def update_device_last_seen(self, device_id: int) -> bool:
+    async def update_device_last_seen(self, device_id: int) -> bool:
         """
         Updates device last seen timestamp.
 
@@ -457,10 +441,10 @@ class SQLiteDBClient:
         """
 
         logger = LoggerManager.get_logger(__name__)
-        conn, cursor = self.require_client()
+        conn = self.require_client()
 
         try:
-            cursor.execute(
+            await conn.execute(
                 """
                 INSERT INTO device_status (device_id, last_seen)
                 VALUES (?, CURRENT_TIMESTAMP)
@@ -470,14 +454,14 @@ class SQLiteDBClient:
                 (device_id,),
             )
 
-            conn.commit()
+            await conn.commit()
             return True
 
         except Exception as e:
             logger.exception(f"Failed to update last seen timestamp for device {device_id}: {e}")
             return False
 
-    def get_device_history(self, device_id: int) -> DeviceHistoryStatus:
+    async def get_device_history(self, device_id: int) -> DeviceHistoryStatus:
         """
         Retrieves the connection history and status timestamps for a device.
 
@@ -489,18 +473,18 @@ class SQLiteDBClient:
         """
 
         logger = LoggerManager.get_logger(__name__)
-        conn, cursor = self.require_client()
+        conn = self.require_client()
 
         try:
-            cursor.execute(
+            async with conn.execute(
                 """
                 SELECT last_seen, created_at, updated_at
                 FROM device_status
                 WHERE device_id = ?
                 """,
                 (device_id,),
-            )
-            row = cursor.fetchone()
+            ) as cursor:
+                row = await cursor.fetchone()
 
             if row:
                 return DeviceHistoryStatus(

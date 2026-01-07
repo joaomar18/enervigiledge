@@ -2,7 +2,7 @@
 
 import asyncio
 import traceback
-from typing import Dict, Any, Set, Callable
+from typing import Dict, Any, Set, Callable, Awaitable
 from abc import abstractmethod
 
 #######################################
@@ -48,7 +48,7 @@ class EnergyMeter():
         meter_options (EnergyMeterOptions): Configuration flags controlling how energy and power are interpreted.
         communication_options (BaseCommunicationOptions): Protocol-specific communication configuration (e.g., ModbusRTUOptions, OPCUAOptions).
         nodes (Set[Node]): Set of nodes representing individual measurement points.
-        last_seen_update (Callable[[int], bool] | None): Optional callback triggered when the device's last seen timestamp changes.
+        last_seen_update (Callable[[int], Awaitable[bool]] | None): Optional callback triggered when the device's last seen timestamp changes.
             Expects one parameter: device id (int).
 
     Attributes:
@@ -71,7 +71,7 @@ class EnergyMeter():
         communication_options: BaseCommunicationOptions,
         nodes: Set[Node],
         protocol: Protocol = Protocol.NONE,
-        last_seen_update: Callable[[int], bool] | None = None,
+        last_seen_update: Callable[[int], Awaitable[bool]] | None = None,
     ):
         self.id = id
         self.name = name
@@ -358,7 +358,7 @@ class EnergyMeter():
             "type": self.meter_type,
         }
     
-    def get_extended_info(self, get_history_method: Callable[[int], DeviceHistoryStatus], additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
+    async def get_extended_info(self, get_history_method: Callable[[int], Awaitable[DeviceHistoryStatus]], additional_data: Dict[str, Any] = {}) -> Dict[str, Any]:
         """
         Returns an extended dictionary describing the device's current state,
         health, and lifecycle metadata.
@@ -393,7 +393,7 @@ class EnergyMeter():
         """
 
         enabled_nodes = [node for node in self.meter_nodes.nodes.values() if node.config.enabled]    
-        history = get_history_method(self.id)
+        history = await get_history_method(self.id)
         output: Dict[str, Any] = additional_data.copy()
         output["protocol"] = self.protocol
         output["type"] = self.meter_type
