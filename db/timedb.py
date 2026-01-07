@@ -222,8 +222,7 @@ class TimeDBClient:
         """
         Writes a single measurement batch to InfluxDB.
 
-        This method checks if the database exists (creates it if necessary),
-        formats the data using `to_db_format()`, and then writes it.
+        This method formats the data using `to_db_format()`, and then writes it.
 
         Args:
             measurement (Measurement): A dataclass containing the database name and a list of data points.
@@ -236,9 +235,6 @@ class TimeDBClient:
         client = self.__require_client()
 
         try:
-            if not self.check_db_exists(measurement.db):
-                client.create_database(measurement.db)
-
             db_data = TimeDBClient.to_db_format(measurement.data)
 
             if db_data:
@@ -472,26 +468,34 @@ class TimeDBClient:
 
         return query
 
-    def __adjust_time_step(self, points: List[Dict[str, Any]], time_step: FormattedTimeStep) -> FormattedTimeStep:
+    def __get_non_empty_points(self, points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Adjusts the time step to the largest interval found in the data points.
+        Filters points with valid start_time and end_time and parses them into datetime objects.
 
-        Iterates through all points to determine their actual time intervals and returns
-        the maximum time step encountered, ensuring the returned step can accommodate all data.
-
-        Args:
-            points: List of data points containing start_time and end_time fields.
-            time_step: Initial time step to compare against.
-
-        Returns:
-            FormattedTimeStep: The largest time step found across all points.
+        Returns a new list containing only points with non-null timestamps; timestamp fields
+        are converted in-place from ISO strings to datetime objects.
         """
+
+        valid_points: List[Dict[str, Any]] = []
 
         for point in points:
             if point["start_time"] is not None and point["end_time"] is not None:
-                st = date.convert_isostr_to_date(point["start_time"])
-                et = date.convert_isostr_to_date(point["end_time"])
-                current_time_step = date.get_formatted_time_step(st, et, inclusive=True)
+                point["start_time"] = date.convert_isostr_to_date(point["start_time"])
+                point["end_time"] = date.convert_isostr_to_date(point["end_time"])
+                valid_points.append(point)
+
+        return valid_points
+
+    def __adjust_time_step(self, points: List[Dict[str, Any]], time_step: FormattedTimeStep) -> FormattedTimeStep:
+        """
+        Determines the largest required time step based on the durations of the given points.
+
+        Iterates over points with pre-parsed datetime start_time and end_time fields and
+        returns the largest time step needed to fully accommodate all point intervals.
+        """
+
+        for point in points:
+                current_time_step = date.get_formatted_time_step(point["start_time"], point["end_time"], inclusive=True)
                 time_step = date.bigger_time_step(time_step, current_time_step)
 
         return time_step
@@ -500,26 +504,21 @@ class TimeDBClient:
         self, variable: Node, points: List[Dict[str, Any]], aligned_time_buckets: List[Tuple[datetime, datetime]]
     ) -> Dict[datetime, Dict[str, Any]]:
         """
-        Aligns InfluxDB result points to logical time buckets and merges multiple database
-        buckets that fall within the same bucket.
+        Aligns points to logical time buckets and merges points falling into the same bucket.
 
-        This is required because InfluxDB groups data using fixed-duration, epoch-aligned
-        buckets, which may split a single calendar period (e.g. a month) into multiple
-        result points.
+        Points are assigned to the bucket whose start time contains the point start_time.
+        Multiple points mapped to the same bucket are merged:
+        - non-counter variables use weighted averages and min/max aggregation
+        - counter variables sum their values
 
-        For non-counter variables, values are merged using weighted averages (mean_sum /
-        mean_count) and min/max aggregation. For counter variables, values are summed.
-
-        Returns one merged point per logical bucket, keyed by the bucket start time.
+        Returns a mapping from bucket start time to the merged point.
         """
 
         unit_factor = calculation.get_unit_factor(variable.config.unit)
         existing_data: Dict[datetime, Dict[str, Any]] = {}
 
         for point in points:
-            if point["start_time"] is not None:
-                point_time = date.convert_isostr_to_date(point["start_time"])
-                bucket_start = date.find_bucket_for_time(point_time, aligned_time_buckets)
+                bucket_start = date.find_bucket_for_time(point["start_time"], aligned_time_buckets)
                 if bucket_start not in existing_data:
                     existing_data[bucket_start] = point
                 else:
@@ -538,21 +537,27 @@ class TimeDBClient:
         points: List[Dict[str, Any]],
         aligned_time_buckets: List[Tuple[datetime, datetime]],
         existing_data: Dict[datetime, Dict[str, Any]],
-    ) -> None:
+    ) -> List[Dict[str, Any]]:
         """
-        Populates the points list with data for each time bucket, filling gaps with None values.
+        Builds a complete list of time-bucketed points, filling missing buckets with None values.
 
-        For each time bucket, either uses existing data or creates a placeholder point with
-        None values. Updates bucket start/end times to align with the bucket boundaries.
+        Iterates over all aligned time buckets and, for each bucket, either reuses existing
+        aggregated data or creates a placeholder point when no data is available. All points
+        are updated or created with bucket-aligned start_time and end_time values.
+
         The structure of placeholder points depends on whether the variable is a counter or not.
 
         Args:
-            variable: Node configuration to determine point structure.
-            points: List to populate with aligned data points (modified in-place).
+            variable: Node configuration used to determine point structure.
+            points: Original list of points (not modified; kept for interface consistency).
             aligned_time_buckets: List of (start, end) datetime tuples defining time buckets.
-            existing_data: Mapping of bucket start times to existing data points.
+            existing_data: Mapping of bucket start times to existing aggregated data points.
+
+        Returns:
+            List[Dict[str, Any]]: List of bucket-aligned data points covering the full time range.
         """
 
+        output: List[Dict[str, Any]] = []
         for bucket_start, bucket_end in aligned_time_buckets:
             if bucket_start in existing_data:
                 point = existing_data[bucket_start]
@@ -574,7 +579,9 @@ class TimeDBClient:
                         "value": None,
                     }
 
-            points.append(point)
+            output.append(point)
+        
+        return output
 
     def __formatted_post_processing(
         self,
@@ -584,35 +591,37 @@ class TimeDBClient:
         end_time: datetime,
         time_step: FormattedTimeStep,
         time_zone: Optional[ZoneInfo],
-    ) -> Optional[FormattedTimeStep]:
+    ) -> Tuple[Optional[FormattedTimeStep], List[Dict[str, Any]]]:
         """
         Post-processes formatted query results to ensure complete time bucket coverage.
 
-        Adjusts the time step based on actual data intervals, aligns points to time buckets,
-        and fills gaps with None values to create a continuous time series. Only applies to
-        numeric variables.
+        Filters points with valid timestamps, adjusts the time step based on actual data
+        intervals, aligns and merges points into logical time buckets, and fills gaps with
+        None values to create a continuous time series. Only applies to numeric variables.
 
         Args:
             variable: Node configuration to determine processing logic.
-            points: List of data points from query (modified in-place).
+            points: List of data points from the query.
             start_time: Start of the query time range.
             end_time: End of the query time range.
             time_step: Initial time step for bucketing.
             time_zone: Optional timezone for bucket alignment.
 
         Returns:
-            Optional[FormattedTimeStep]: Adjusted time step, or None for non-numeric variables.
+            Tuple[Optional[FormattedTimeStep], List[Dict[str, Any]]]:
+                - Adjusted time step, or None for non-numeric variables.
+                - List of bucket-aligned data points or query points for non-numeric variables.
         """
 
         if not isinstance(variable.processor, NumericNodeProcessor):
-            return None
+            return (None, points)
 
-        time_step = self.__adjust_time_step(points, time_step)
+        valid_points = self.__get_non_empty_points(points)
+        time_step = self.__adjust_time_step(valid_points, time_step)
         aligned_time_buckets = date.get_aligned_time_buckets(start_time, end_time, time_step, time_zone)
-        existing_data = self.__align_points_start_time(variable, points, aligned_time_buckets)
-        points.clear()
-        self.__fill_formatted_time_buckets(variable, points, aligned_time_buckets, existing_data)
-        return time_step
+        existing_data = self.__align_points_start_time(variable, valid_points, aligned_time_buckets)
+        aligned_points = self.__fill_formatted_time_buckets(variable, valid_points, aligned_time_buckets, existing_data)
+        return (time_step, aligned_points)
 
     def __post_process_points(self, variable: Node, points: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """
@@ -813,7 +822,7 @@ class TimeDBClient:
         Retrieve historical logs for a specific variable from a device's InfluxDB, with optional
         time filtering, aggregation, and formatting.
 
-        The method ensures the device's database exists, then fetches variable logs either as raw
+        The method fetches variable logs either as raw
         time series points or as time-bucketed (formatted) results. Formatted logs fill missing
         buckets with `None` and compute global statistics for numeric variables.
 
@@ -848,9 +857,6 @@ class TimeDBClient:
         client = self.__require_client()
         db_name = f"{device_name}_{device_id}"
 
-        if not self.check_db_exists(db_name):
-            client.create_database(db_name)
-
         if (time_span.start_time and not time_span.end_time) or (time_span.end_time and not time_span.start_time):
             raise ValueError("Both 'start_time' and 'end_time' must be provided together.")
 
@@ -858,8 +864,8 @@ class TimeDBClient:
             raise ValueError("'end_time' must be a later date than 'start_time'.")
 
         client.switch_database(db_name)
-
         if time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step:  # Logs are to be Formatted
+
             points = self.__get_formatted_variable_logs(
                 client, variable, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone
             )
@@ -872,7 +878,7 @@ class TimeDBClient:
         if (
             time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step
         ):  # Apply post logs processing if logs are Formatted
-            time_span.time_step = self.__formatted_post_processing(
+            (time_span.time_step, points) = self.__formatted_post_processing(
                 variable, points, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone
             )
         global_metrics = self.__post_process_points(variable, points)
