@@ -497,29 +497,39 @@ class TimeDBClient:
         return time_step
 
     def __align_points_start_time(
-        self, points: List[Dict[str, Any]], aligned_time_buckets: List[Tuple[datetime, datetime]]
+        self, variable: Node, points: List[Dict[str, Any]], aligned_time_buckets: List[Tuple[datetime, datetime]]
     ) -> Dict[datetime, Dict[str, Any]]:
         """
-        Maps data points to their corresponding time bucket start times.
+        Aligns InfluxDB result points to logical time buckets and merges multiple database
+        buckets that fall within the same bucket.
 
-        Creates a dictionary where keys are bucket start times and values are the data points
-        that fall within those buckets, based on each point's start_time.
+        This is required because InfluxDB groups data using fixed-duration, epoch-aligned
+        buckets, which may split a single calendar period (e.g. a month) into multiple
+        result points.
 
-        Args:
-            points: List of data points containing start_time fields.
-            aligned_time_buckets: List of (start, end) datetime tuples defining time buckets.
+        For non-counter variables, values are merged using weighted averages (mean_sum /
+        mean_count) and min/max aggregation. For counter variables, values are summed.
 
-        Returns:
-            Dict[datetime, Dict[str, Any]]: Mapping of bucket start times to their data points.
+        Returns one merged point per logical bucket, keyed by the bucket start time.
         """
 
+        unit_factor = calculation.get_unit_factor(variable.config.unit)
         existing_data: Dict[datetime, Dict[str, Any]] = {}
 
         for point in points:
             if point["start_time"] is not None:
                 point_time = date.convert_isostr_to_date(point["start_time"])
                 bucket_start = date.find_bucket_for_time(point_time, aligned_time_buckets)
-                existing_data[bucket_start] = point
+                if bucket_start not in existing_data:
+                    existing_data[bucket_start] = point
+                else:
+                    if not variable.config.is_counter:
+                        existing_data[bucket_start]["average_value"] = ((existing_data[bucket_start]["mean_sum"] + point["mean_sum"]) / (existing_data[bucket_start]["mean_count"] + point["mean_count"])) / unit_factor
+                        existing_data[bucket_start]["min_value"] = min(existing_data[bucket_start]["min_value"], point["min_value"])
+                        existing_data[bucket_start]["max_value"] = max(existing_data[bucket_start]["max_value"], point["max_value"])
+                    else:
+                        existing_data[bucket_start]["value"] += point["value"]
+
         return existing_data
 
     def __fill_formatted_time_buckets(
@@ -599,7 +609,7 @@ class TimeDBClient:
 
         time_step = self.__adjust_time_step(points, time_step)
         aligned_time_buckets = date.get_aligned_time_buckets(start_time, end_time, time_step, time_zone)
-        existing_data = self.__align_points_start_time(points, aligned_time_buckets)
+        existing_data = self.__align_points_start_time(variable, points, aligned_time_buckets)
         points.clear()
         self.__fill_formatted_time_buckets(variable, points, aligned_time_buckets, existing_data)
         return time_step
