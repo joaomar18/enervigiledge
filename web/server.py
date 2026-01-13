@@ -19,7 +19,7 @@ from db.timedb import TimeDBClient
 import web.api.auth as auth
 import web.api.device as device
 import web.api.nodes as nodes
-import web.api.perfomance as performance
+import web.api.performance as performance
 from util.debug import LoggerManager
 from app_config import IS_DEVELOPMENT
 
@@ -88,25 +88,29 @@ class HTTPServer:
         - Modular API structure supports maintainability and future extension
     """
 
-    def __init__(self, host: str, port: int, device_manager: DeviceManager, db: SQLiteDBClient, timedb: TimeDBClient) -> None:
+    def __init__(
+        self, host: str, port: int, device_manager: DeviceManager, db: SQLiteDBClient, timedb: TimeDBClient
+    ) -> None:
         self.host = host
         self.port = port
         self.device_manager = device_manager
         self.db = db
         self.timedb = timedb
         self.safety = HTTPSafety()
-        services.set_dependencies(self.safety, self.device_manager, self.db, self.timedb)  # Set dependencies for routers endpoints
+        services.set_dependencies(
+            self.safety, self.device_manager, self.db, self.timedb
+        )  # Set dependencies for routers endpoints
         self.server = FastAPI()
         api_router = APIRouter(prefix="/api")
         api_router.include_router(auth.router)  # Authorization router (handles authorization endpoints)
         api_router.include_router(device.router)  # Device router (handles device endpoints)
         api_router.include_router(nodes.router)  # Nodes router (handles nodes endpoints)
-        api_router.include_router(performance.router) # Performance router (handles performance metrics endpoints)
+        api_router.include_router(performance.router)  # Performance router (handles performance metrics endpoints)
         self.server.include_router(api_router)
         if IS_DEVELOPMENT:
             self.server.add_middleware(
                 CORSMiddleware,
-                allow_origins=["http://localhost:8080, http://127.0.0.1:8080"],
+                allow_origins=["http://localhost:8080"],
                 allow_credentials=True,
                 allow_methods=["GET", "POST", "PUT", "DELETE"],
                 allow_headers=["Authorization", "Content-Type"],
@@ -164,6 +168,12 @@ class HTTPServer:
         It runs the server within the asyncio event loop.
         """
 
-        config = Config(app=self.server, host=self.host if IS_DEVELOPMENT else "127.0.0.1", port=self.port, reload=False, log_level=logging.CRITICAL + 1)
+        config = Config(
+            app=self.server,
+            host=self.host if IS_DEVELOPMENT else "127.0.0.1",
+            port=self.port,
+            reload=False,
+            log_level=logging.CRITICAL + 1,
+        )
         server = Server(config)
         await server.serve()
