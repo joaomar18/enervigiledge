@@ -104,7 +104,7 @@ class HTTPSafety:
     MAX_REQUEST_ATTEMPTS = 5
     BLOCK_TIME = timedelta(minutes=15)
     AUTO_LOGIN_SESSION_TIME = timedelta(days=30)
-    REGULAR_SESSION_TIME = timedelta(hours=1)
+    REGULAR_SESSION_TIME = timedelta(days=7)
 
     def __init__(self):
         self.failed_requests: Dict[str, Dict[str, RequestsSafety]] = {}
