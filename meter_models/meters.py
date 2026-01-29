@@ -13,8 +13,8 @@ from model.controller.node import NodeRecord, NodeConfig, NodeAttributes, NodePh
 from model.controller.protocol.no_protocol import NoProtocolNodeOptions, NoProtocolType
 from model.controller.protocol.modbus_rtu import ModbusRTUNodeOptions, ModbusRTUNodeType, ModbusRTUNodeMode, ModbusRTUFunction
 from model.controller.protocol.opc_ua import OPCUANodeOptions, OPCUANodeType
-from protocol.modbus_rtu.rtu_device import ModbusRTUOptions, ModbusRTUNode
-from protocol.opcua.opcua_device import OPCUAOptions, OPCUANode
+from controller.meter.protocol.modbus_rtu.rtu_device import ModbusRTUOptions, ModbusRTUNode
+from controller.meter.protocol.opcua.opcua_device import OPCUAOptions, OPCUANode
 
 #######################################
 

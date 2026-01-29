@@ -5,3 +5,5 @@ user_config.json
 config.db*
 influxdb.conf
 influxdb-data
+.vscode
+.pytest_cache

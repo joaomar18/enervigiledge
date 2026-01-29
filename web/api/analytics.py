@@ -9,13 +9,13 @@ from fastapi.responses import JSONResponse
 #############LOCAL IMPORTS#############
 
 from web.safety import HTTPSafety
-import util.functions.performance as perf
+import analytics.system as perf
 from web.api.decorator import auth_endpoint, AuthConfigs
 from web.dependencies import services
 
 #######################################
 
-router = APIRouter(prefix="/performance", tags=["performance"])
+router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 @router.get("/get_system_metrics")
 @auth_endpoint(AuthConfigs.PROTECTED)
