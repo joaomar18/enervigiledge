@@ -157,8 +157,21 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
         self.run_connection_task = False
         self.run_receiver_task = False
+        try:
+            if self.connection_task:
+                self.connection_task.cancel()
+                await self.connection_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            if self.receiver_task:
+                self.receiver_task.cancel()
+                await self.receiver_task
+        except asyncio.CancelledError:
+            pass
         self.connection_task = None
         self.receiver_task = None
+        self.disconnect_nodes()
         await self.close_connection()
 
     def __renew_client(self) -> None:
@@ -712,6 +725,19 @@ class ModbusRTUEnergyMeter(EnergyMeter):
 
         else:
             raise ModbusException(f"Unknown modbus function {options.function} while trying to extract boolean value.")
+
+    def disconnect_nodes(self) -> None:
+        """
+        Marks all nodes as disconnected.
+        """
+        
+        rtu_nodes = [node for node in self.modbus_rtu_nodes if node.config.enabled]
+        calculated_nodes = [node for node in self.nodes if not isinstance(node, ModbusRTUNode) and node.config.enabled]
+        for node in rtu_nodes:
+            node.set_connection_state(False)
+            node.processor.set_value(None)
+        for node in calculated_nodes:
+            node.processor.set_value(None)
 
     async def close_connection(self) -> None:
         """

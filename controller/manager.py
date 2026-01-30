@@ -61,6 +61,7 @@ class DeviceManager:
         """
 
         try:
+            await self.stop_devices()
             if self.handler_task:
                 self.handler_task.cancel()
                 await self.handler_task
@@ -79,6 +80,14 @@ class DeviceManager:
         for record in meter_records:
             device = self.create_device_from_record(record)
             await self.add_device(device)
+
+    async def stop_devices(self) -> None:
+        """
+        Stops all registered devices asynchronously.
+        """
+
+        for device in self.devices:
+            await device.stop()
 
     async def add_device(self, device: EnergyMeter):
         """

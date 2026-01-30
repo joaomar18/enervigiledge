@@ -1,6 +1,7 @@
 ###########EXTERNAL IMPORTS############
 
 import asyncio
+import logging
 
 #######################################
 
@@ -30,7 +31,7 @@ async def async_main():
 
     # Initialize global logger
     LoggerManager.init()
-    logger = LoggerManager.get_logger(__name__)
+    logger = LoggerManager.get_logger(__name__, level=logging.DEBUG)
     timedb_client = TimeDBClient(host="127.0.0.1", port=8010)
     sqlitedb_client = SQLiteDBClient()
     mqtt_client = MQTTClient(config_file="mqtt/client_options.env")
@@ -54,7 +55,7 @@ async def async_main():
         while True:
             await asyncio.sleep(2)
     except asyncio.CancelledError:
-        logger.debug("Apllication shutdown by the user.")
+        logger.info("Application shutdown by the user.")
     except Exception as e:
         logger.exception(f"Application failed to start: {e}")
     finally:
