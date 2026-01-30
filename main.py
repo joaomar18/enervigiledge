@@ -55,15 +55,21 @@ async def async_main():
         while True:
             await asyncio.sleep(2)
     except asyncio.CancelledError:
-        logger.info("Application shutdown by the user.")
+        logger.info("Application is being shutdown by the user.")
     except Exception as e:
         logger.exception(f"Application failed to start: {e}")
     finally:
+        logger.debug("Shutting down InfluxDB client...")
         await timedb_client.close_connection()
+        logger.debug("Shutting down SQLiteDB client...")
         await sqlitedb_client.close_connection()
+        logger.debug("Shutting down MQTT client...")
         await mqtt_client.stop()
+        logger.debug("Shutting down HTTP server...")
         await http_server.stop()
+        logger.debug("Shutting down Device Manager...")
         await device_manager.stop()
+        logger.info("Application shutdown complete.")
 
 
 if __name__ == "__main__":
