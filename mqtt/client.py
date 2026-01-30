@@ -96,28 +96,21 @@ class MQTTClient:
         Starts background tasks for MQTT handling and publishing.
         """
 
-        logger = LoggerManager.get_logger(__name__)
-
-        try:
-            if not self.enabled:
-                raise NotImplementedError("MQTT client is not enabled in the configuration")
-            if self.client is not None or self.publish_task is not None:
-                raise RuntimeError("Client or publish task are already instantiated")
-            loop = asyncio.get_event_loop()
-            if self.use_authentication:
-                self.client = mqtt.Client(hostname=self.address, port=self.port, username=self.username, password=self.password)
-            else:
-                self.client = mqtt.Client(hostname=self.address, port=self.port)
-            self.publish_task = loop.create_task(self.publisher())
-        except Exception as e:
-            logger.exception(f"Failed to start MQTT client: {str(e)}")
+        if not self.enabled:
+            raise NotImplementedError("MQTT client is not enabled in the configuration")
+        if self.client is not None or self.publish_task is not None:
+            raise RuntimeError("Client or publish task are already instantiated")
+        loop = asyncio.get_event_loop()
+        if self.use_authentication:
+            self.client = mqtt.Client(hostname=self.address, port=self.port, username=self.username, password=self.password)
+        else:
+            self.client = mqtt.Client(hostname=self.address, port=self.port)
+        self.publish_task = loop.create_task(self.publisher())
 
     async def stop(self) -> None:
         """
         Stops the MQTT client by cancelling the publish task.
         """
-
-        logger = LoggerManager.get_logger(__name__)
 
         try:
             if self.publish_task:
@@ -129,8 +122,6 @@ class MQTTClient:
                 self.client = None
         except asyncio.CancelledError:
             pass
-        except Exception as e:
-            logger.exception(f"Failed to stop MQTT client: {str(e)}")
 
     def __require_client(self) -> mqtt.Client:
         """

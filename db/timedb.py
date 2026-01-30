@@ -116,7 +116,9 @@ class TimeDBClient:
             formatted_start = date.to_iso_minutes(start_time)
             formatted_end = date.to_iso_minutes(end_time)
 
-            fields: dict[str, Any] = {k: v for k, v in item.items() if k not in ("name", "start_time", "end_time") and v is not None}
+            fields: dict[str, Any] = {
+                k: v for k, v in item.items() if k not in ("name", "start_time", "end_time") and v is not None
+            }
             fields["start_time"] = formatted_start
             fields["end_time"] = formatted_end
 
@@ -150,16 +152,11 @@ class TimeDBClient:
         Should be called during application initialization.
         """
 
-        logger = LoggerManager.get_logger(__name__)
-
-        try:
-            loop = asyncio.get_event_loop()
-            if self.client is not None or self.write_task is not None:
-                raise RuntimeError("InfluxDB main connection or write task are already instantiated")
-            self.client = InfluxDBClient(host=self.host, port=self.port, username=self.username, password=self.password)
-            self.write_task = loop.create_task(self.db_writer())
-        except Exception as e:
-            logger.exception(f"Failed to initiate InfluxDB main connecion: {e}")
+        loop = asyncio.get_event_loop()
+        if self.client is not None or self.write_task is not None:
+            raise RuntimeError("InfluxDB main connection or write task are already instantiated")
+        self.client = InfluxDBClient(host=self.host, port=self.port, username=self.username, password=self.password)
+        self.write_task = loop.create_task(self.db_writer())
 
     async def close_connection(self):
         """
@@ -167,10 +164,7 @@ class TimeDBClient:
         Should be called during application shutdown.
         """
 
-        logger = LoggerManager.get_logger(__name__)
-
         try:
-
             if self.write_task:
                 self.write_task.cancel()
                 await self.write_task
@@ -179,11 +173,8 @@ class TimeDBClient:
             if self.client:
                 self.client.close()
                 self.client = None
-
         except asyncio.CancelledError:
             pass
-        except Exception as e:
-            logger.exception(f"Failed to close InfluxDB main connection: {e}")
 
     def __require_main_client(self) -> InfluxDBClient:
         """
@@ -382,7 +373,12 @@ class TimeDBClient:
         return query.render()
 
     def __build_query_with_time_span_aggregated(
-        self, variable: Node, start_time_str: str, end_time_str: str, group_by_time: Optional[str], time_zone: Optional[ZoneInfo]
+        self,
+        variable: Node,
+        start_time_str: str,
+        end_time_str: str,
+        group_by_time: Optional[str],
+        time_zone: Optional[ZoneInfo],
     ) -> str:
         """
         Builds an aggregated InfluxDB query to retrieve variable logs grouped into time buckets.
@@ -439,7 +435,9 @@ class TimeDBClient:
             query = self.__build_query_with_time_span_non_aggregated(variable, start_time_str, end_time_str, time_zone)
 
         else:
-            query = self.__build_query_with_time_span_aggregated(variable, start_time_str, end_time_str, group_by_time, time_zone)
+            query = self.__build_query_with_time_span_aggregated(
+                variable, start_time_str, end_time_str, group_by_time, time_zone
+            )
 
         return query
 
@@ -473,7 +471,9 @@ class TimeDBClient:
         if start_time and end_time:
             start_time_str = start_time.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
             end_time_str = end_time.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
-            query = self.__build_query_with_time_span(variable, start_time_str, end_time_str, aggregated, group_by_time, time_zone)
+            query = self.__build_query_with_time_span(
+                variable, start_time_str, end_time_str, aggregated, group_by_time, time_zone
+            )
 
         else:
             query = self.__build_query_without_time_span(variable, time_zone)
@@ -507,8 +507,8 @@ class TimeDBClient:
         """
 
         for point in points:
-                current_time_step = date.get_formatted_time_step(point["start_time"], point["end_time"], inclusive=True)
-                time_step = date.bigger_time_step(time_step, current_time_step)
+            current_time_step = date.get_formatted_time_step(point["start_time"], point["end_time"], inclusive=True)
+            time_step = date.bigger_time_step(time_step, current_time_step)
 
         return time_step
 
@@ -530,16 +530,23 @@ class TimeDBClient:
         existing_data: Dict[datetime, Dict[str, Any]] = {}
 
         for point in points:
-                bucket_start = date.find_bucket_for_time(point["start_time"], aligned_time_buckets)
-                if bucket_start not in existing_data:
-                    existing_data[bucket_start] = point
+            bucket_start = date.find_bucket_for_time(point["start_time"], aligned_time_buckets)
+            if bucket_start not in existing_data:
+                existing_data[bucket_start] = point
+            else:
+                if not variable.config.is_counter:
+                    existing_data[bucket_start]["average_value"] = (
+                        (existing_data[bucket_start]["mean_sum"] + point["mean_sum"])
+                        / (existing_data[bucket_start]["mean_count"] + point["mean_count"])
+                    ) / unit_factor
+                    existing_data[bucket_start]["min_value"] = min(
+                        existing_data[bucket_start]["min_value"], point["min_value"]
+                    )
+                    existing_data[bucket_start]["max_value"] = max(
+                        existing_data[bucket_start]["max_value"], point["max_value"]
+                    )
                 else:
-                    if not variable.config.is_counter:
-                        existing_data[bucket_start]["average_value"] = ((existing_data[bucket_start]["mean_sum"] + point["mean_sum"]) / (existing_data[bucket_start]["mean_count"] + point["mean_count"])) / unit_factor
-                        existing_data[bucket_start]["min_value"] = min(existing_data[bucket_start]["min_value"], point["min_value"])
-                        existing_data[bucket_start]["max_value"] = max(existing_data[bucket_start]["max_value"], point["max_value"])
-                    else:
-                        existing_data[bucket_start]["value"] += point["value"]
+                    existing_data[bucket_start]["value"] += point["value"]
 
         return existing_data
 
@@ -592,7 +599,7 @@ class TimeDBClient:
                     }
 
             output.append(point)
-        
+
         return output
 
     def __formatted_post_processing(
@@ -877,7 +884,9 @@ class TimeDBClient:
                 raise ValueError("'end_time' must be a later date than 'start_time'.")
 
             client.switch_database(db_name)
-            if time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step:  # Logs are to be Formatted
+            if (
+                time_span.formatted and time_span.start_time and time_span.end_time and time_span.time_step
+            ):  # Logs are to be Formatted
 
                 points = self.__get_formatted_variable_logs(
                     client, variable, time_span.start_time, time_span.end_time, time_span.time_step, time_span.time_zone
@@ -885,7 +894,12 @@ class TimeDBClient:
 
             else:
                 points = self.__get_raw_variable_logs(
-                    client, variable, time_span.start_time, time_span.end_time, time_span.time_zone, time_span.force_aggregation
+                    client,
+                    variable,
+                    time_span.start_time,
+                    time_span.end_time,
+                    time_span.time_zone,
+                    time_span.force_aggregation,
                 )
 
             if (
@@ -936,7 +950,7 @@ class TimeDBClient:
             if self.check_db_exists(client, db_name):
                 logger.warning(f"Database for device with name {device_name} and id {device_id} already exists.")
                 return False
-            
+
             client.create_database(db_name)
             return True
         except Exception as e:
@@ -965,7 +979,7 @@ class TimeDBClient:
         try:
             if not self.check_db_exists(client, db_name):
                 return False
-            
+
             client.switch_database(db_name)
             client.query(f'DELETE FROM "{variable.config.name}"')
             return True
@@ -999,7 +1013,7 @@ class TimeDBClient:
         try:
             if not self.check_db_exists(client, db_name):
                 return False
-            
+
             client.switch_database(db_name)
             client.query(f"DROP SERIES FROM /.*/")
             return True

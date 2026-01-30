@@ -39,6 +39,18 @@ test = [
 [project.scripts]
 enervigiledge = "main:async_main"
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "db",
+    "web",
+    "mqtt",
+    "model",
+    "analytics",
+    "controller",
+    "meter_models"
+]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]

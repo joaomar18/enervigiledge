@@ -40,17 +40,12 @@ class SQLiteDBClient:
         Should be called during application initialization.
         """
 
-        logger = LoggerManager.get_logger(__name__)
-
-        try:
-            if self.conn is not None or self.cursor is not None:
-                raise RuntimeError("DB connection is already instantiated")
-            self.conn = await aiosqlite.connect(self.db_path)
-            await self.conn.execute("PRAGMA journal_mode=WAL;")  # Enable WAL mode
-            await self.conn.execute("PRAGMA foreign_keys=ON;")  # Enable foreign key constraints
-            await self.create_tables()
-        except Exception as e:
-            logger.exception(f"Failed to initiate SQLite connecion: {e}")
+        if self.conn is not None or self.cursor is not None:
+            raise RuntimeError("DB connection is already instantiated")
+        self.conn = await aiosqlite.connect(self.db_path)
+        await self.conn.execute("PRAGMA journal_mode=WAL;")  # Enable WAL mode
+        await self.conn.execute("PRAGMA foreign_keys=ON;")  # Enable foreign key constraints
+        await self.create_tables()
 
     async def close_connection(self) -> None:
         """
@@ -58,15 +53,9 @@ class SQLiteDBClient:
         Should be called during application shutdown.
         """
 
-        logger = LoggerManager.get_logger(__name__)
-
-        try:
-            if self.conn:
-                await self.conn.close()
-                self.conn = None
-
-        except Exception as e:
-            logger.exception(f"Failed to close SQLite connection: {e}")
+        if self.conn:
+            await self.conn.close()
+            self.conn = None
 
     def require_client(self) -> aiosqlite.Connection:
         """
@@ -78,8 +67,7 @@ class SQLiteDBClient:
 
         if self.conn is None:
             raise RuntimeError(
-                f"DB client is not instantiated properly. "
-                f"Type of connection: {type(self.conn).__name__}, "
+                f"DB client is not instantiated properly. " f"Type of connection: {type(self.conn).__name__}, "
             )
         return self.conn
 
@@ -263,7 +251,6 @@ class SQLiteDBClient:
                 if not cursor.rowcount:
                     logger.warning(f"No energy meter found with ID {record.id}")
                     return False
-
 
             # Insert the updated device configuration
             await conn.execute(

@@ -125,24 +125,17 @@ class HTTPServer:
         It should be called once during initialization or startup of the HTTP server component.
         """
 
-        logger = LoggerManager.get_logger(__name__)
+        if self.run_task is not None:
+            raise RuntimeError("Run task is already instantiated")
 
-        try:
-            if self.run_task is not None:
-                raise RuntimeError("Run task is already instantiated")
-
-            loop = asyncio.get_event_loop()
-            self.run_task = loop.create_task(self.run_server())
-            await self.safety.start_cleanup_task()
-        except Exception as e:
-            logger.exception(f"Failed to start HTTP Server: {str(e)}")
+        loop = asyncio.get_event_loop()
+        self.run_task = loop.create_task(self.run_server())
+        await self.safety.start_cleanup_task()
 
     async def stop(self) -> None:
         """
         Stops the HTTP Server by cancelling the run task.
         """
-
-        logger = LoggerManager.get_logger(__name__)
 
         try:
             if self.run_task:
@@ -150,11 +143,8 @@ class HTTPServer:
                 await self.run_task
                 self.run_task = None
             await self.safety.stop_cleanup_task()
-
         except asyncio.CancelledError:
             pass
-        except Exception as e:
-            logger.exception(f"Failed to stop HTTP Server: {str(e)}")
 
     async def run_server(self):
         """

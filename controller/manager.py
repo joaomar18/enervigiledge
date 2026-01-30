@@ -48,37 +48,25 @@ class DeviceManager:
         Starts the device handling background task.
         """
 
-        logger = LoggerManager.get_logger(__name__)
+        if self.handler_task is not None:
+            raise RuntimeError("Handler task is already instantiated")
 
-        try:
-
-            if self.handler_task is not None:
-                raise RuntimeError("Handler task is already instantiated")
-
-            await self.init_devices()
-            loop = asyncio.get_event_loop()
-            self.handler_task = loop.create_task(self.handle_devices())
-
-        except Exception as e:
-            logger.exception(f"Failed to start device manager handler task: {e}")
+        await self.init_devices()
+        loop = asyncio.get_event_loop()
+        self.handler_task = loop.create_task(self.handle_devices())
 
     async def stop(self) -> None:
         """
         Stops and cancels the device handling background task.
         """
 
-        logger = LoggerManager.get_logger(__name__)
-
         try:
             if self.handler_task:
                 self.handler_task.cancel()
                 await self.handler_task
                 self.handler_task = None
-
         except asyncio.CancelledError:
             pass
-        except Exception as e:
-            logger.exception(f"Failed to stop device manager handler task: {e}")
 
     async def init_devices(self) -> None:
         """
