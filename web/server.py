@@ -16,11 +16,11 @@ from web.dependencies import services
 from controller.manager import DeviceManager
 from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
+from analytics.system import SystemMonitor
 import web.api.auth as auth
 import web.api.device as device
 import web.api.nodes as nodes
 import web.api.analytics as analytics
-from util.debug import LoggerManager
 from app_config import IS_DEVELOPMENT
 
 #######################################
@@ -53,6 +53,7 @@ class HTTPServer:
         - db (SQLiteDBClient): Handles persistent storage of device configuration
         - timedb (TimeDBClient): Manages time-series data storage and queries
         - safety (HTTPSafety): Implements authentication, authorization, and request security policies
+        - system_monitor (SystemMonitor): Monitors and provides system performance metrics
         - server (FastAPI): Core web application composed of modular API routers
 
     API Structure:
@@ -89,16 +90,17 @@ class HTTPServer:
     """
 
     def __init__(
-        self, host: str, port: int, device_manager: DeviceManager, db: SQLiteDBClient, timedb: TimeDBClient
+        self, host: str, port: int, device_manager: DeviceManager, db: SQLiteDBClient, timedb: TimeDBClient, system_monitor : SystemMonitor
     ) -> None:
         self.host = host
         self.port = port
         self.device_manager = device_manager
         self.db = db
         self.timedb = timedb
+        self.system_monitor = system_monitor
         self.safety = HTTPSafety()
         services.set_dependencies(
-            self.safety, self.device_manager, self.db, self.timedb
+            self.safety, self.device_manager, self.db, self.timedb, self.system_monitor
         )  # Set dependencies for routers endpoints
         self.server = FastAPI()
         api_router = APIRouter(prefix="/api")

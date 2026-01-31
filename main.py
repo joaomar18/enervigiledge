@@ -13,6 +13,7 @@ from mqtt.client import MQTTClient
 from controller.manager import DeviceManager
 from web.server import HTTPServer
 from util.debug import LoggerManager
+from analytics.system import SystemMonitor
 
 # from meter_models.meters import get_orno_we_516_db, get_sm1238_db
 
@@ -38,8 +39,14 @@ async def async_main():
     device_manager = DeviceManager(
         publish_queue=mqtt_client.publish_queue, measurements_queue=timedb_client.write_queue, devices_db=sqlitedb_client
     )
+    system_monitor = SystemMonitor()
     http_server = HTTPServer(
-        host="0.0.0.0", port=8000, device_manager=device_manager, db=sqlitedb_client, timedb=timedb_client
+        host="0.0.0.0",
+        port=8000,
+        device_manager=device_manager,
+        db=sqlitedb_client,
+        timedb=timedb_client,
+        system_monitor=system_monitor,
     )
 
     try:
@@ -51,9 +58,11 @@ async def async_main():
         await device_manager.start()
         await mqtt_client.start()
         await http_server.start()
+        system_monitor.start()
         # Keep main loop alive to support background tasks
         while True:
             await asyncio.sleep(2)
+            logger.debug(f"CPU Temp: {system_monitor.get_realtime_data().cpu_temp} °C")
     except asyncio.CancelledError:
         logger.info("Application is being shutdown by the user.")
     except Exception as e:
@@ -65,10 +74,12 @@ async def async_main():
         await sqlitedb_client.close_connection()
         logger.debug("Shutting down MQTT client...")
         await mqtt_client.stop()
-        logger.debug("Shutting down HTTP server...")
-        await http_server.stop()
         logger.debug("Shutting down Device Manager...")
         await device_manager.stop()
+        logger.debug("Shutting down System Monitor...")
+        system_monitor.stop()
+        logger.debug("Shutting down HTTP server...")
+        await http_server.stop()
         logger.info("Application shutdown complete.")
 
 

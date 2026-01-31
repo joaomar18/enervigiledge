@@ -10,6 +10,7 @@ from web.safety import HTTPSafety
 from controller.manager import DeviceManager
 from db.db import SQLiteDBClient
 from db.timedb import TimeDBClient
+from analytics.system import SystemMonitor
 
 #######################################
 
@@ -31,6 +32,7 @@ class HTTPDependencies:
         device_manager (DeviceManager | None): Device lifecycle management service
         db (SQLiteDBClient | None): SQLite database client for configuration data
         timedb (TimeDBClient | None): InfluxDB client for time-series data
+        system_monitor (SystemMonitor | None): System performance monitoring service
     """
 
     def __init__(
@@ -39,14 +41,23 @@ class HTTPDependencies:
         device_manager: Optional[DeviceManager] = None,
         db: Optional[SQLiteDBClient] = None,
         timedb: Optional[TimeDBClient] = None,
+        system_monitor: Optional[SystemMonitor] = None,
     ):
 
         self.safety = safety
         self.device_manager = device_manager
         self.db = db
         self.timedb = timedb
+        self.system_monitor: Optional[SystemMonitor] = None
 
-    def set_dependencies(self, safety: HTTPSafety, device_manager: DeviceManager, db: SQLiteDBClient, timedb: TimeDBClient):
+    def set_dependencies(
+        self,
+        safety: HTTPSafety,
+        device_manager: DeviceManager,
+        db: SQLiteDBClient,
+        timedb: TimeDBClient,
+        system_monitor: SystemMonitor,
+    ) -> None:
         """
         Set all dependency instances at once during application startup.
 
@@ -58,11 +69,13 @@ class HTTPDependencies:
             device_manager: DeviceManager instance for device operations
             db: SQLiteDBClient instance for configuration persistence
             timedb: TimeDBClient instance for time-series data operations
+            system_monitor: SystemMonitor instance for system performance monitoring
         """
         self.safety = safety
         self.device_manager = device_manager
         self.db = db
         self.timedb = timedb
+        self.system_monitor = system_monitor
 
     def get_safety(self) -> HTTPSafety:
         """
@@ -119,6 +132,20 @@ class HTTPDependencies:
         if self.timedb:
             return self.timedb
         raise ValueError("Time DB is not yet initialized in HTTP Dependencies")
+
+    def get_system_monitor(self) -> SystemMonitor:
+        """
+        Get the SystemMonitor service instance.
+
+        Returns:
+            SystemMonitor: Configured system performance monitoring service
+
+        Raises:
+            ValueError: If SystemMonitor has not been initialized
+        """
+        if self.system_monitor:
+            return self.system_monitor
+        raise ValueError("System Monitor is not yet initialized in HTTP Dependencies")
 
 
 services = HTTPDependencies()  # Global HTTPDependencies instance for application-wide dependency access.
