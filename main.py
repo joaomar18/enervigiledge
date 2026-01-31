@@ -62,7 +62,6 @@ async def async_main():
         # Keep main loop alive to support background tasks
         while True:
             await asyncio.sleep(2)
-            logger.debug(f"CPU Temp: {system_monitor.get_realtime_data().cpu_temp} °C")
     except asyncio.CancelledError:
         logger.info("Application is being shutdown by the user.")
     except Exception as e:
